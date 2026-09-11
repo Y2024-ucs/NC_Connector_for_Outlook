@@ -438,7 +438,7 @@
     "message": "Po tomto datu už odkaz nebude dostupný."
   },
   "sharing_step_files_title": {
-    "message": "Vybrat soubory nebo složky"
+    "message": "Sestavit sdílení"
   },
   "sharing_files_table_path": {
     "message": "Cesta"
@@ -1015,6 +1015,69 @@
   },
   "options_update_changelog_fixed": {
     "message": "Opraveno"
+  },
+  "sharing_base_path_info": {
+    "message": "Cílová složka:"
+  },
+  "sharing_button_add_local": {
+    "message": "+ Místní"
+  },
+  "sharing_button_add_nextcloud": {
+    "message": "+ Můj Nextcloud"
+  },
+  "sharing_button_add_nextcloud_files": {
+    "message": "Vybrat soubory"
+  },
+  "sharing_button_add_nextcloud_folder": {
+    "message": "Vybrat složku"
+  },
+  "sharing_source_local": {
+    "message": "Místní"
+  },
+  "sharing_source_nextcloud": {
+    "message": "Můj Nextcloud"
+  },
+  "sharing_queue_entries_summary": {
+    "message": "Položky: $1"
+  },
+  "sharing_queue_sources_summary": {
+    "message": "Zdroje: $1"
+  },
+  "sharing_queue_total_summary": {
+    "message": "Celkem: $1"
+  },
+  "sharing_queue_storage_loading": {
+    "message": "Načítání informací o úložišti…"
+  },
+  "sharing_queue_storage_available": {
+    "message": "Volné místo: $1 z $2"
+  },
+  "sharing_queue_storage_unlimited": {
+    "message": "Bez limitu úložiště · využito $1"
+  },
+  "sharing_queue_storage_unknown": {
+    "message": "Informace o úložišti nejsou k dispozici"
+  },
+  "sharing_queue_storage_insufficient": {
+    "message": "Požadováno: $1 · Dostupné: $2"
+  },
+  "sharing_queue_expand_folder": {
+    "message": "Rozbalit složku „$1“"
+  },
+  "sharing_queue_collapse_folder": {
+    "message": "Sbalit složku „$1“"
+  },
+  "sharing_queue_remove_item": {
+    "message": "Odebrat „$1“"
+  },
+  "sharing_status_waiting": {
+    "message": "Čeká"
+  },
+  "sharing_files_empty": {
+    "message": "Nejsou vybrány žádné soubory."
+  },
+  "outlook_sharing_queue_read_failed": {
+    "message": "Vybranou položku se nepodařilo přečíst: $1"
   },
   "outlook_nextcloud_picker_load_failed": {
     "message": "Složku Nextcloud se nepodařilo načíst."

@@ -34,6 +34,10 @@ namespace NcTalkOutlookAddIn.UI
             base.OnShown(e);
             AdjustInitialDialogSizeForDisplay();
             ReflowWizardLayout();
+            if (_currentStepIndex == 2)
+            {
+                EnsureQueueStorageLoaded();
+            }
         }
 
 
@@ -647,7 +651,6 @@ namespace NcTalkOutlookAddIn.UI
             UpdateStepHostBounds();
             LayoutCurrentStep();
             LayoutProgressPanel();
-            ConfigureFileListViewRowHeight();
             PositionProgressBars();
             Invalidate(true);
         }

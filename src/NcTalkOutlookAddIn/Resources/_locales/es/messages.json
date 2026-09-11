@@ -438,7 +438,7 @@
     "message": "Después de esta fecha el enlace ya no estará disponible."
   },
   "sharing_step_files_title": {
-    "message": "Seleccionar archivos o carpetas"
+    "message": "Preparar recurso compartido"
   },
   "sharing_files_table_path": {
     "message": "Ruta"
@@ -1015,6 +1015,69 @@
   },
   "options_update_changelog_fixed": {
     "message": "Corregido"
+  },
+  "sharing_base_path_info": {
+    "message": "Carpeta de destino:"
+  },
+  "sharing_button_add_local": {
+    "message": "+ Este dispositivo"
+  },
+  "sharing_button_add_nextcloud": {
+    "message": "+ Mi Nextcloud"
+  },
+  "sharing_button_add_nextcloud_files": {
+    "message": "Seleccionar archivos"
+  },
+  "sharing_button_add_nextcloud_folder": {
+    "message": "Seleccionar carpeta"
+  },
+  "sharing_source_local": {
+    "message": "Almacenamiento local"
+  },
+  "sharing_source_nextcloud": {
+    "message": "Mi Nextcloud"
+  },
+  "sharing_queue_entries_summary": {
+    "message": "Elementos: $1"
+  },
+  "sharing_queue_sources_summary": {
+    "message": "Fuentes: $1"
+  },
+  "sharing_queue_total_summary": {
+    "message": "Tamaño total: $1"
+  },
+  "sharing_queue_storage_loading": {
+    "message": "Cargando información de almacenamiento…"
+  },
+  "sharing_queue_storage_available": {
+    "message": "Espacio libre: $1 de $2"
+  },
+  "sharing_queue_storage_unlimited": {
+    "message": "Sin límite de almacenamiento · $1 usados"
+  },
+  "sharing_queue_storage_unknown": {
+    "message": "Información de almacenamiento no disponible"
+  },
+  "sharing_queue_storage_insufficient": {
+    "message": "Necesario: $1 · Disponible: $2"
+  },
+  "sharing_queue_expand_folder": {
+    "message": "Expandir la carpeta «$1»"
+  },
+  "sharing_queue_collapse_folder": {
+    "message": "Contraer la carpeta «$1»"
+  },
+  "sharing_queue_remove_item": {
+    "message": "Eliminar «$1»"
+  },
+  "sharing_status_waiting": {
+    "message": "En espera"
+  },
+  "sharing_files_empty": {
+    "message": "No se seleccionaron archivos."
+  },
+  "outlook_sharing_queue_read_failed": {
+    "message": "No se pudo leer el elemento seleccionado: $1"
   },
   "outlook_nextcloud_picker_load_failed": {
     "message": "No se pudo cargar la carpeta de Nextcloud."

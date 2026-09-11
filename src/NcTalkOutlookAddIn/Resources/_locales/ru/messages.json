@@ -438,7 +438,7 @@
     "message": "После этой даты ссылка будет недоступна."
   },
   "sharing_step_files_title": {
-    "message": "Выберите файлы или папки"
+    "message": "Сформировать общий ресурс"
   },
   "sharing_files_table_path": {
     "message": "Путь"
@@ -1015,6 +1015,69 @@
   },
   "options_update_changelog_fixed": {
     "message": "Исправлено"
+  },
+  "sharing_base_path_info": {
+    "message": "Целевая папка:"
+  },
+  "sharing_button_add_local": {
+    "message": "+ Локально"
+  },
+  "sharing_button_add_nextcloud": {
+    "message": "+ Мой Nextcloud"
+  },
+  "sharing_button_add_nextcloud_files": {
+    "message": "Выбрать файлы"
+  },
+  "sharing_button_add_nextcloud_folder": {
+    "message": "Выбрать папку"
+  },
+  "sharing_source_local": {
+    "message": "Локальное хранилище"
+  },
+  "sharing_source_nextcloud": {
+    "message": "Мой Nextcloud"
+  },
+  "sharing_queue_entries_summary": {
+    "message": "Элементы: $1"
+  },
+  "sharing_queue_sources_summary": {
+    "message": "Источники: $1"
+  },
+  "sharing_queue_total_summary": {
+    "message": "Общий размер: $1"
+  },
+  "sharing_queue_storage_loading": {
+    "message": "Загрузка информации о хранилище…"
+  },
+  "sharing_queue_storage_available": {
+    "message": "Свободно: $1 из $2"
+  },
+  "sharing_queue_storage_unlimited": {
+    "message": "Без лимита хранилища · использовано $1"
+  },
+  "sharing_queue_storage_unknown": {
+    "message": "Информация о хранилище недоступна"
+  },
+  "sharing_queue_storage_insufficient": {
+    "message": "Требуется: $1 · Доступно: $2"
+  },
+  "sharing_queue_expand_folder": {
+    "message": "Развернуть папку «$1»"
+  },
+  "sharing_queue_collapse_folder": {
+    "message": "Свернуть папку «$1»"
+  },
+  "sharing_queue_remove_item": {
+    "message": "Удалить «$1»"
+  },
+  "sharing_status_waiting": {
+    "message": "Ожидание"
+  },
+  "sharing_files_empty": {
+    "message": "Файлы не выбраны."
+  },
+  "outlook_sharing_queue_read_failed": {
+    "message": "Не удалось прочитать выбранный элемент: $1"
   },
   "outlook_nextcloud_picker_load_failed": {
     "message": "Не удалось загрузить папку Nextcloud."

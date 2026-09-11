@@ -438,7 +438,7 @@
     "message": "Após esta data, o link não estará mais disponível."
   },
   "sharing_step_files_title": {
-    "message": "Selecionar arquivos ou pastas"
+    "message": "Montar compartilhamento"
   },
   "sharing_files_table_path": {
     "message": "Caminho"
@@ -1015,6 +1015,69 @@
   },
   "options_update_changelog_fixed": {
     "message": "Corrigido"
+  },
+  "sharing_base_path_info": {
+    "message": "Pasta de destino:"
+  },
+  "sharing_button_add_local": {
+    "message": "+ Este dispositivo"
+  },
+  "sharing_button_add_nextcloud": {
+    "message": "+ Meu Nextcloud"
+  },
+  "sharing_button_add_nextcloud_files": {
+    "message": "Selecionar arquivos"
+  },
+  "sharing_button_add_nextcloud_folder": {
+    "message": "Selecionar pasta"
+  },
+  "sharing_source_local": {
+    "message": "Armazenamento local"
+  },
+  "sharing_source_nextcloud": {
+    "message": "Meu Nextcloud"
+  },
+  "sharing_queue_entries_summary": {
+    "message": "Itens: $1"
+  },
+  "sharing_queue_sources_summary": {
+    "message": "Fontes: $1"
+  },
+  "sharing_queue_total_summary": {
+    "message": "Tamanho total: $1"
+  },
+  "sharing_queue_storage_loading": {
+    "message": "Carregando informações de armazenamento…"
+  },
+  "sharing_queue_storage_available": {
+    "message": "Espaço livre: $1 de $2"
+  },
+  "sharing_queue_storage_unlimited": {
+    "message": "Sem limite de armazenamento · $1 usados"
+  },
+  "sharing_queue_storage_unknown": {
+    "message": "Informações de armazenamento indisponíveis"
+  },
+  "sharing_queue_storage_insufficient": {
+    "message": "Necessário: $1 · Disponível: $2"
+  },
+  "sharing_queue_expand_folder": {
+    "message": "Expandir a pasta “$1”"
+  },
+  "sharing_queue_collapse_folder": {
+    "message": "Recolher a pasta “$1”"
+  },
+  "sharing_queue_remove_item": {
+    "message": "Remover “$1”"
+  },
+  "sharing_status_waiting": {
+    "message": "Aguardando"
+  },
+  "sharing_files_empty": {
+    "message": "Nenhum arquivo selecionado."
+  },
+  "outlook_sharing_queue_read_failed": {
+    "message": "Não foi possível ler o item selecionado: $1"
   },
   "outlook_nextcloud_picker_load_failed": {
     "message": "Não foi possível carregar a pasta do Nextcloud."

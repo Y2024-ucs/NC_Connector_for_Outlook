@@ -113,6 +113,7 @@
     <Compile Include="Models\TalkRoomCreationResult.cs" />
     <Compile Include="Models\FileLinkPermissions.cs" />
     <Compile Include="Models\FileLinkSelection.cs" />
+    <Compile Include="Models\FileLinkQueueNode.cs" />
     <Compile Include="Models\FileLinkRequest.cs" />
     <Compile Include="Models\FileLinkResult.cs" />
     <Compile Include="Models\FileLinkWizardLaunchOptions.cs" />
@@ -174,6 +175,7 @@
     <Compile Include="Services\FileLinkDavClient.Requests.cs" />
     <Compile Include="Services\FileLinkUploadContext.cs" />
     <Compile Include="Services\FileLinkUploadPlan.cs" />
+    <Compile Include="Services\FileLinkQueueSnapshotBuilder.cs" />
     <Compile Include="Services\FileLinkSelectionScanner.cs" />
     <Compile Include="Services\FileLinkUploadPlanner.cs" />
     <Compile Include="Services\FileLinkUploadProgress.cs" />
@@ -202,6 +204,8 @@
     <Compile Include="UI\FileLinkWizardForm.DragDrop.cs" />
     <Compile Include="UI\FileLinkWizardForm.Duplicates.cs" />
     <Compile Include="UI\FileLinkWizardForm.Files.cs" />
+    <Compile Include="UI\FileLinkWizardForm.Queue.cs" />
+    <Compile Include="UI\FileLinkWizardForm.QueueStorage.cs" />
     <Compile Include="UI\FileLinkWizardForm.Layout.cs" />
     <Compile Include="UI\FileLinkWizardForm.Policy.cs" />
     <Compile Include="UI\FileLinkWizardForm.Upload.cs" />

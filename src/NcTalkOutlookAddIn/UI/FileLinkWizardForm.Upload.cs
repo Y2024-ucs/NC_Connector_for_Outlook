@@ -38,9 +38,12 @@ namespace NcTalkOutlookAddIn.UI
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            CancelQueueStorageRefresh();
             ResetUploadProgressPump();
             _uploadProgressFlushTimer.Dispose();
-            _fileListRowHeightImageList.Dispose();
+            _localSourceMenu.Dispose();
+            _nextcloudSourceMenu.Dispose();
+            _fileQueueImageList.Dispose();
             QueueUnfinalizedUploadContextCleanup(
                 "wizard_closed_without_finalize");
             base.OnFormClosed(e);
@@ -188,11 +191,10 @@ namespace NcTalkOutlookAddIn.UI
                 state.UploadSpeedKbps = 0;
                 ApplyQueueRowStyle(state, _themePalette.InputBackground, _themePalette.Text);
                 DisposeStateProgressBar(state);
-                if (state.Item.SubItems.Count >= 3)
-                {
-                    state.Item.SubItems[2].Text = string.Empty;
-                    state.Item.SubItems[2].ForeColor = _themePalette.Text;
-                }
+                SetSelectionQueueStatus(
+                    state,
+                    Strings.FileLinkQueueWaiting,
+                    _themePalette.MutedText);
             }
 
             UpdateNavigationState();
@@ -231,11 +233,10 @@ namespace NcTalkOutlookAddIn.UI
                     state.UploadStartedUtc = DateTime.MinValue;
                     state.UploadSpeedKbps = 0;
                     DisposeStateProgressBar(state);
-                    if (state.Item.SubItems.Count >= 3)
-                    {
-                        state.Item.SubItems[2].Text = string.Empty;
-                        state.Item.SubItems[2].ForeColor = _themePalette.Text;
-                    }
+                    SetSelectionQueueStatus(
+                        state,
+                        Strings.FileLinkQueueWaiting,
+                        _themePalette.MutedText);
                 }
                 PositionProgressBars();
 
@@ -279,11 +280,10 @@ namespace NcTalkOutlookAddIn.UI
                     state.UploadSpeedKbps = 0;
                     ApplyQueueRowStyle(state, _themePalette.InputBackground, _themePalette.Text);
                     DisposeStateProgressBar(state);
-                    if (state.Item.SubItems.Count >= 3)
-                    {
-                        state.Item.SubItems[2].Text = Strings.FileLinkWizardStatusCancelled;
-                        state.Item.SubItems[2].ForeColor = _themePalette.ErrorText;
-                    }
+                    SetSelectionQueueStatus(
+                        state,
+                        Strings.FileLinkWizardStatusCancelled,
+                        _themePalette.ErrorText);
                 }
                 FlushBufferedUploadProgress();
                 ShowUploadError(Strings.FileLinkWizardUploadCancelledMessage);
@@ -543,10 +543,10 @@ namespace NcTalkOutlookAddIn.UI
                     state.Status = FileLinkUploadStatus.Failed;
                     ApplyQueueRowStyle(state, _themePalette.InputBackground, _themePalette.Text);
                     DisposeStateProgressBar(state);
-                    if (state.Item.SubItems.Count >= 3)
-                    {
-                        state.Item.SubItems[2].Text = Strings.FileLinkWizardStatusError;
-                    }
+                    SetSelectionQueueStatus(
+                        state,
+                        Strings.FileLinkWizardStatusError,
+                        _themePalette.ErrorText);
                 }
             }
             PositionProgressBars();

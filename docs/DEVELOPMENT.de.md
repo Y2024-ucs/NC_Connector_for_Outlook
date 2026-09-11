@@ -158,6 +158,8 @@ Services:
 
 - `src/NcTalkOutlookAddIn/Services/TalkService.cs` (Talk API Calls)
 - `src/NcTalkOutlookAddIn/Services/FileLinkService.cs` (Orchestrierung von Uploadplan, Freigabe-Stammordner, Transfer und Share-Erstellung)
+- `src/NcTalkOutlookAddIn/Services/FileLinkQueueSnapshotBuilder.cs` (quellengruppierter Ordnerbaum für die Freigabe-Warteschlange)
+- `src/NcTalkOutlookAddIn/Services/FileLinkDavClient.Browsing.cs` (DAV-Hierarchie und Speicherwerte des Benutzers) sowie `FileLinkDavClient.Copy.cs` (Kopieren ausgewählter Nextcloud-Dateien in die Freigabe)
 - `src/NcTalkOutlookAddIn/Services/NextcloudCapabilitiesService.cs` (globale Nextcloud-32-Prüfung und typisierter OCS-Capabilities-Snapshot mit fünf Minuten Cache)
 - `src/NcTalkOutlookAddIn/Services/FileLinkSelectionScanner.cs` (einmaliger lokaler Scan und Pfade relativ zum Freigabe-Stammordner)
 - `src/NcTalkOutlookAddIn/Services/FileLinkUploadPlanner.cs` (Auswahl von Direct, Chunked oder optionalem Bulk vor der ersten serverseitigen Änderung)
@@ -188,6 +190,7 @@ UI:
 - `src/NcTalkOutlookAddIn/UI/SettingsForm.cs`
 - `src/NcTalkOutlookAddIn/UI/TalkLinkForm.cs`
 - `src/NcTalkOutlookAddIn/UI/FileLinkWizardForm.cs`
+- `src/NcTalkOutlookAddIn/UI/NextcloudFilePickerForm.cs` (Datei- und Ordnerauswahl für **Meine Nextcloud**)
 - `src/NcTalkOutlookAddIn/UI/ComposeAttachmentPromptForm.cs` (2-Aktions-Prompt fuer Schwellwertmodus)
 - `src/NcTalkOutlookAddIn/UI/BrandedHeader.cs` (Header-Banner inkl. `AttachToParent(...)` fuer konsistente Header-Initialisierung in Forms)
 - `src/NcTalkOutlookAddIn/UI/ScaledForm.cs` (zentrale DPI-Skalierung via `ScaleLogical(...)`, damit Form-Wrapper nicht dupliziert werden)
@@ -267,6 +270,7 @@ Backend-Talk-Templates verwenden für die Outlook-Word-/RTF-Pipeline bevorzugt T
 
 - Der FileLink-Ribbon-Einstieg ist im Mail-Inspector und im Explorer-Tab `Nachricht` fuer Inline-Antworten/-Weiterleitungen sichtbar. Beide Einstiege laufen ueber denselben `FileLinkLaunchController`.
 - Der Wizard startet mit den gespeicherten lokalen FileLink-Vorgaben. Ein gesperrter Share-Policy-Wert überschreibt den zugehörigen lokalen Wert; ein editierbarer Wert lässt die gespeicherte Outlook-Einstellung unverändert.
+- Der Datei-Schritt gruppiert lokale und **Meine Nextcloud**-Auswahlen in derselben Warteschlange. Der sichtbare Ordnerbaum entsteht aus unveränderlichen Auswahl-Snapshots und liest die Quelle beim Zeichnen nicht erneut.
 - Inline-Antworten/-Weiterleitungen fuegen das gerenderte Freigabe-HTML ueber `Explorer.ActiveInlineResponseWordEditor` ein; der Inline-Pfad schreibt nicht direkt in `MailItem.HTMLBody` und behaelt zwei leere Absaetze ueber dem Freigabeblock fuer eigenen Text.
 - Normale HTML-Compose-Fenster verwenden zuerst den Inspector-WordEditor, damit verwaltete Bookmarks erhalten bleiben. Nur wenn dieser Editor nicht geoeffnet werden kann, bleibt die direkte `MailItem.HTMLBody`-Route als Kompatibilitaetsfallback aktiv.
 - `MailComposeSubscription` debounct Anhangsänderungen und verarbeitet Always-via-NC sowie den Schwellwertmodus. `BeforeAttachmentAdd` versucht die Dateidaten früh zu erfassen; bei einer erzwingenden Policy wird ein nicht materialisierbarer oder nicht prüfbarer Host-Anhang abgebrochen. Harte Outlook-/Exchange-Grenzen können weiterhin vor einem Add-in-Ereignis greifen.
@@ -306,6 +310,7 @@ Backend-Talk-Templates verwenden für die Outlook-Word-/RTF-Pipeline bevorzugt T
 - Alle Funktionen setzen Nextcloud 32 oder neuer voraus. `NextcloudCapabilitiesService` validiert die strukturierte Version der authentifizierten OCS-Capabilities-Antwort und speichert den typisierten Snapshot fünf Minuten pro Server/Benutzer zwischen. Verbindungsprüfungen aktualisieren ihn; Funktionseinstiege lehnen ältere Server oder Antworten ohne auswertbare Version ab.
 - `FileLinkService` orchestriert die fachlich getrennten Komponenten für Planung, DAV-Verzeichnisse, Transfer, Share-Erstellung und Fortschritt.
 - `FileLinkSelectionScanner` scannt die lokale Auswahl vor der ersten serverseitigen Änderung einmal. Das relativ zum Freigabe-Stammordner aufgebaute Ergebnis bewahrt leere Verzeichnisse, lehnt symbolische Links und Junctions ab und speichert Dateigröße sowie Änderungszeit. `FileLinkUploadPlanner` weist anschließend die Transferarten zu, ohne den Server zu verändern.
+- `NextcloudFilePickerForm` liest den Dateibereich des konfigurierten Benutzers mit DAV-`PROPFIND` der Tiefe eins. Beim Bestätigen eines Ordners wird der vollständige Nachfahren-Snapshot einschließlich leerer Ordner festgehalten. Ausgewählte Dateien plant der Scanner als serverseitige Kopien. Der Transfer prüft ihre aktuelle Größe und kopiert sie mit authentifiziertem DAV-`COPY` in den reservierten Freigabeordner. Das Original bleibt unverändert; Outlook überträgt dabei keinen Dateiinhalt.
 - Beim Weiter aus dem ersten Schritt prüft der manuelle Wizard den aus Basispfad, festgehaltenem Wizard-Datum und bereinigtem Freigabenamen abgeleiteten Zielpfad mit einem DAV-`PROPFIND` der Tiefe null. Ein vorhandenes Ziel hält den Wizard im ersten Schritt. `FileLinkDavClient` reserviert den Freigabe-Stammordner beim späteren Upload atomar mit `MKCOL`, damit eine Kollision zwischen Vorprüfung und Upload sicher abbricht. Ein `405` nach einem unklaren ersten Ergebnis gilt nur dann als erfolgreiche Reservierung, wenn ein DAV-`PROPFIND` der Tiefe null den exakten Pfad als Collection bestätigt. Ein bekannter `405` ohne vorherige Unklarheit bleibt eine Kollision. Die Anhangsautomatisierung überspringt die Vorprüfung und probiert weiterhin nummerierte Freigabenamen. Leere Verzeichnisse, für Bulk oder Chunked benötigte Elternpfade und von mehreren Direct-Dateien gemeinsam genutzte Eltern werden einmal, Eltern vor Kindern, mit maximal drei parallelen Requests pro Ebene angelegt. Direct-Pfadketten mit nur einer Datei legt `X-NC-WebDAV-Auto-Mkcol` an.
 - `FileLinkTransferService` koordiniert getrennte Bulk-, Direct- und Chunked-Uploader. Dateien außerhalb von Bulk bis 20 MiB werden mit dem serverseitig ausgewerteten Header `X-NC-WebDAV-Auto-Mkcol: 1` über direkte `PUT`-Requests hochgeladen. Dateien über 20 MiB verwenden Chunked Upload v2. Direct- und Chunked-Dateien teilen sich das Limit von maximal drei parallelen Transfers.
 - Nur wenn `ocs.data.capabilities.dav.bulkupload` exakt `"1.0"` meldet, kommen mindestens 20 Kandidaten mit höchstens 8 MiB pro Datei für DAV-Bulk infrage. Sequentielle Multipart-Batches sind auf 100 Dateien und ungefähr 20 MiB begrenzt. Der Planner wählt Bulk nur, wenn mindestens 20 Prozent aller Upload-Requests entfallen. Die Berechnung umfasst Basispfad, Freigabe-Stammordner, geplante Verzeichnisse, direkte Dateien sowie jeden Chunk-Ordner, Chunk-`PUT` und abschließenden `MOVE`. Vor der ersten Serveränderung meldet die sequenzielle MD5-Berechnung ihren aktuellen und gesamten Dateizähler als eigene Wizard-Phase.
@@ -351,6 +356,8 @@ Freigaben:
 - Aktuelle kanonische Benutzer-ID: `GET /ocs/v2.php/cloud/user?format=json`
 - Öffentliche Freigabe erstellen: `POST /ocs/v2.php/apps/files_sharing/api/v1/shares`
 - Upload/Ordneranlage: `remote.php/dav/...` (WebDAV)
+- Dateien und Speicherwerte des Benutzers lesen: `PROPFIND /remote.php/dav/files/<user>/...` mit Tiefe eins
+- Ausgewählte Nextcloud-Datei in die Freigabe kopieren: `COPY /remote.php/dav/files/<user>/...` mit absolutem `Destination` im selben Konto
 - Optionaler Bulk-Upload kleiner Dateien: `POST /remote.php/dav/bulk` (`multipart/related`, nur bei exakt `ocs.data.capabilities.dav.bulkupload = "1.0"`)
 - Upload großer Dateien: `MKCOL /remote.php/dav/uploads/<user>/<upload-id>`, Chunk-`PUT`s, danach `MOVE /remote.php/dav/uploads/<user>/<upload-id>/.file` zum Zielpfad
 

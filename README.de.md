@@ -31,11 +31,13 @@ Ohne Backend funktionieren Freigaben, Talk und IFB lokal in Outlook. Mit NC Conn
 
 ## Freigaben
 
-Der Freigabe-Assistent lädt Dateien und Ordner nach Nextcloud hoch und fügt den fertigen Freigabeblock in die Mail ein. HTML/RTF bekommt einen formatierten Block, Plaintext einen klaren Textblock.
+Der Freigabe-Assistent kombiniert lokale Dateien und Ordner mit vorhandenen Elementen aus der eigenen Nextcloud und fügt den fertigen Freigabeblock in die Mail ein. HTML/RTF bekommt einen formatierten Block, Plaintext einen klaren Textblock.
 
 Weitere Punkte:
 
 - verfügbar in Compose-Fenstern, Antworten, Weiterleitungen und Inline-Antworten
+- die Warteschlange gruppiert `Lokal` und `Meine Nextcloud` und zeigt Ordner als aufklappbaren Baum
+- vorhandene Nextcloud-Dateien und -Ordner werden innerhalb von Nextcloud in die neue Freigabe kopiert; die Originale bleiben unverändert und werden nicht zuerst nach Outlook heruntergeladen
 - optionales Ablaufdatum und eigene Berechtigungen pro Freigabe
 - Anhangsautomatisierung für große Anhänge oder immer über NC Connector, mit wählbarem Linkziel `ZIP-Download` (Standard) oder `Nextcloud-Freigabeseite`
 - ein lokaler Scan erstellt einen relativ zum Freigabeordner aufgebauten Uploadplan; der Zielordner wird atomar angelegt und die Anhangsautomatisierung probiert bei einer Kollision nummerierte Namen ohne vorherige Server-Abfrage

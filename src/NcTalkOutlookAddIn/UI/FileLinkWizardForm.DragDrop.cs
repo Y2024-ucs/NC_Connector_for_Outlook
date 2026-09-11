@@ -4,8 +4,10 @@
 
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Windows.Forms;
 using NcTalkOutlookAddIn.Models;
+using NcTalkOutlookAddIn.Services;
 using NcTalkOutlookAddIn.Utilities;
 
 namespace NcTalkOutlookAddIn.UI
@@ -104,18 +106,19 @@ namespace NcTalkOutlookAddIn.UI
                 existingPaths.Add(selection.IdentityPath);
             }
 
+            FileLinkQueueNode snapshot =
+                FileLinkQueueSnapshotBuilder.Build(
+                    selection,
+                    CancellationToken.None);
             _items.Add(selection);
-
-            var listViewItem = new ListViewItem(selection.DisplayPath)
+            _queueSnapshots.Add(selection, snapshot);
+            if (snapshot.IsDirectory && snapshot.Children.Count > 0)
             {
-                Tag = selection
-            };
-            listViewItem.UseItemStyleForSubItems = false;
-            listViewItem.SubItems.Add(selection.SelectionType == FileLinkSelectionType.File ? Strings.FileLinkWizardTypeFile : Strings.FileLinkWizardTypeFolder);
-            listViewItem.SubItems.Add(string.Empty);
-            _fileListView.Items.Add(listViewItem);
+                _expandedQueueFolders.Add(
+                    BuildQueueNodeKey(selection, snapshot));
+            }
 
-            var state = new SelectionUploadState(listViewItem);
+            var state = new SelectionUploadState(selection);
             _selectionStates[selection] = state;
             return true;
         }

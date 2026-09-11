@@ -508,7 +508,7 @@ namespace NcTalkOutlookAddIn.UI
                             / state.TotalBytes)
                     : 100;
                 percent = Math.Max(0, Math.Min(100, percent));
-                if (state.ProgressBar == null)
+                if (state.ProgressBar == null && state.Item != null)
                 {
                     state.ProgressBar = CreateProgressBar();
                 }
@@ -528,7 +528,8 @@ namespace NcTalkOutlookAddIn.UI
                     state.ProgressBar.Visible = true;
                     state.ProgressBar.Value = percent;
                 }
-                if (state.Item.SubItems.Count >= 3)
+                if (state.Item != null
+                    && state.Item.SubItems.Count >= 3)
                 {
                     state.Item.SubItems[2].Text =
                         FormatUploadSpeedKbps(
@@ -551,11 +552,16 @@ namespace NcTalkOutlookAddIn.UI
                 state.UploadSpeedKbps = 0;
                 string statusText =
                     Strings.FileLinkWizardStatusSuccess;
+                SetSelectionQueueStatus(
+                    state,
+                    statusText,
+                    _themePalette.SuccessText);
                 if (!string.IsNullOrEmpty(state.RenamedTo))
                 {
                     statusText += " \u2192 " + state.RenamedTo;
                 }
-                if (state.Item.SubItems.Count >= 3)
+                if (state.Item != null
+                    && state.Item.SubItems.Count >= 3)
                 {
                     state.Item.SubItems[2].Text = statusText;
                     state.Item.SubItems[2].ForeColor =
@@ -572,13 +578,10 @@ namespace NcTalkOutlookAddIn.UI
                 DisposeStateProgressBar(state);
                 state.UploadStartedUtc = DateTime.MinValue;
                 state.UploadSpeedKbps = 0;
-                if (state.Item.SubItems.Count >= 3)
-                {
-                    state.Item.SubItems[2].Text =
-                        Strings.FileLinkWizardStatusError;
-                    state.Item.SubItems[2].ForeColor =
-                        _themePalette.ErrorText;
-                }
+                SetSelectionQueueStatus(
+                    state,
+                    Strings.FileLinkWizardStatusError,
+                    _themePalette.ErrorText);
             }
         }
     }

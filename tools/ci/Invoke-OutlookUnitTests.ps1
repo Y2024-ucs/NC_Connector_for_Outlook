@@ -82,6 +82,7 @@ internal static class OutlookUtilityTests
         TestComposeShareCleanupTracker();
         TestFileLinkUploadPolicy();
         TestFileLinkPath();
+        TestFileLinkQueueSnapshotBuilder();
         TestFileLinkSelectionScanner();
         TestFileLinkUploadPlanner();
         TestPlainTextUtilities();
@@ -721,6 +722,100 @@ internal static class OutlookUtilityTests
         }
     }
 
+    private static void TestFileLinkQueueSnapshotBuilder()
+    {
+        string fixtureRoot = Path.Combine(
+            Path.GetTempPath(),
+            "nc4ol-queue-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(fixtureRoot);
+        try
+        {
+            string selectedFolder = Path.Combine(fixtureRoot, "Selected");
+            Directory.CreateDirectory(selectedFolder);
+            Directory.CreateDirectory(Path.Combine(selectedFolder, "Empty"));
+            Directory.CreateDirectory(Path.Combine(selectedFolder, "Nested"));
+            File.WriteAllText(
+                Path.Combine(selectedFolder, "root.txt"),
+                "root");
+            File.WriteAllText(
+                Path.Combine(selectedFolder, "Nested", "child.pdf"),
+                "child");
+
+            FileLinkQueueNode local = FileLinkQueueSnapshotBuilder.Build(
+                new FileLinkSelection(
+                    FileLinkSelectionType.Directory,
+                    selectedFolder),
+                CancellationToken.None);
+            Equal("Queue snapshot keeps the selected local folder", "Selected", local.DisplayName);
+            Check("Queue snapshot keeps local folders before files", local.Children.Count == 3 && local.Children[0].IsDirectory && local.Children[1].IsDirectory && !local.Children[2].IsDirectory);
+            FileLinkQueueNode nested = local.Children.First(node => node.DisplayName == "Nested");
+            Check("Queue snapshot includes nested local files", nested.Children.Count == 1 && nested.Children[0].DisplayName == "child.pdf" && nested.Children[0].Length == 5);
+            FileLinkQueueNode empty = local.Children.First(node => node.DisplayName == "Empty");
+            Check("Queue snapshot preserves empty local folders", empty.Children.Count == 0);
+
+            var remoteRoot = new NextcloudStorageEntry(
+                "Projects",
+                "Projects",
+                true,
+                0,
+                null);
+            FileLinkSelection remoteSelection = FileLinkSelection.FromNextcloudFolder(
+                remoteRoot,
+                new[]
+                {
+                    new NextcloudStorageEntry(
+                        "Projects/Empty",
+                        "Empty",
+                        true,
+                        0,
+                        null),
+                    new NextcloudStorageEntry(
+                        "Projects/report.docx",
+                        "report.docx",
+                        false,
+                        42,
+                        null)
+                });
+            FileLinkQueueNode remote = FileLinkQueueSnapshotBuilder.Build(
+                remoteSelection,
+                CancellationToken.None);
+            Equal("Queue snapshot keeps the selected Nextcloud folder", "Projects", remote.DisplayName);
+            Check("Queue snapshot preserves empty Nextcloud folders", remote.Children.Count == 2 && remote.Children[0].IsDirectory && remote.Children[0].Children.Count == 0);
+            Check("Queue snapshot exposes the Nextcloud file size", !remote.Children[1].IsDirectory && remote.Children[1].Length == 42);
+
+            bool missingParentRejected = false;
+            try
+            {
+                FileLinkSelection incomplete = FileLinkSelection.FromNextcloudFolder(
+                    remoteRoot,
+                    new[]
+                    {
+                        new NextcloudStorageEntry(
+                            "Projects/Missing/file.txt",
+                            "file.txt",
+                            false,
+                            1,
+                            null)
+                    });
+                FileLinkQueueSnapshotBuilder.Build(
+                    incomplete,
+                    CancellationToken.None);
+            }
+            catch (IOException)
+            {
+                missingParentRejected = true;
+            }
+            Check("Queue snapshot rejects an incomplete Nextcloud hierarchy", missingParentRejected);
+        }
+        finally
+        {
+            if (Directory.Exists(fixtureRoot))
+            {
+                Directory.Delete(fixtureRoot, true);
+            }
+        }
+    }
+
     private static void TestFileLinkSelectionScanner()
     {
         string fixtureRoot = Path.Combine(
@@ -1100,11 +1195,13 @@ internal static class OutlookUtilityTests
     $sources = @(
         $testSource,
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Models\FileLinkSelection.cs"),
+        (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Models\FileLinkQueueNode.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Models\NextcloudStorageEntry.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Models\ComposeLifecycleOrigin.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Models\ComposeShareCleanupRecord.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\FileLinkDuplicateInfo.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\FileLinkUploadPlan.cs"),
+        (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\FileLinkQueueSnapshotBuilder.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\FileLinkSelectionScanner.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\FileLinkUploadPlanner.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\TalkServiceConfiguration.cs"),

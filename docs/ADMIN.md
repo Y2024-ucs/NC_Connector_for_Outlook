@@ -525,12 +525,15 @@ If a required final signature check cannot complete, Outlook keeps the message o
 
 ### Sharing and uploads
 
-The sharing wizard accepts files and folders. It automatically selects an upload method supported by the server and selected files, then reports scan, folder preparation, files, bytes, and transfer rate. Implementation details are in [DEVELOPMENT.md](DEVELOPMENT.md#sharing-flow-mail-compose).
+The sharing wizard accepts local files and folders as well as existing content from the configured user's own Nextcloud. The queue shows the complete destination path, groups both sources, and reports entries, source count, total size, and the user's Nextcloud storage state. The **My Nextcloud** picker includes path navigation, filtering, file details, and storage information. This source works without NC Connector Backend.
+
+Selected Nextcloud content is copied within the same account into the new share folder. The original remains unchanged and is not downloaded to Outlook first. Local content still uses the upload method supported by the server and selected files. Implementation details are in [DEVELOPMENT.md](DEVELOPMENT.md#sharing-flow-mail-compose).
 
 Operating limits and error behavior:
 
 - symbolic links and junctions are rejected
 - a source file changed after the initial scan stops the upload
+- the configured account needs read access to selected Nextcloud content and write access to the destination folder
 - an existing manual share-root name stops that share; attachment automation can select a numbered name
 - HTTP `507` means that Nextcloud has insufficient storage
 - proxy timeouts and request-size limits can affect uploads even when the client and Nextcloud are otherwise healthy

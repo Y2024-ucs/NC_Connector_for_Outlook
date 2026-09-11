@@ -934,7 +934,7 @@ namespace NcTalkOutlookAddIn.Utilities
         internal static string FileLinkWizardTitle { get { return Get("sharing_wizard_title", "Nextcloud Share"); } }
         internal static string FileLinkWizardStepShare { get { return Get("sharing_heading_permissions", "Share settings"); } }
         internal static string FileLinkWizardStepExpire { get { return Get("sharing_step_expire", "Expiration date"); } }
-        internal static string FileLinkWizardStepFiles { get { return Get("sharing_step_files_title", "Select files or folders"); } }
+        internal static string FileLinkWizardStepFiles { get { return Get("sharing_step_files_title", "Build share"); } }
         internal static string FileLinkWizardStepNote { get { return Get("sharing_step_note", "Note & finish"); } }
         internal static string FileLinkWizardShareNameLabel { get { return Get("sharing_share_name_label", "Share name"); } }
         internal static string FileLinkWizardPermissionsLabel { get { return Get("sharing_step_security", "Permissions"); } }
@@ -944,6 +944,27 @@ namespace NcTalkOutlookAddIn.Utilities
         internal static string FileLinkWizardExpireToggle { get { return Get("sharing_expire_toggle", "Set expiration date"); } }
         internal static string FileLinkWizardExpireHint { get { return Get("sharing_expire_hint", "After this date the link is no longer available."); } }
         internal static string FileLinkWizardBasePathPrefix { get { return Get("outlook_sharing_base_path_prefix", "Base directory: "); } }
+        internal static string FileLinkQueueTargetFolder { get { return Get("sharing_base_path_info", "Target folder:"); } }
+        internal static string FileLinkQueueAddLocal { get { return Get("sharing_button_add_local", "+ Local"); } }
+        internal static string FileLinkQueueAddNextcloud { get { return Get("sharing_button_add_nextcloud", "+ My Nextcloud"); } }
+        internal static string FileLinkQueueSelectFiles { get { return Get("sharing_button_add_nextcloud_files", "Select files"); } }
+        internal static string FileLinkQueueSelectFolder { get { return Get("sharing_button_add_nextcloud_folder", "Select folder"); } }
+        internal static string FileLinkQueueSourceLocal { get { return Get("sharing_source_local", "Local"); } }
+        internal static string FileLinkQueueSourceNextcloud { get { return Get("sharing_source_nextcloud", "My Nextcloud"); } }
+        internal static string FileLinkQueueEntriesSummary { get { return Get("sharing_queue_entries_summary", "Entries: {0}"); } }
+        internal static string FileLinkQueueSourcesSummary { get { return Get("sharing_queue_sources_summary", "Sources: {0}"); } }
+        internal static string FileLinkQueueTotalSummary { get { return Get("sharing_queue_total_summary", "Total: {0}"); } }
+        internal static string FileLinkQueueStorageLoading { get { return Get("sharing_queue_storage_loading", "Loading storage information..."); } }
+        internal static string FileLinkQueueStorageAvailable { get { return Get("sharing_queue_storage_available", "Free space: {0} of {1}"); } }
+        internal static string FileLinkQueueStorageUnlimited { get { return Get("sharing_queue_storage_unlimited", "No storage limit · {0} used"); } }
+        internal static string FileLinkQueueStorageUnknown { get { return Get("sharing_queue_storage_unknown", "Storage information unavailable"); } }
+        internal static string FileLinkQueueStorageInsufficient { get { return Get("sharing_queue_storage_insufficient", "Required: {0} · Available: {1}"); } }
+        internal static string FileLinkQueueExpandFolder { get { return Get("sharing_queue_expand_folder", "Expand folder {0}"); } }
+        internal static string FileLinkQueueCollapseFolder { get { return Get("sharing_queue_collapse_folder", "Collapse folder {0}"); } }
+        internal static string FileLinkQueueRemoveItem { get { return Get("sharing_queue_remove_item", "Remove {0}"); } }
+        internal static string FileLinkQueueWaiting { get { return Get("sharing_status_waiting", "Waiting"); } }
+        internal static string FileLinkQueueEmpty { get { return Get("sharing_files_empty", "No files selected."); } }
+        internal static string FileLinkQueueReadFailedFormat { get { return Get("outlook_sharing_queue_read_failed", "The selected item could not be read: {0}"); } }
         internal static string FileLinkWizardAddFilesButton { get { return Get("sharing_button_add_files", "Add files..."); } }
         internal static string FileLinkWizardAddFolderButton { get { return Get("sharing_button_add_folder", "Add folder..."); } }
         internal static string FileLinkWizardAddNextcloudFilesButton { get { return Get("outlook_sharing_add_nextcloud_files", "My Nextcloud files..."); } }

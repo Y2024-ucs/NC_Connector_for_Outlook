@@ -438,7 +438,7 @@
     "message": "E dátum után a hivatkozás már nem érhető el."
   },
   "sharing_step_files_title": {
-    "message": "Fájlok vagy mappák kiválasztása"
+    "message": "Megosztás összeállítása"
   },
   "sharing_files_table_path": {
     "message": "Elérési út"
@@ -1015,6 +1015,69 @@
   },
   "options_update_changelog_fixed": {
     "message": "Javítva"
+  },
+  "sharing_base_path_info": {
+    "message": "Célmappa:"
+  },
+  "sharing_button_add_local": {
+    "message": "+ Helyi"
+  },
+  "sharing_button_add_nextcloud": {
+    "message": "+ Saját Nextcloud"
+  },
+  "sharing_button_add_nextcloud_files": {
+    "message": "Fájlok kiválasztása"
+  },
+  "sharing_button_add_nextcloud_folder": {
+    "message": "Mappa kiválasztása"
+  },
+  "sharing_source_local": {
+    "message": "Helyi"
+  },
+  "sharing_source_nextcloud": {
+    "message": "Saját Nextcloud"
+  },
+  "sharing_queue_entries_summary": {
+    "message": "Elemek: $1"
+  },
+  "sharing_queue_sources_summary": {
+    "message": "Források: $1"
+  },
+  "sharing_queue_total_summary": {
+    "message": "Összesen: $1"
+  },
+  "sharing_queue_storage_loading": {
+    "message": "Tárhelyadatok betöltése…"
+  },
+  "sharing_queue_storage_available": {
+    "message": "Szabad hely: $1 / $2"
+  },
+  "sharing_queue_storage_unlimited": {
+    "message": "Nincs tárhelykorlát · $1 használatban"
+  },
+  "sharing_queue_storage_unknown": {
+    "message": "A tárhelyadatok nem érhetők el"
+  },
+  "sharing_queue_storage_insufficient": {
+    "message": "Szükséges: $1 · Elérhető: $2"
+  },
+  "sharing_queue_expand_folder": {
+    "message": "Mappa kibontása: „$1“"
+  },
+  "sharing_queue_collapse_folder": {
+    "message": "Mappa összecsukása: „$1“"
+  },
+  "sharing_queue_remove_item": {
+    "message": "„$1“ eltávolítása"
+  },
+  "sharing_status_waiting": {
+    "message": "Várakozás"
+  },
+  "sharing_files_empty": {
+    "message": "Nincs kiválasztott fájl."
+  },
+  "outlook_sharing_queue_read_failed": {
+    "message": "A kijelölt elem nem olvasható: $1"
   },
   "outlook_nextcloud_picker_load_failed": {
     "message": "A Nextcloud-mappa nem tölthető be."

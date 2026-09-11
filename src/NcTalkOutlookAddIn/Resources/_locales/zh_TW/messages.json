@@ -438,7 +438,7 @@
     "message": "此日期之後，連結將不可用。"
   },
   "sharing_step_files_title": {
-    "message": "選擇檔案或資料夾"
+    "message": "建立分享"
   },
   "sharing_files_table_path": {
     "message": "路徑"
@@ -1015,6 +1015,69 @@
   },
   "options_update_changelog_fixed": {
     "message": "修復"
+  },
+  "sharing_base_path_info": {
+    "message": "目標資料夾："
+  },
+  "sharing_button_add_local": {
+    "message": "+ 本機"
+  },
+  "sharing_button_add_nextcloud": {
+    "message": "+ 我的 Nextcloud"
+  },
+  "sharing_button_add_nextcloud_files": {
+    "message": "選擇檔案"
+  },
+  "sharing_button_add_nextcloud_folder": {
+    "message": "選擇資料夾"
+  },
+  "sharing_source_local": {
+    "message": "本機儲存空間"
+  },
+  "sharing_source_nextcloud": {
+    "message": "我的 Nextcloud"
+  },
+  "sharing_queue_entries_summary": {
+    "message": "項目數：$1"
+  },
+  "sharing_queue_sources_summary": {
+    "message": "來源數：$1"
+  },
+  "sharing_queue_total_summary": {
+    "message": "總大小：$1"
+  },
+  "sharing_queue_storage_loading": {
+    "message": "正在載入儲存空間資訊…"
+  },
+  "sharing_queue_storage_available": {
+    "message": "可用空間：$1 / $2"
+  },
+  "sharing_queue_storage_unlimited": {
+    "message": "無儲存配額限制 · 已使用 $1"
+  },
+  "sharing_queue_storage_unknown": {
+    "message": "無法取得儲存空間資訊"
+  },
+  "sharing_queue_storage_insufficient": {
+    "message": "需要：$1 · 可用：$2"
+  },
+  "sharing_queue_expand_folder": {
+    "message": "展開資料夾「$1」"
+  },
+  "sharing_queue_collapse_folder": {
+    "message": "收合資料夾「$1」"
+  },
+  "sharing_queue_remove_item": {
+    "message": "移除「$1」"
+  },
+  "sharing_status_waiting": {
+    "message": "等待中"
+  },
+  "sharing_files_empty": {
+    "message": "未選擇檔案。"
+  },
+  "outlook_sharing_queue_read_failed": {
+    "message": "無法讀取所選項目：$1"
   },
   "outlook_nextcloud_picker_load_failed": {
     "message": "無法載入 Nextcloud 資料夾。"

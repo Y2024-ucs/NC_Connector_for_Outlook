@@ -9,11 +9,12 @@ using System.Globalization;
 using System.Linq;
 using System.Windows.Forms;
 using NcTalkOutlookAddIn.Models;
+using NcTalkOutlookAddIn.Services;
 using NcTalkOutlookAddIn.Utilities;
 
 namespace NcTalkOutlookAddIn.UI
 {
-    // File-step layout, queue actions, and owner-drawn row rendering.
+    // File-step layout and source selection.
     internal sealed partial class FileLinkWizardForm
     {
         private void InitializeStepFiles()
@@ -23,212 +24,436 @@ namespace NcTalkOutlookAddIn.UI
 
             _fileStepLayout.SuspendLayout();
             _fileStepLayout.ColumnCount = 1;
-            _fileStepLayout.RowCount = 3;
+            _fileStepLayout.RowCount = 5;
             _fileStepLayout.Dock = DockStyle.Fill;
             _fileStepLayout.Padding = new Padding(FileStepPaddingPixels);
             _fileStepLayout.Margin = new Padding(0);
             _fileStepLayout.ColumnStyles.Clear();
-            _fileStepLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            _fileStepLayout.ColumnStyles.Add(
+                new ColumnStyle(SizeType.Percent, 100f));
             _fileStepLayout.RowStyles.Clear();
             _fileStepLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             _fileStepLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            _fileStepLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            _fileStepLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            _fileStepLayout.RowStyles.Add(
+                new RowStyle(SizeType.Absolute, ScaleLogical(32)));
+            _fileStepLayout.RowStyles.Add(
+                new RowStyle(SizeType.Percent, 100f));
             panel.Controls.Add(_fileStepLayout);
 
-            _basePathLabel.Text = Strings.FileLinkWizardBasePathPrefix + (_request.BasePath ?? string.Empty);
+            var destinationPanel = new TableLayoutPanel
+            {
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Dock = DockStyle.Top,
+                ColumnCount = 1,
+                RowCount = 2,
+                Margin = new Padding(0)
+            };
+            destinationPanel.ColumnStyles.Add(
+                new ColumnStyle(SizeType.Percent, 100f));
+            destinationPanel.RowStyles.Add(
+                new RowStyle(SizeType.AutoSize));
+            destinationPanel.RowStyles.Add(
+                new RowStyle(SizeType.AutoSize));
+
+            _targetFolderCaptionLabel.Text =
+                Strings.FileLinkQueueTargetFolder;
+            _targetFolderCaptionLabel.AutoSize = true;
+            _targetFolderCaptionLabel.Margin = new Padding(0);
+            destinationPanel.Controls.Add(
+                _targetFolderCaptionLabel,
+                0,
+                0);
+
             _basePathLabel.AutoSize = true;
-            _basePathLabel.Margin = new Padding(0);
-            _fileStepLayout.Controls.Add(_basePathLabel, 0, 0);
+            _basePathLabel.Font = new Font(
+                _basePathLabel.Font,
+                FontStyle.Bold);
+            _basePathLabel.Margin = new Padding(0, ScaleLogical(3), 0, 0);
+            destinationPanel.Controls.Add(_basePathLabel, 0, 1);
+            _fileStepLayout.Controls.Add(destinationPanel, 0, 0);
 
             _attachmentModeInfoLabel.AutoSize = true;
-            _attachmentModeInfoLabel.ForeColor = Color.DimGray;
+            _attachmentModeInfoLabel.ForeColor = _themePalette.MutedText;
             _attachmentModeInfoLabel.Visible = false;
-            _attachmentModeInfoLabel.Margin = new Padding(0, 8, 0, 0);
-            _fileStepLayout.Controls.Add(_attachmentModeInfoLabel, 0, 1);
-
-            _fileStepContentLayout.SuspendLayout();
-            _fileStepContentLayout.ColumnCount = 2;
-            _fileStepContentLayout.RowCount = 1;
-            _fileStepContentLayout.Dock = DockStyle.Fill;
-            _fileStepContentLayout.Margin = new Padding(0, 12, 0, 0);
-            _fileStepContentLayout.ColumnStyles.Clear();
-            _fileStepContentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            _fileStepContentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, FileStepButtonColumnMinWidthPixels));
-            _fileStepContentLayout.RowStyles.Clear();
-            _fileStepContentLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-            _fileStepLayout.Controls.Add(_fileStepContentLayout, 0, 2);
-
-            _fileListView.Dock = DockStyle.Fill;
-            _fileListView.Margin = new Padding(0, 0, FileStepButtonColumnSpacingPixels, 0);
-            _fileListView.View = View.Details;
-            _fileListView.FullRowSelect = true;
-            _fileListView.HideSelection = false;
-            _fileListView.Scrollable = true;
-            _fileListView.OwnerDraw = true;
-            _fileListView.Columns.Add(Strings.FileLinkWizardColumnPath, 240);
-            _fileListView.Columns.Add(Strings.FileLinkWizardColumnType, 100);
-            _fileListView.Columns.Add(Strings.FileLinkWizardColumnStatus, 120);
-            _fileListView.Resize += (s, e) => PositionProgressBars();
-            _fileListView.DrawColumnHeader += HandleFileListViewDrawColumnHeader;
-            _fileListView.DrawItem += HandleFileListViewDrawItem;
-            _fileListView.DrawSubItem += HandleFileListViewDrawSubItem;
-            _fileListView.HorizontalWheelHandler = HandlePathColumnMouseWheel;
-            ConfigureFileListViewRowHeight();
-            _fileStepContentLayout.Controls.Add(_fileListView, 0, 0);
-
-            _fileStepActionPanel.FlowDirection = FlowDirection.TopDown;
-            _fileStepActionPanel.WrapContents = false;
-            _fileStepActionPanel.Dock = DockStyle.Fill;
-            _fileStepActionPanel.Margin = new Padding(0);
-            _fileStepActionPanel.Padding = new Padding(0);
-            _fileStepContentLayout.Controls.Add(_fileStepActionPanel, 1, 0);
-
-            _addFilesButton.Text = Strings.FileLinkWizardAddFilesButton;
-            _addFilesButton.AutoSize = false;
-            _addFilesButton.Size = new Size(150, 28);
-            _addFilesButton.Margin = new Padding(0, 0, 0, FileStepButtonGapPixels);
-            _addFilesButton.TextAlign = ContentAlignment.MiddleCenter;
-            _addFilesButton.Click += (s, e) => AddFiles();
-            _fileStepActionPanel.Controls.Add(_addFilesButton);
-
-            _addFolderButton.Text = Strings.FileLinkWizardAddFolderButton;
-            _addFolderButton.AutoSize = false;
-            _addFolderButton.Size = new Size(150, 28);
-            _addFolderButton.Margin = new Padding(0, 0, 0, FileStepButtonGapPixels);
-            _addFolderButton.TextAlign = ContentAlignment.MiddleCenter;
-            _addFolderButton.Click += (s, e) => AddFolder();
-            _fileStepActionPanel.Controls.Add(_addFolderButton);
-
-            _addNextcloudFilesButton.Text =
-                Strings.FileLinkWizardAddNextcloudFilesButton;
-            _addNextcloudFilesButton.AutoSize = false;
-            _addNextcloudFilesButton.Size = new Size(150, 28);
-            _addNextcloudFilesButton.Margin = new Padding(
+            _attachmentModeInfoLabel.Margin = new Padding(
                 0,
-                FileStepButtonGapPixels,
+                ScaleLogical(7),
                 0,
-                FileStepButtonGapPixels);
-            _addNextcloudFilesButton.TextAlign =
-                ContentAlignment.MiddleCenter;
-            _addNextcloudFilesButton.Click += (s, e) =>
-                AddNextcloudFiles();
-            _fileStepActionPanel.Controls.Add(
-                _addNextcloudFilesButton);
+                0);
+            _fileStepLayout.Controls.Add(
+                _attachmentModeInfoLabel,
+                0,
+                1);
 
-            _addNextcloudFolderButton.Text =
-                Strings.FileLinkWizardAddNextcloudFolderButton;
-            _addNextcloudFolderButton.AutoSize = false;
-            _addNextcloudFolderButton.Size = new Size(150, 28);
-            _addNextcloudFolderButton.Margin = new Padding(
-                0,
-                0,
-                0,
-                FileStepButtonGapPixels);
-            _addNextcloudFolderButton.TextAlign =
-                ContentAlignment.MiddleCenter;
-            _addNextcloudFolderButton.Click += (s, e) =>
-                AddNextcloudFolder();
-            _fileStepActionPanel.Controls.Add(
-                _addNextcloudFolderButton);
+            InitializeQueueSourceActions();
+            _fileStepLayout.Controls.Add(_fileStepActionPanel, 0, 2);
 
-            _removeItemButton.Text = Strings.FileLinkWizardRemoveButton;
-            _removeItemButton.AutoSize = false;
-            _removeItemButton.Size = new Size(150, 28);
-            _removeItemButton.Margin = new Padding(0);
-            _removeItemButton.TextAlign = ContentAlignment.MiddleCenter;
-            _removeItemButton.Click += (s, e) => RemoveSelection();
-            _fileStepActionPanel.Controls.Add(_removeItemButton);
+            InitializeQueueSummary();
+            _fileStepLayout.Controls.Add(_queueSummaryPanel, 0, 3);
+
+            InitializeQueueList();
+            _fileStepLayout.Controls.Add(_fileStepContentLayout, 0, 4);
 
             AttachFileQueueDropTarget(panel);
             AttachFileQueueDropTarget(_fileStepLayout);
             AttachFileQueueDropTarget(_fileStepContentLayout);
             AttachFileQueueDropTarget(_fileStepActionPanel);
             AttachFileQueueDropTarget(_fileListView);
-            AttachFileQueueDropTarget(_addFilesButton);
-            AttachFileQueueDropTarget(_addFolderButton);
-            AttachFileQueueDropTarget(_addNextcloudFilesButton);
-            AttachFileQueueDropTarget(_addNextcloudFolderButton);
-            AttachFileQueueDropTarget(_removeItemButton);
+            AttachFileQueueDropTarget(_queueEmptyLabel);
+            AttachFileQueueDropTarget(_localSourceButton);
+            AttachFileQueueDropTarget(_nextcloudSourceButton);
 
-            _fileStepContentLayout.ResumeLayout(false);
             _fileStepLayout.ResumeLayout(false);
             _fileStepLayout.PerformLayout();
-
             panel.ResumeLayout(false);
             panel.PerformLayout();
 
-            panel.ClientSizeChanged += (s, e) => LayoutFileStep(panel.ClientSize);
+            panel.ClientSizeChanged +=
+                (s, e) => LayoutFileStep(panel.ClientSize);
+            RefreshQueueTargetPath();
+            RebuildQueueView();
             LayoutFileStep(panel.ClientSize);
-            UpdateQueueColumnWidths();
-            PositionProgressBars();
 
             _steps.Add(panel);
         }
 
+        private void InitializeQueueSourceActions()
+        {
+            _fileStepActionPanel.FlowDirection = FlowDirection.LeftToRight;
+            _fileStepActionPanel.WrapContents = false;
+            _fileStepActionPanel.AutoSize = true;
+            _fileStepActionPanel.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            _fileStepActionPanel.Dock = DockStyle.Top;
+            _fileStepActionPanel.Margin = new Padding(
+                0,
+                ScaleLogical(12),
+                0,
+                ScaleLogical(8));
+            _fileStepActionPanel.Padding = new Padding(0);
+
+            ConfigureSourceButton(
+                _localSourceButton,
+                Strings.FileLinkQueueAddLocal,
+                FileLinkIconProvider.LocalSourceKey,
+                _localSourceMenu);
+            _fileStepActionPanel.Controls.Add(_localSourceButton);
+
+            ConfigureSourceButton(
+                _nextcloudSourceButton,
+                Strings.FileLinkQueueAddNextcloud,
+                FileLinkIconProvider.NextcloudSourceKey,
+                _nextcloudSourceMenu);
+            _fileStepActionPanel.Controls.Add(_nextcloudSourceButton);
+
+            AddSourceMenuItems(
+                _localSourceMenu,
+                AddFiles,
+                AddFolder);
+            AddSourceMenuItems(
+                _nextcloudSourceMenu,
+                AddNextcloudFiles,
+                AddNextcloudFolder);
+        }
+
+        private void ConfigureSourceButton(
+            Button button,
+            string text,
+            string imageKey,
+            ContextMenuStrip menu)
+        {
+            button.Text = text;
+            button.AutoSize = false;
+            button.Size = new Size(
+                ScaleLogical(190),
+                ScaleLogical(36));
+            button.Margin = new Padding(
+                0,
+                0,
+                ScaleLogical(FileStepButtonGapPixels),
+                0);
+            button.TextAlign = ContentAlignment.MiddleLeft;
+            button.ImageAlign = ContentAlignment.MiddleLeft;
+            button.TextImageRelation = TextImageRelation.ImageBeforeText;
+            button.Image = _fileQueueImageList.Images[imageKey];
+            button.Click += (s, e) => menu.Show(
+                button,
+                new Point(0, button.Height));
+            button.Paint += DrawSourceButtonArrow;
+        }
+
+        private void AddSourceMenuItems(
+            ContextMenuStrip menu,
+            Action addFiles,
+            Action addFolder)
+        {
+            menu.BackColor = _themePalette.ControlBackground;
+            menu.ForeColor = _themePalette.Text;
+            menu.Renderer = new ToolStripProfessionalRenderer(
+                new QueueMenuColorTable(_themePalette));
+            var filesItem = new ToolStripMenuItem(
+                Strings.FileLinkQueueSelectFiles,
+                new Bitmap(
+                    _fileQueueImageList.Images[
+                        FileLinkIconProvider.GenericFileKey]),
+                (s, e) => addFiles());
+            var folderItem = new ToolStripMenuItem(
+                Strings.FileLinkQueueSelectFolder,
+                new Bitmap(
+                    _fileQueueImageList.Images[
+                        FileLinkIconProvider.FolderKey]),
+                (s, e) => addFolder());
+            menu.Items.Add(filesItem);
+            menu.Items.Add(folderItem);
+        }
+
+        private void ApplyQueueTheme()
+        {
+            _queueSummaryPanel.BackColor =
+                _themePalette.ControlBackground;
+            _queueSummaryPanel.ForeColor = _themePalette.Text;
+            _queueSummaryLabel.BackColor =
+                _themePalette.ControlBackground;
+            _queueSummaryLabel.ForeColor = _themePalette.MutedText;
+            _queueStorageLabel.BackColor =
+                _themePalette.ControlBackground;
+            _queueStorageLabel.ForeColor = _themePalette.MutedText;
+            _queueEmptyLabel.BackColor = _themePalette.InputBackground;
+            _queueEmptyLabel.ForeColor = _themePalette.MutedText;
+            _fileListView.BackColor = _themePalette.InputBackground;
+            _fileListView.ForeColor = _themePalette.Text;
+            foreach (ContextMenuStrip menu in new[]
+            {
+                _localSourceMenu,
+                _nextcloudSourceMenu
+            })
+            {
+                menu.BackColor = _themePalette.ControlBackground;
+                menu.ForeColor = _themePalette.Text;
+                foreach (ToolStripItem item in menu.Items)
+                {
+                    item.BackColor = _themePalette.ControlBackground;
+                    item.ForeColor = _themePalette.Text;
+                }
+            }
+        }
+
+        private sealed class QueueMenuColorTable
+            : ProfessionalColorTable
+        {
+            private readonly UiThemePalette _palette;
+
+            internal QueueMenuColorTable(UiThemePalette palette)
+            {
+                _palette = palette;
+                UseSystemColors = false;
+            }
+
+            public override Color ToolStripDropDownBackground
+            {
+                get { return _palette.ControlBackground; }
+            }
+
+            public override Color MenuItemSelected
+            {
+                get { return _palette.SelectionBackground; }
+            }
+
+            public override Color MenuItemBorder
+            {
+                get { return _palette.Border; }
+            }
+
+            public override Color ImageMarginGradientBegin
+            {
+                get { return _palette.ControlBackground; }
+            }
+
+            public override Color ImageMarginGradientMiddle
+            {
+                get { return _palette.ControlBackground; }
+            }
+
+            public override Color ImageMarginGradientEnd
+            {
+                get { return _palette.ControlBackground; }
+            }
+
+            public override Color SeparatorDark
+            {
+                get { return _palette.Border; }
+            }
+
+            public override Color SeparatorLight
+            {
+                get { return _palette.Border; }
+            }
+        }
+
+        private void DrawSourceButtonArrow(object sender, PaintEventArgs e)
+        {
+            var button = sender as Button;
+            if (button == null || e == null)
+            {
+                return;
+            }
+            string arrow = "▾";
+            Size size = TextRenderer.MeasureText(
+                arrow,
+                button.Font,
+                Size.Empty,
+                TextFormatFlags.NoPadding);
+            var bounds = new Rectangle(
+                Math.Max(0, button.ClientSize.Width - size.Width - ScaleLogical(9)),
+                Math.Max(0, (button.ClientSize.Height - size.Height) / 2),
+                size.Width,
+                size.Height);
+            TextRenderer.DrawText(
+                e.Graphics,
+                arrow,
+                button.Font,
+                bounds,
+                button.Enabled
+                    ? button.ForeColor
+                    : _themePalette.DisabledText,
+                TextFormatFlags.NoPadding);
+        }
+
+        private void InitializeQueueSummary()
+        {
+            _queueSummaryPanel.ColumnCount = 2;
+            _queueSummaryPanel.RowCount = 1;
+            _queueSummaryPanel.Dock = DockStyle.Fill;
+            _queueSummaryPanel.Margin = new Padding(0);
+            _queueSummaryPanel.Padding = new Padding(
+                ScaleLogical(8),
+                ScaleLogical(4),
+                ScaleLogical(8),
+                ScaleLogical(4));
+            _queueSummaryPanel.BorderStyle = BorderStyle.FixedSingle;
+            _queueSummaryPanel.ColumnStyles.Add(
+                new ColumnStyle(SizeType.Percent, 55f));
+            _queueSummaryPanel.ColumnStyles.Add(
+                new ColumnStyle(SizeType.Percent, 45f));
+            _queueSummaryPanel.RowStyles.Add(
+                new RowStyle(SizeType.Percent, 100f));
+
+            _queueSummaryLabel.Dock = DockStyle.Fill;
+            _queueSummaryLabel.AutoEllipsis = true;
+            _queueSummaryLabel.TextAlign = ContentAlignment.MiddleLeft;
+            _queueSummaryLabel.ForeColor = _themePalette.MutedText;
+            _queueSummaryLabel.Margin = new Padding(0);
+            _queueSummaryPanel.Controls.Add(_queueSummaryLabel, 0, 0);
+
+            _queueStorageLabel.Dock = DockStyle.Fill;
+            _queueStorageLabel.AutoEllipsis = true;
+            _queueStorageLabel.TextAlign = ContentAlignment.MiddleRight;
+            _queueStorageLabel.ForeColor = _themePalette.MutedText;
+            _queueStorageLabel.Margin = new Padding(0);
+            _queueSummaryPanel.Controls.Add(_queueStorageLabel, 1, 0);
+        }
+
+        private void InitializeQueueList()
+        {
+            _fileStepContentLayout.SuspendLayout();
+            _fileStepContentLayout.ColumnCount = 1;
+            _fileStepContentLayout.RowCount = 1;
+            _fileStepContentLayout.Dock = DockStyle.Fill;
+            _fileStepContentLayout.Margin = new Padding(
+                0,
+                ScaleLogical(8),
+                0,
+                0);
+            _fileStepContentLayout.ColumnStyles.Clear();
+            _fileStepContentLayout.ColumnStyles.Add(
+                new ColumnStyle(SizeType.Percent, 100f));
+            _fileStepContentLayout.RowStyles.Clear();
+            _fileStepContentLayout.RowStyles.Add(
+                new RowStyle(SizeType.Percent, 100f));
+
+            _fileListView.Dock = DockStyle.Fill;
+            _fileListView.Margin = new Padding(0);
+            _fileListView.View = View.Details;
+            _fileListView.HeaderStyle = ColumnHeaderStyle.None;
+            _fileListView.FullRowSelect = true;
+            _fileListView.HideSelection = false;
+            _fileListView.MultiSelect = true;
+            _fileListView.Scrollable = true;
+            _fileListView.OwnerDraw = true;
+            _fileListView.SmallImageList = _fileQueueImageList;
+            _fileListView.ShowItemToolTips = true;
+            _fileListView.Columns.Add(string.Empty, ScaleLogical(340));
+            _fileListView.Columns.Add(string.Empty, ScaleLogical(90));
+            _fileListView.Columns.Add(string.Empty, ScaleLogical(132));
+            _fileListView.Columns.Add(string.Empty, ScaleLogical(36));
+            _fileListView.Resize += (s, e) =>
+            {
+                UpdateQueueColumnWidths();
+                PositionProgressBars();
+            };
+            _fileListView.DrawColumnHeader +=
+                HandleFileListViewDrawColumnHeader;
+            _fileListView.DrawItem += HandleFileListViewDrawItem;
+            _fileListView.DrawSubItem += HandleFileListViewDrawSubItem;
+            _fileListView.MouseClick += HandleQueueMouseClick;
+            _fileListView.MouseDoubleClick += HandleQueueMouseDoubleClick;
+            _fileListView.MouseMove += HandleQueueMouseMove;
+            _fileListView.KeyDown += HandleQueueKeyDown;
+            _fileStepContentLayout.Controls.Add(_fileListView, 0, 0);
+
+            _queueEmptyLabel.Text = Strings.FileLinkQueueEmpty;
+            _queueEmptyLabel.Dock = DockStyle.Fill;
+            _queueEmptyLabel.TextAlign = ContentAlignment.MiddleCenter;
+            _queueEmptyLabel.ForeColor = _themePalette.MutedText;
+            _queueEmptyLabel.BackColor = _themePalette.InputBackground;
+            _queueEmptyLabel.BorderStyle = BorderStyle.FixedSingle;
+            _queueEmptyLabel.Margin = new Padding(0);
+            _fileStepContentLayout.Controls.Add(_queueEmptyLabel, 0, 0);
+
+            _fileStepContentLayout.ResumeLayout(false);
+        }
+
         private void LayoutFileStep(Size clientSize)
         {
-            if (_fileStepContentLayout.ColumnStyles.Count >= 2)
-            {
-                int actionColumnWidth = CalculateFileStepButtonColumnWidth();
-                _fileStepContentLayout.ColumnStyles[1].Width = actionColumnWidth;
-                ApplyFileStepButtonSize(_addFilesButton, actionColumnWidth);
-                ApplyFileStepButtonSize(_addFolderButton, actionColumnWidth);
-                ApplyFileStepButtonSize(
-                    _addNextcloudFilesButton,
-                    actionColumnWidth);
-                ApplyFileStepButtonSize(
-                    _addNextcloudFolderButton,
-                    actionColumnWidth);
-                ApplyFileStepButtonSize(_removeItemButton, actionColumnWidth);
-            }
-            int maxInfoWidth = Math.Max(120, clientSize.Width - (FileStepPaddingPixels * 2));
-            _attachmentModeInfoLabel.MaximumSize = new Size(maxInfoWidth, 0);
+            int textPadding = ScaleLogical(52);
+            int minimumButtonWidth = ScaleLogical(170);
+            int widestText = Math.Max(
+                TextRenderer.MeasureText(
+                    _localSourceButton.Text,
+                    _localSourceButton.Font).Width,
+                TextRenderer.MeasureText(
+                    _nextcloudSourceButton.Text,
+                    _nextcloudSourceButton.Font).Width);
+            int buttonWidth = Math.Max(
+                minimumButtonWidth,
+                widestText + textPadding);
+            _localSourceButton.Width = buttonWidth;
+            _nextcloudSourceButton.Width = buttonWidth;
+
+            int maxInfoWidth = Math.Max(
+                ScaleLogical(120),
+                clientSize.Width - ScaleLogical(FileStepPaddingPixels * 2));
+            _attachmentModeInfoLabel.MaximumSize = new Size(
+                maxInfoWidth,
+                0);
+            _basePathLabel.MaximumSize = new Size(maxInfoWidth, 0);
 
             UpdateQueueColumnWidths();
             PositionProgressBars();
         }
 
-        private void ApplyFileStepButtonSize(Button button, int targetWidth)
-        {
-            if (button == null)
-            {
-                return;
-            }
-            int minWidth;
-            FooterButtonLayoutHelper.ApplyButtonSize(button, out minWidth);
-            int width = Math.Max(minWidth, Math.Max(ScaleLogical(120), targetWidth));
-            button.Size = new Size(width, button.Height);
-        }
-
-        private int CalculateFileStepButtonColumnWidth()
-        {
-            int textPadding = ScaleLogical(40);
-            int minWidth = ScaleLogical(FileStepButtonColumnMinWidthPixels);
-            int maxTextWidth = new[]
-            {
-                _addFilesButton,
-                _addFolderButton,
-                _addNextcloudFilesButton,
-                _addNextcloudFolderButton,
-                _removeItemButton
-            }
-                .Max(
-                    button => TextRenderer.MeasureText(
-                        button.Text ?? string.Empty,
-                        button.Font).Width);
-
-            return Math.Max(minWidth, maxTextWidth + textPadding);
-        }
-
         private sealed class SelectionUploadState
         {
-            internal SelectionUploadState(ListViewItem item)
+            internal SelectionUploadState(FileLinkSelection selection)
             {
-                Item = item;
+                Selection = selection;
                 Status = FileLinkUploadStatus.Pending;
             }
 
-            internal ListViewItem Item { get; private set; }
+            internal FileLinkSelection Selection { get; private set; }
+
+            internal ListViewItem Item { get; set; }
 
             internal ProgressBar ProgressBar { get; set; }
 
@@ -245,26 +470,64 @@ namespace NcTalkOutlookAddIn.UI
             internal double UploadSpeedKbps { get; set; }
         }
 
+        private enum FileLinkQueueRowKind
+        {
+            Source,
+            Folder,
+            File
+        }
+
+        private sealed class FileLinkQueueRow
+        {
+            internal FileLinkQueueRow(
+                FileLinkQueueRowKind kind,
+                FileLinkSelectionSource source,
+                FileLinkSelection selection,
+                FileLinkQueueNode node,
+                int depth,
+                string key,
+                bool expanded,
+                bool canRemove)
+            {
+                Kind = kind;
+                Source = source;
+                Selection = selection;
+                Node = node;
+                Depth = depth;
+                Key = key ?? string.Empty;
+                Expanded = expanded;
+                CanRemove = canRemove;
+            }
+
+            internal FileLinkQueueRowKind Kind { get; private set; }
+
+            internal FileLinkSelectionSource Source { get; private set; }
+
+            internal FileLinkSelection Selection { get; private set; }
+
+            internal FileLinkQueueNode Node { get; private set; }
+
+            internal int Depth { get; private set; }
+
+            internal string Key { get; private set; }
+
+            internal bool Expanded { get; private set; }
+
+            internal bool CanRemove { get; private set; }
+
+            internal bool HasChildren
+            {
+                get
+                {
+                    return Node != null
+                           && Node.IsDirectory
+                           && Node.Children.Count > 0;
+                }
+            }
+        }
+
         private sealed class PathScrollableListView : ListView
         {
-            private const int WmMouseWheel = 0x020A;
-
-            internal Func<int, bool> HorizontalWheelHandler { get; set; }
-
-            protected override void WndProc(ref Message m)
-            {
-                if (m.Msg == WmMouseWheel && HorizontalWheelHandler != null)
-                {
-                    long wParam = m.WParam.ToInt64();
-                    int delta = unchecked((short)((wParam >> 16) & 0xffff));
-                    if (delta != 0 && HorizontalWheelHandler(delta))
-                    {
-                        return;
-                    }
-                }
-
-                base.WndProc(ref m);
-            }
         }
 
         private void AddFiles()
@@ -275,13 +538,11 @@ namespace NcTalkOutlookAddIn.UI
                 dialog.CheckFileExists = true;
                 if (dialog.ShowDialog(this) == DialogResult.OK)
                 {
-                    var selections = new List<FileLinkSelection>();
-                    foreach (string file in dialog.FileNames)
-                    {
-                        selections.Add(new FileLinkSelection(FileLinkSelectionType.File, file));
-                    }
-
-                    AddSelections(selections);
+                    AddSelections(
+                        dialog.FileNames.Select(
+                            file => new FileLinkSelection(
+                                FileLinkSelectionType.File,
+                                file)));
                 }
             }
         }
@@ -290,9 +551,16 @@ namespace NcTalkOutlookAddIn.UI
         {
             using (var dialog = new FolderBrowserDialog())
             {
-                if (dialog.ShowDialog(this) == DialogResult.OK && !string.IsNullOrWhiteSpace(dialog.SelectedPath))
+                if (dialog.ShowDialog(this) == DialogResult.OK
+                    && !string.IsNullOrWhiteSpace(dialog.SelectedPath))
                 {
-                    AddSelections(new[] { new FileLinkSelection(FileLinkSelectionType.Directory, dialog.SelectedPath) });
+                    AddSelections(
+                        new[]
+                        {
+                            new FileLinkSelection(
+                                FileLinkSelectionType.Directory,
+                                dialog.SelectedPath)
+                        });
                 }
             }
         }
@@ -325,8 +593,7 @@ namespace NcTalkOutlookAddIn.UI
                 {
                     return;
                 }
-                NextcloudStorageEntry root =
-                    dialog.SelectedEntries[0];
+                NextcloudStorageEntry root = dialog.SelectedEntries[0];
                 AddSelections(
                     new[]
                     {
@@ -339,35 +606,59 @@ namespace NcTalkOutlookAddIn.UI
 
         private void RemoveSelection()
         {
-            if (_fileListView.SelectedItems.Count == 0)
+            var selections = _fileListView.SelectedItems
+                .Cast<ListViewItem>()
+                .Select(item => item.Tag as FileLinkQueueRow)
+                .Where(row => row != null && row.CanRemove)
+                .Select(row => row.Selection)
+                .Where(selection => selection != null)
+                .Distinct()
+                .ToList();
+            RemoveSelections(selections);
+        }
+
+        private void RemoveSelections(
+            IEnumerable<FileLinkSelection> selections)
+        {
+            if (IsWizardBusy || selections == null)
             {
                 return;
             }
-            foreach (ListViewItem item in _fileListView.SelectedItems)
+            List<FileLinkSelection> removed = selections
+                .Where(selection => selection != null)
+                .Distinct()
+                .ToList();
+            if (removed.Count == 0)
             {
-                FileLinkSelection selection = item.Tag as FileLinkSelection;
-                if (selection != null)
+                return;
+            }
+
+            foreach (FileLinkSelection selection in removed)
+            {
+                _items.Remove(selection);
+                _queueSnapshots.Remove(selection);
+                SelectionUploadState state;
+                if (_selectionStates.TryGetValue(selection, out state))
                 {
-                    _items.Remove(selection);
-                    SelectionUploadState state;
-                    if (_selectionStates.TryGetValue(selection, out state))
-                    {
-                        DisposeStateProgressBar(state);
-                        _selectionStates.Remove(selection);
-                    }
+                    DisposeStateProgressBar(state);
+                    _selectionStates.Remove(selection);
                 }
-                _fileListView.Items.Remove(item);
+                string keyPrefix = selection.IdentityPath + "|";
+                _expandedQueueFolders.RemoveWhere(
+                    key => key.StartsWith(
+                        keyPrefix,
+                        StringComparison.Ordinal));
             }
             if (_items.Count == 0)
             {
                 _allowEmptyUpload = false;
             }
-            UpdateQueueColumnWidths();
-            PositionProgressBars();
+            RebuildQueueView();
             InvalidateUpload();
         }
 
-        private void AddSelections(IEnumerable<FileLinkSelection> selections)
+        private void AddSelections(
+            IEnumerable<FileLinkSelection> selections)
         {
             if (selections == null)
             {
@@ -388,321 +679,62 @@ namespace NcTalkOutlookAddIn.UI
             var existingPaths = _attachmentMode
                 ? null
                 : new HashSet<string>(
-                    _items.Select(i => i.IdentityPath),
+                    _items.Select(item => item.IdentityPath),
                     StringComparer.OrdinalIgnoreCase);
 
             int requestedCount = pendingSelections.Count;
             int addedCount = 0;
-
-            _fileListView.BeginUpdate();
-            try
+            Exception firstFailure = null;
+            foreach (FileLinkSelection selection in pendingSelections)
             {
-                foreach (var selection in pendingSelections)
+                try
                 {
                     if (TryAddSelection(selection, existingPaths))
                     {
                         addedCount++;
                     }
                 }
-            }
-            finally
-            {
-                _fileListView.EndUpdate();
-            }
-            if (addedCount == 0)
-            {
-                return;
-            }
-
-            _allowEmptyUpload = false;
-            DiagnosticsLogger.Log(
-                LogCategories.FileLink,
-                "Queue selections added (requested="
-                + requestedCount.ToString(CultureInfo.InvariantCulture)
-                + ", added="
-                + addedCount.ToString(CultureInfo.InvariantCulture)
-                + ", total="
-                + _items.Count.ToString(CultureInfo.InvariantCulture)
-                + ").");
-
-            UpdateQueueColumnWidths();
-            PositionProgressBars();
-            InvalidateUpload();
-        }
-
-        private void UpdateQueueColumnWidths()
-        {
-            if (_fileListView == null || _fileListView.Columns.Count < 3 || _fileListView.IsDisposed || _fileListView.Disposing)
-            {
-                return;
-            }
-            int typeWidth = 110;
-            int statusWidth = 180;
-            int clientWidth = Math.Max(0, _fileListView.ClientSize.Width);
-            int pathWidth = clientWidth - typeWidth - statusWidth - 6;
-            if (pathWidth < 120)
-            {
-                int shortage = 120 - pathWidth;
-                int reducibleStatus = Math.Max(0, statusWidth - 150);
-                int reduceStatus = Math.Min(shortage, reducibleStatus);
-                statusWidth -= reduceStatus;
-                shortage -= reduceStatus;
-
-                int reducibleType = Math.Max(0, typeWidth - 90);
-                int reduceType = Math.Min(shortage, reducibleType);
-                typeWidth -= reduceType;
-
-                pathWidth = Math.Max(90, clientWidth - typeWidth - statusWidth - 6);
-            }
-
-            _fileListView.Columns[0].Width = pathWidth;
-            _fileListView.Columns[1].Width = typeWidth;
-            _fileListView.Columns[2].Width = statusWidth;
-            UpdatePathColumnScrollRange();
-            _fileListView.Invalidate();
-        }
-
-        private bool HandlePathColumnMouseWheel(int delta)
-        {
-            if (delta == 0)
-            {
-                return false;
-            }
-            if (_pathColumnMaxHorizontalOffset <= 0)
-            {
-                _pathColumnHorizontalOffset = 0;
-                return false;
-            }
-            int steps = Math.Max(1, Math.Abs(delta) / 120);
-            int shift = steps * PathColumnWheelStepPixels;
-            int nextOffset = _pathColumnHorizontalOffset + (delta < 0 ? shift : -shift);
-            if (nextOffset < 0)
-            {
-                nextOffset = 0;
-            }
-            else if (nextOffset > _pathColumnMaxHorizontalOffset)
-            {
-                nextOffset = _pathColumnMaxHorizontalOffset;
-            }
-            if (nextOffset == _pathColumnHorizontalOffset)
-            {
-                return true;
-            }
-
-            _pathColumnHorizontalOffset = nextOffset;
-            _fileListView.Invalidate();
-            return true;
-        }
-
-        private void UpdatePathColumnScrollRange()
-        {
-            if (_fileListView == null || _fileListView.IsDisposed || _fileListView.Disposing || _fileListView.Columns.Count == 0)
-            {
-                _pathColumnHorizontalOffset = 0;
-                _pathColumnMaxHorizontalOffset = 0;
-                return;
-            }
-            int visibleWidth = Math.Max(0, _fileListView.Columns[0].Width - 8);
-            if (_fileListView.Items.Count == 0 || visibleWidth <= 0)
-            {
-                _pathColumnHorizontalOffset = 0;
-                _pathColumnMaxHorizontalOffset = 0;
-                return;
-            }
-            int widestPath = 0;
-            foreach (ListViewItem item in _fileListView.Items)
-            {
-                string path = item != null ? (item.Text ?? string.Empty) : string.Empty;
-                if (path.Length == 0)
+                catch (Exception ex)
                 {
-                    continue;
-                }
-                int width = TextRenderer.MeasureText(
-                    path,
-                    _fileListView.Font,
-                    new Size(int.MaxValue, int.MaxValue),
-                    TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width;
-
-                if (width > widestPath)
-                {
-                    widestPath = width;
-                }
-            }
-
-            _pathColumnMaxHorizontalOffset = Math.Max(0, widestPath - visibleWidth);
-            if (_pathColumnHorizontalOffset > _pathColumnMaxHorizontalOffset)
-            {
-                _pathColumnHorizontalOffset = _pathColumnMaxHorizontalOffset;
-            }
-        }
-
-        private void HandleFileListViewDrawColumnHeader(object sender, DrawListViewColumnHeaderEventArgs e)
-        {
-            if (e == null)
-            {
-                return;
-            }
-
-            e.DrawDefault = true;
-        }
-
-        private void HandleFileListViewDrawItem(object sender, DrawListViewItemEventArgs e)
-        {
-            if (e == null)
-            {
-                return;
-            }
-            if (_fileListView.View != View.Details)
-            {
-                e.DrawDefault = true;
-            }
-        }
-
-        private void HandleFileListViewDrawSubItem(object sender, DrawListViewSubItemEventArgs e)
-        {
-            if (e == null || e.Item == null || e.SubItem == null)
-            {
-                return;
-            }
-
-            Color rowBackColor = e.Item.BackColor.IsEmpty ? _fileListView.BackColor : e.Item.BackColor;
-            Color rowTextColor = e.Item.ForeColor.IsEmpty ? _fileListView.ForeColor : e.Item.ForeColor;
-            Color backColor = e.SubItem.BackColor.IsEmpty ? rowBackColor : e.SubItem.BackColor;
-            Color textColor = e.SubItem.ForeColor.IsEmpty ? rowTextColor : e.SubItem.ForeColor;
-
-            bool selected = e.Item.Selected && (!_fileListView.HideSelection || _fileListView.Focused);
-            if (selected)
-            {
-                backColor = _themePalette != null ? _themePalette.SelectionBackground : SystemColors.Highlight;
-                textColor = _themePalette != null ? _themePalette.SelectionText : SystemColors.HighlightText;
-            }
-
-            using (var backBrush = new SolidBrush(backColor))
-            {
-                e.Graphics.FillRectangle(backBrush, e.Bounds);
-            }
-            string text = e.SubItem.Text ?? string.Empty;
-            Rectangle textBounds = new Rectangle(
-                e.Bounds.Left + 4,
-                e.Bounds.Top + 1,
-                Math.Max(0, e.Bounds.Width - 6),
-                Math.Max(0, e.Bounds.Height - 2));
-
-            if (e.ColumnIndex == 2)
-            {
-                SelectionUploadState selectionState = ResolveSelectionState(e.Item);
-                if (selectionState != null && selectionState.Status == FileLinkUploadStatus.Uploading)
-                {
-                    int topPadding = ScaleLogical(2);
-                    int bottomPadding = ScaleLogical(2);
-                    int barHeight = Math.Max(ScaleLogical(6), 6);
-                    int contentHeight = Math.Max(0, e.Bounds.Height - topPadding - bottomPadding);
-                    barHeight = Math.Min(barHeight, contentHeight);
-                    int speedTop = e.Bounds.Top + topPadding + barHeight + 1;
-                    int speedBottom = e.Bounds.Bottom - bottomPadding;
-                    int speedHeight = Math.Max(0, speedBottom - speedTop);
-                    if (speedHeight > 0)
+                    if (firstFailure == null)
                     {
-                        textBounds = new Rectangle(
-                            e.Bounds.Left + 4,
-                            speedTop,
-                            Math.Max(0, e.Bounds.Width - 6),
-                            speedHeight);
+                        firstFailure = ex;
                     }
+                    DiagnosticsLogger.LogException(
+                        LogCategories.FileLink,
+                        "Queue selection could not be read.",
+                        ex);
                 }
             }
 
-            if (e.ColumnIndex == 0)
+            if (addedCount > 0)
             {
-                var state = e.Graphics.Save();
-                e.Graphics.SetClip(e.Bounds);
-                var shiftedTextBounds = new Rectangle(
-                    textBounds.Left - _pathColumnHorizontalOffset,
-                    textBounds.Top,
-                    textBounds.Width + _pathColumnHorizontalOffset,
-                    textBounds.Height);
-                TextRenderer.DrawText(
-                    e.Graphics,
-                    text,
-                    _fileListView.Font,
-                    shiftedTextBounds,
-                    textColor,
-                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
-                e.Graphics.Restore(state);
+                _allowEmptyUpload = false;
+                DiagnosticsLogger.Log(
+                    LogCategories.FileLink,
+                    "Queue selections added (requested="
+                    + requestedCount.ToString(CultureInfo.InvariantCulture)
+                    + ", added="
+                    + addedCount.ToString(CultureInfo.InvariantCulture)
+                    + ", total="
+                    + _items.Count.ToString(CultureInfo.InvariantCulture)
+                    + ").");
+                RebuildQueueView();
+                InvalidateUpload();
             }
-            else
+
+            if (firstFailure != null)
             {
-                TextRenderer.DrawText(
-                    e.Graphics,
-                    text,
-                    _fileListView.Font,
-                    textBounds,
-                    textColor,
-                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
-            }
-            if (e.ColumnIndex == _fileListView.Columns.Count - 1 && selected)
-            {
-                Rectangle focusRect = e.Item.Bounds;
-                focusRect.Width = Math.Max(0, _fileListView.ClientSize.Width - focusRect.Left);
-                ControlPaint.DrawFocusRectangle(e.Graphics, focusRect, textColor, backColor);
+                MessageBox.Show(
+                    string.Format(
+                        CultureInfo.CurrentCulture,
+                        Strings.FileLinkQueueReadFailedFormat,
+                        firstFailure.Message),
+                    Strings.DialogTitle,
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
             }
         }
 
-        private SelectionUploadState ResolveSelectionState(ListViewItem item)
-        {
-            if (item == null)
-            {
-                return null;
-            }
-
-            var selection = item.Tag as FileLinkSelection;
-            if (selection == null)
-            {
-                return null;
-            }
-
-            SelectionUploadState selectionState;
-            if (_selectionStates.TryGetValue(selection, out selectionState))
-            {
-                return selectionState;
-            }
-
-            return null;
-        }
-
-        private void ApplyQueueRowStyle(SelectionUploadState state, Color backgroundColor, Color textColor)
-        {
-            if (state == null || state.Item == null)
-            {
-                return;
-            }
-
-            ListViewItem item = state.Item;
-            item.BackColor = backgroundColor;
-            item.ForeColor = textColor;
-
-            for (int i = 0; i < item.SubItems.Count; i++)
-            {
-                item.SubItems[i].BackColor = backgroundColor;
-                if (i != 2)
-                {
-                    item.SubItems[i].ForeColor = textColor;
-                }
-            }
-        }
-
-        private void ConfigureFileListViewRowHeight()
-        {
-            if (_fileListView == null || _fileListView.IsDisposed || _fileListView.Disposing)
-            {
-                return;
-            }
-            int rowHeight = Math.Max(ScaleLogical(30), 30);
-            _fileListRowHeightImageList.ColorDepth = ColorDepth.Depth32Bit;
-            _fileListRowHeightImageList.ImageSize = new Size(1, rowHeight);
-            _fileListRowHeightImageList.Images.Clear();
-            _fileListRowHeightImageList.Images.Add(new Bitmap(1, rowHeight));
-            _fileListView.SmallImageList = _fileListRowHeightImageList;
-        }
     }
 }
