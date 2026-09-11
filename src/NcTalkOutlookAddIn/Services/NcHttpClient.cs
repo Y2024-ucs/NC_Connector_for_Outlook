@@ -27,6 +27,7 @@ namespace NcTalkOutlookAddIn.Services
             EnableAutomaticDecompression = true;
             ParseJson = true;
             ContentLength = -1;
+            MaximumResponseBytes = 0;
             CancellationToken = CancellationToken.None;
             AllowWriteStreamBuffering = true;
         }
@@ -50,6 +51,7 @@ namespace NcTalkOutlookAddIn.Services
         internal bool ParseJson { get; set; }
         internal bool ForceFreshConnection { get; set; }
         internal bool ReadResponseAsBytes { get; set; }
+        internal long MaximumResponseBytes { get; set; }
         internal CancellationToken CancellationToken { get; set; }
         internal int ReadWriteTimeoutMs { get; set; }
         internal int ConnectionLimit { get; set; }
@@ -242,11 +244,17 @@ namespace NcTalkOutlookAddIn.Services
                 {
                     if (options.ReadResponseAsBytes)
                     {
-                        using (var memory = new MemoryStream())
+                        if (options.MaximumResponseBytes > 0
+                            && response.ContentLength
+                            > options.MaximumResponseBytes)
                         {
-                            stream.CopyTo(memory);
-                            result.ResponseBytes = memory.ToArray();
+                            throw new InvalidDataException(
+                                "The HTTP response exceeds the configured byte limit.");
                         }
+                        result.ResponseBytes = ReadResponseBytes(
+                            stream,
+                            options.MaximumResponseBytes,
+                            options.CancellationToken);
                     }
                     else
                     {
@@ -256,7 +264,10 @@ namespace NcTalkOutlookAddIn.Services
                         }
                     }
                 }
-                if (result.ResponseText == null && result.ResponseBytes != null && result.ResponseBytes.Length > 0)
+                if (options.ParseJson
+                    && result.ResponseText == null
+                    && result.ResponseBytes != null
+                    && result.ResponseBytes.Length > 0)
                 {
                     Encoding responseEncoding = options.ResponseEncoding ?? Encoding.UTF8;
                     result.ResponseText = responseEncoding.GetString(result.ResponseBytes);
@@ -316,6 +327,35 @@ namespace NcTalkOutlookAddIn.Services
                 }
             }
             return result;
+        }
+
+        private static byte[] ReadResponseBytes(
+            Stream source,
+            long maximumBytes,
+            CancellationToken cancellationToken)
+        {
+            const int BufferSize = 81920;
+            var buffer = new byte[BufferSize];
+            using (var memory = new MemoryStream())
+            {
+                int read;
+                while ((read = source.Read(
+                    buffer,
+                    0,
+                    buffer.Length)) > 0)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (maximumBytes > 0
+                        && memory.Length > maximumBytes - read)
+                    {
+                        throw new InvalidDataException(
+                            "The HTTP response exceeds the configured byte limit.");
+                    }
+                    memory.Write(buffer, 0, read);
+                }
+                cancellationToken.ThrowIfCancellationRequested();
+                return memory.ToArray();
+            }
         }
 
         private static WebException FindWebException(Exception exception)

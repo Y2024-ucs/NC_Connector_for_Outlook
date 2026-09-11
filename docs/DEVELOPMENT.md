@@ -42,7 +42,7 @@ The add-in connects Outlook classic to a Nextcloud server and provides:
 ### Build MSI (recommended)
 
 ```powershell
-cd "C:\\path\\to\\nc4ol"
+cd "C:\\path\\to\r\nc4ol"
 
 # Optional: reference assemblies (only if needed)
 nuget install Microsoft.NETFramework.ReferenceAssemblies.net472 -OutputDirectory packages -ExcludeVersion
@@ -59,12 +59,12 @@ If WiX ICE validation is not available on the build host (for example `WIX0217` 
 
 Output:
 
-- `dist\\NCConnectorForOutlook-<version>.msi`
+- `dist\r\nCConnectorForOutlook-<version>.msi`
 
 ### Install & run locally
 
 1. Install the MSI (administrator rights required):
-   - `msiexec /i dist\\NCConnectorForOutlook-<version>.msi`
+   - `msiexec /i dist\r\nCConnectorForOutlook-<version>.msi`
 2. Start Outlook
 3. Ribbon:
    - Calendar/appointment: **NC Connector → Insert Talk link**
@@ -263,7 +263,7 @@ For stable rendering in Outlook appointment bodies (Word/RTF pipeline), backend 
    - The wizard starts with the persisted FileLink defaults. A locked share-policy value overrides its local counterpart; an editable value leaves the saved Outlook setting unchanged.
 4. `Services/FileLinkService.cs` orchestrates the upload and public-share flow through the dedicated planner, DAV, transfer, share, and progress components.
    - `FileLinkSelectionScanner` scans each local selection once. The root-relative scan result preserves empty directories, rejects symbolic links and junctions, and captures file size and modification time. `FileLinkUploadPlanner` then assigns transfer modes without touching the server.
-   - `NextcloudFilePickerForm` browses the configured user's file space with depth-one DAV `PROPFIND` requests. Confirming a folder records its complete descendant snapshot, including empty folders. Selected files are planned as server copies; the transfer service checks their current size and sends authenticated DAV `COPY` requests into the reserved share folder. Originals remain unchanged and no file content passes through Outlook.
+   - `NextcloudFilePickerForm` browses the configured user's file space with depth-one DAV `PROPFIND` requests. A selected supported raster image of at most 5 MiB is read with an authenticated, byte-limited DAV `GET` and decoded off the UI thread; stale preview requests are cancelled. Confirming a folder records its complete descendant snapshot, including empty folders. Selected files are planned as server copies; the transfer service checks their current size and sends authenticated DAV `COPY` requests into the reserved share folder. Originals remain unchanged, and file content does not pass through Outlook for the transfer itself.
    - When the user leaves the first manual wizard step, a depth-zero DAV `PROPFIND` checks the target derived from the base path, the wizard's fixed date, and the sanitized share name. An occupied target keeps the wizard on that step. `FileLinkDavClient` still reserves the share root later with an atomic `MKCOL`, so a collision created after the preflight stops the upload safely. A `405` after an indeterminate first result counts as a successful reservation only when a depth-zero DAV `PROPFIND` confirms the exact path as a collection. A known `405` without an earlier indeterminate result remains a collision. Attachment automation skips the preflight and continues to try numbered names. Empty directories, parents needed by bulk or chunked transfers, and Direct parents shared by multiple files are created once, parent first, with at most three parallel requests per level. Single-file Direct path chains are created by `X-NC-WebDAV-Auto-Mkcol`.
    - `FileLinkTransferService` coordinates dedicated bulk, direct, and chunked uploaders. Non-bulk files up to 20 MiB use direct WebDAV `PUT` and the server-side `X-NC-WebDAV-Auto-Mkcol: 1` header. Larger files use Nextcloud chunked upload v2 under `/remote.php/dav/uploads/<user>/<upload-id>` and are assembled with `MOVE .file`. Direct and chunked files share the limit of three concurrent transfers.
    - When the typed capability snapshot exposes `dav.bulkupload = "1.0"`, at least 20 candidate files of at most 8 MiB can be packed into sequential multipart batches of at most 100 files and about 20 MiB. The planner selects bulk only when the batch plan saves at least 20 percent of all upload requests, counting base-path and share-root creation, planned directories, direct files, and every chunk-folder, chunk-`PUT`, and final `MOVE`. Before the first server change, sequential MD5 preparation reports its completed and total file count as a separate wizard phase.
@@ -370,6 +370,7 @@ Sharing:
 - Create public share: `POST /ocs/v2.php/apps/files_sharing/api/v1/shares`
 - Upload/folder creation: `remote.php/dav/...` (WebDAV)
 - Browse the user's files and quota: depth-one `PROPFIND /remote.php/dav/files/<user>/...`
+- Preview a selected supported image: byte-limited `GET /remote.php/dav/files/<user>/...` (maximum 5 MiB)
 - Copy a selected Nextcloud file into the share: `COPY /remote.php/dav/files/<user>/...` with an absolute same-account `Destination`
 - Optional small-file bulk upload: `POST /remote.php/dav/bulk` (`multipart/related`, only when `ocs.data.capabilities.dav.bulkupload` is exactly `"1.0"`)
 - Large file upload: `MKCOL /remote.php/dav/uploads/<user>/<upload-id>`, chunk `PUT`s, then `MOVE /remote.php/dav/uploads/<user>/<upload-id>/.file` to the final file path
@@ -416,7 +417,7 @@ Debug logging is optional and is intended to make support cases reproducible.
 
 - Enable: Settings → **Debug** → “Write debug log file”
 - Optional safety control (default on): “Anonymize logs”
-- Daily log file format: `%LOCALAPPDATA%\\NC4OL\\addin-runtime.log_YYYYMMDD`
+- Daily log file format: `%LOCALAPPDATA%\r\nC4OL\\addin-runtime.log_YYYYMMDD`
 - Runtime exceptions are always written via `DiagnosticsLogger.LogException(...)`, even when debug logging is disabled.
 - Retention: keep latest 7 daily log files and delete files older than 30 days (best effort cleanup).
 - Authorization values, URL credentials, structured token/password fields, Talk/share path tokens, and Secret fragments are redacted before every log write, even when optional anonymization is off.
@@ -455,8 +456,8 @@ Outlook can be installed as a 32-bit application on 64-bit Windows. In that case
 
 The MSI registers add-in keys for **both** registry views:
 
-- 64-bit: `HKLM\\Software\\Microsoft\\Office\\Outlook\\Addins\\NcTalkOutlook.AddIn`
-- 32-bit: `HKLM\\Software\\Wow6432Node\\Microsoft\\Office\\Outlook\\Addins\\NcTalkOutlook.AddIn`
+- 64-bit: `HKLM\\Software\\Microsoft\\Office\\Outlook\\Addins\r\ncTalkOutlook.AddIn`
+- 32-bit: `HKLM\\Software\\Wow6432Node\\Microsoft\\Office\\Outlook\\Addins\r\ncTalkOutlook.AddIn`
 
 Installer definition:
 

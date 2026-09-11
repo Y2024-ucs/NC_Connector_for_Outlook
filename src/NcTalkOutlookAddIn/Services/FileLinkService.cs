@@ -89,22 +89,6 @@ namespace NcTalkOutlookAddIn.Services
             }
         }
 
-        internal string NextcloudAccountName
-        {
-            get
-            {
-                string normalizedBaseUrl =
-                    _configuration.GetNormalizedBaseUrl();
-                Uri uri;
-                return Uri.TryCreate(
-                           normalizedBaseUrl,
-                           UriKind.Absolute,
-                           out uri)
-                    ? uri.Host
-                    : _configuration.Username;
-            }
-        }
-
         internal NextcloudStorageListing ListNextcloudDirectory(
             string relativePath,
             CancellationToken cancellationToken)
@@ -118,6 +102,31 @@ namespace NcTalkOutlookAddIn.Services
                 normalizedBaseUrl,
                 userId,
                 relativePath,
+                cancellationToken);
+        }
+
+        internal byte[] ReadNextcloudFilePreview(
+            NextcloudStorageEntry entry,
+            long maximumBytes,
+            CancellationToken cancellationToken)
+        {
+            if (entry == null || entry.IsDirectory)
+            {
+                throw new ArgumentException(
+                    "A Nextcloud file is required.",
+                    "entry");
+            }
+
+            string normalizedBaseUrl =
+                _configuration.GetNormalizedBaseUrl();
+            string userId =
+                NextcloudUserIdentityService.ResolveCurrentUserId(
+                    _configuration);
+            return _davClient.ReadFilePreview(
+                normalizedBaseUrl,
+                userId,
+                entry.RelativePath,
+                maximumBytes,
                 cancellationToken);
         }
 

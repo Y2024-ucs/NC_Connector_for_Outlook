@@ -97,6 +97,16 @@ namespace NcTalkOutlookAddIn.Utilities
         {
             get { return "folder load failed"; }
         }
+
+        internal static string NextcloudPickerPreviewLoadFailed
+        {
+            get { return "preview load failed"; }
+        }
+
+        internal static string NextcloudPickerPreviewSkipped
+        {
+            get { return "preview skipped"; }
+        }
     }
 
     internal static class ParallelExecution
@@ -143,6 +153,8 @@ namespace NcTalkOutlookAddIn.Services
         internal bool IncludeAuthHeader { get; set; }
         internal bool IncludeOcsApiHeader { get; set; }
         internal bool ParseJson { get; set; }
+        internal bool ReadResponseAsBytes { get; set; }
+        internal long MaximumResponseBytes { get; set; }
         internal long ContentLength { get; set; }
         internal bool AllowWriteStreamBuffering { get; set; }
         internal CancellationToken CancellationToken { get; set; }
@@ -156,6 +168,7 @@ namespace NcTalkOutlookAddIn.Services
         internal bool HasHttpResponse { get; set; }
         internal HttpStatusCode StatusCode { get; set; }
         internal string ResponseText { get; set; }
+        internal byte[] ResponseBytes { get; set; }
         internal IDictionary<string, object> ParsedJson { get; set; }
         internal WebException TransportException { get; set; }
         internal IDictionary<string, string> Headers { get; set; }
@@ -251,6 +264,8 @@ internal static class FileLinkProtocolTests
         TestAutoMkcolHeader();
         TestDavPathNormalization();
         TestNextcloudDirectoryListing();
+        TestNextcloudPreviewDownload();
+        TestNextcloudPreviewLimit();
         TestNextcloudServerCopy();
         TestMissingResourcePreflight();
         TestExistingResourcePreflight();
@@ -346,6 +361,78 @@ internal static class FileLinkProtocolTests
         Equal("Nextcloud listing reads file sizes", 42L, listing.Entries[1].Length);
         Equal("Nextcloud listing reads occupied storage", 100L, listing.UsedBytes.Value);
         Equal("Nextcloud listing reads available storage", 900L, listing.AvailableBytes.Value);
+    }
+
+    private static void TestNextcloudPreviewDownload()
+    {
+        var requests = new List<NcHttpRequestOptions>();
+        var client = new FileLinkDavClient(options =>
+        {
+            requests.Add(options);
+            return new NcHttpResponse
+            {
+                HasHttpResponse = true,
+                StatusCode = HttpStatusCode.OK,
+                ResponseBytes = new byte[] { 1, 2, 3 }
+            };
+        });
+
+        byte[] preview = client.ReadFilePreview(
+            "https://cloud.example.test/nextcloud",
+            "user name",
+            "Photos/Summer #1.png",
+            5L * 1024L * 1024L,
+            CancellationToken.None);
+
+        Equal("Nextcloud preview returns the response bytes", 3, preview.Length);
+        Equal("Nextcloud preview sends one request", 1, requests.Count);
+        Equal("Nextcloud preview uses DAV GET", "GET", requests[0].Method);
+        Equal(
+            "Nextcloud preview encodes the canonical DAV path",
+            "https://cloud.example.test/nextcloud/remote.php/dav/files/user%20name/Photos/Summer%20%231.png",
+            requests[0].Url);
+        Check(
+            "Nextcloud preview reads a binary response",
+            requests[0].ReadResponseAsBytes);
+        Equal(
+            "Nextcloud preview carries the five MiB response limit",
+            5L * 1024L * 1024L,
+            requests[0].MaximumResponseBytes);
+        Check(
+            "Nextcloud preview does not send the OCS header",
+            !requests[0].IncludeOcsApiHeader);
+    }
+
+    private static void TestNextcloudPreviewLimit()
+    {
+        var client = new FileLinkDavClient(options =>
+            new NcHttpResponse
+            {
+                HasHttpResponse = true,
+                StatusCode = HttpStatusCode.OK,
+                ResponseBytes = new byte[] { 1, 2, 3, 4 }
+            });
+
+        bool rejected = false;
+        try
+        {
+            client.ReadFilePreview(
+                "https://cloud.example.test",
+                "user",
+                "large.png",
+                3,
+                CancellationToken.None);
+        }
+        catch (TalkServiceException ex)
+        {
+            rejected = string.Equals(
+                ex.Message,
+                "preview skipped",
+                StringComparison.Ordinal);
+        }
+        Check(
+            "Nextcloud preview rejects a response above its byte limit",
+            rejected);
     }
 
     private static void TestNextcloudServerCopy()

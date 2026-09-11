@@ -1112,6 +1112,18 @@
   "outlook_nextcloud_picker_no_preview": {
     "message": "Podgląd niedostępny"
   },
+  "outlook_nextcloud_picker_multiple_selection": {
+    "message": "Wybrane elementy: {0}"
+  },
+  "outlook_nextcloud_picker_preview_loading": {
+    "message": "Wczytywanie podglądu..."
+  },
+  "outlook_nextcloud_picker_preview_load_failed": {
+    "message": "Nie udało się wczytać podglądu"
+  },
+  "outlook_nextcloud_picker_preview_skipped": {
+    "message": "Pominięto podgląd dużego pliku"
+  },
   "outlook_nextcloud_picker_close_button": {
     "message": "Zamknij"
   },

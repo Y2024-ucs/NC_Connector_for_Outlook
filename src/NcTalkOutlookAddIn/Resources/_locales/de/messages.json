@@ -1112,6 +1112,18 @@
   "outlook_nextcloud_picker_no_preview": {
     "message": "Keine Vorschau verfügbar"
   },
+  "outlook_nextcloud_picker_multiple_selection": {
+    "message": "Ausgewählte Elemente: {0}"
+  },
+  "outlook_nextcloud_picker_preview_loading": {
+    "message": "Vorschau wird geladen..."
+  },
+  "outlook_nextcloud_picker_preview_load_failed": {
+    "message": "Vorschau konnte nicht geladen werden"
+  },
+  "outlook_nextcloud_picker_preview_skipped": {
+    "message": "Vorschau für große Dateien übersprungen"
+  },
   "outlook_nextcloud_picker_close_button": {
     "message": "Schließen"
   },

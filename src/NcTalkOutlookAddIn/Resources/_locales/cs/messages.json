@@ -1112,6 +1112,18 @@
   "outlook_nextcloud_picker_no_preview": {
     "message": "Náhled není k dispozici"
   },
+  "outlook_nextcloud_picker_multiple_selection": {
+    "message": "Vybrané položky: {0}"
+  },
+  "outlook_nextcloud_picker_preview_loading": {
+    "message": "Načítání náhledu..."
+  },
+  "outlook_nextcloud_picker_preview_load_failed": {
+    "message": "Náhled nelze načíst"
+  },
+  "outlook_nextcloud_picker_preview_skipped": {
+    "message": "Náhled byl u velkého souboru přeskočen"
+  },
   "outlook_nextcloud_picker_close_button": {
     "message": "Zavřít"
   },

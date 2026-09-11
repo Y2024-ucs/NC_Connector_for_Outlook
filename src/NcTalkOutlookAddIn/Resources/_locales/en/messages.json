@@ -1112,6 +1112,18 @@
   "outlook_nextcloud_picker_no_preview": {
     "message": "No preview available"
   },
+  "outlook_nextcloud_picker_multiple_selection": {
+    "message": "Selected items: {0}"
+  },
+  "outlook_nextcloud_picker_preview_loading": {
+    "message": "Loading preview..."
+  },
+  "outlook_nextcloud_picker_preview_load_failed": {
+    "message": "Could not load preview"
+  },
+  "outlook_nextcloud_picker_preview_skipped": {
+    "message": "Preview skipped for large files"
+  },
   "outlook_nextcloud_picker_close_button": {
     "message": "Close"
   },

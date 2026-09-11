@@ -1112,6 +1112,18 @@
   "outlook_nextcloud_picker_no_preview": {
     "message": "プレビューを表示できません"
   },
+  "outlook_nextcloud_picker_multiple_selection": {
+    "message": "選択した項目: {0}"
+  },
+  "outlook_nextcloud_picker_preview_loading": {
+    "message": "プレビューを読み込んでいます..."
+  },
+  "outlook_nextcloud_picker_preview_load_failed": {
+    "message": "プレビューを読み込めませんでした"
+  },
+  "outlook_nextcloud_picker_preview_skipped": {
+    "message": "大きいファイルのプレビューをスキップしました"
+  },
   "outlook_nextcloud_picker_close_button": {
     "message": "閉じる"
   },

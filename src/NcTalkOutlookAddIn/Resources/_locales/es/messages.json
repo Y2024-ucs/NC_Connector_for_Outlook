@@ -1112,6 +1112,18 @@
   "outlook_nextcloud_picker_no_preview": {
     "message": "Vista previa no disponible"
   },
+  "outlook_nextcloud_picker_multiple_selection": {
+    "message": "Elementos seleccionados: {0}"
+  },
+  "outlook_nextcloud_picker_preview_loading": {
+    "message": "Cargando vista previa..."
+  },
+  "outlook_nextcloud_picker_preview_load_failed": {
+    "message": "No se pudo cargar la vista previa"
+  },
+  "outlook_nextcloud_picker_preview_skipped": {
+    "message": "Vista previa omitida para archivos grandes"
+  },
   "outlook_nextcloud_picker_close_button": {
     "message": "Cerrar"
   },

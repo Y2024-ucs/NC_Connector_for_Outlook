@@ -1112,6 +1112,18 @@
   "outlook_nextcloud_picker_no_preview": {
     "message": "Предпросмотр недоступен"
   },
+  "outlook_nextcloud_picker_multiple_selection": {
+    "message": "Выбрано элементов: {0}"
+  },
+  "outlook_nextcloud_picker_preview_loading": {
+    "message": "Загрузка предпросмотра..."
+  },
+  "outlook_nextcloud_picker_preview_load_failed": {
+    "message": "Не удалось загрузить предпросмотр"
+  },
+  "outlook_nextcloud_picker_preview_skipped": {
+    "message": "Предпросмотр большого файла пропущен"
+  },
   "outlook_nextcloud_picker_close_button": {
     "message": "Закрыть"
   },

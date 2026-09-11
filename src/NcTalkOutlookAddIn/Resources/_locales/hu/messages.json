@@ -1112,6 +1112,18 @@
   "outlook_nextcloud_picker_no_preview": {
     "message": "Nincs elérhető előnézet"
   },
+  "outlook_nextcloud_picker_multiple_selection": {
+    "message": "Kiválasztott elemek: {0}"
+  },
+  "outlook_nextcloud_picker_preview_loading": {
+    "message": "Előnézet betöltése..."
+  },
+  "outlook_nextcloud_picker_preview_load_failed": {
+    "message": "Az előnézet nem tölthető be"
+  },
+  "outlook_nextcloud_picker_preview_skipped": {
+    "message": "Előnézet kihagyva nagy fájloknál"
+  },
   "outlook_nextcloud_picker_close_button": {
     "message": "Bezárás"
   },

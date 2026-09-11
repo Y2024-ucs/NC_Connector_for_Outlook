@@ -6,7 +6,10 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -25,6 +28,21 @@ namespace NcTalkOutlookAddIn.UI
 
     internal sealed class NextcloudFilePickerForm : ScaledForm
     {
+        private const long MaximumPreviewBytes = 5L * 1024L * 1024L;
+        private const long MaximumDecodedPreviewPixels = 80000000L;
+        private const int MaximumPreviewDimension = 2048;
+
+        private static readonly ISet<string> PreviewImageExtensions =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ".bmp",
+                ".gif",
+                ".ico",
+                ".jpeg",
+                ".jpg",
+                ".png"
+            };
+
         private readonly FileLinkService _service;
         private readonly NextcloudFilePickerMode _mode;
         private readonly UiThemePalette _palette =
@@ -32,16 +50,19 @@ namespace NcTalkOutlookAddIn.UI
         private readonly TextBox _filterTextBox = new TextBox();
         private readonly Button _upButton = new Button();
         private readonly PictureBox _sourceIcon = new PictureBox();
-        private readonly Label _accountLabel = new Label();
-        private readonly Label _pathLabel = new Label();
+        private readonly FlowLayoutPanel _breadcrumbPanel =
+            new FlowLayoutPanel();
         private readonly ListView _itemsView = new ListView();
         private readonly Label _previewLabel = new Label();
+        private readonly PictureBox _previewImage = new PictureBox();
         private readonly Label _storageLabel = new Label();
         private readonly Label _statusLabel = new Label();
         private readonly Button _closeButton = new Button();
         private readonly Button _selectButton = new Button();
         private readonly ImageList _icons;
         private CancellationTokenSource _loadCancellation;
+        private CancellationTokenSource _previewCancellation;
+        private int _previewVersion;
         private string _currentPath = string.Empty;
         private NextcloudStorageListing _currentListing;
         private long? _usedBytes;
@@ -84,6 +105,8 @@ namespace NcTalkOutlookAddIn.UI
             InitializeLayout();
             UiThemeManager.ApplyToForm(this);
             _filterTextBox.ForeColor = _palette.MutedText;
+            _upButton.ForeColor = _palette.LinkText;
+            _upButton.FlatAppearance.BorderColor = _palette.Border;
             Shown += async (s, e) =>
                 await LoadFolderAsync(string.Empty);
         }
@@ -97,6 +120,8 @@ namespace NcTalkOutlookAddIn.UI
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             CancelCurrentLoad();
+            CancelCurrentPreview();
+            DisposePreviewImage();
             if (_sourceIcon.Image != null)
             {
                 _sourceIcon.Image.Dispose();
@@ -116,8 +141,8 @@ namespace NcTalkOutlookAddIn.UI
                 Padding = new Padding(0),
                 Margin = new Padding(0)
             };
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, ScaleLogical(52)));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, ScaleLogical(44)));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, ScaleLogical(36)));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, ScaleLogical(38)));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, ScaleLogical(56)));
             Controls.Add(root);
@@ -127,9 +152,9 @@ namespace NcTalkOutlookAddIn.UI
                 Dock = DockStyle.Fill,
                 Padding = new Padding(
                     ScaleLogical(12),
+                    ScaleLogical(7),
                     ScaleLogical(12),
-                    ScaleLogical(12),
-                    ScaleLogical(8))
+                    ScaleLogical(5))
             };
             root.Controls.Add(searchPanel, 0, 0);
 
@@ -141,7 +166,7 @@ namespace NcTalkOutlookAddIn.UI
                     searchPanel.ClientSize.Width
                     - _filterTextBox.Width
                     - ScaleLogical(12)),
-                ScaleLogical(12));
+                ScaleLogical(7));
             _filterTextBox.Text = Strings.NextcloudPickerFilterPlaceholder;
             _filterTextBox.ForeColor = _palette.MutedText;
             _filterTextBox.GotFocus += HandleFilterGotFocus;
@@ -160,28 +185,34 @@ namespace NcTalkOutlookAddIn.UI
             var pathPanel = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 4,
+                ColumnCount = 3,
                 RowCount = 1,
                 Padding = new Padding(
                     ScaleLogical(8),
-                    ScaleLogical(5),
+                    ScaleLogical(3),
                     ScaleLogical(12),
-                    ScaleLogical(5)),
+                    ScaleLogical(3)),
                 Margin = new Padding(0)
             };
             pathPanel.ColumnStyles.Add(
-                new ColumnStyle(SizeType.Absolute, ScaleLogical(32)));
+                new ColumnStyle(SizeType.Absolute, ScaleLogical(34)));
             pathPanel.ColumnStyles.Add(
-                new ColumnStyle(SizeType.Absolute, ScaleLogical(30)));
-            pathPanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+                new ColumnStyle(SizeType.Absolute, ScaleLogical(28)));
             pathPanel.ColumnStyles.Add(
                 new ColumnStyle(SizeType.Percent, 100f));
             root.Controls.Add(pathPanel, 0, 1);
 
-            _upButton.Text = "‹";
+            _upButton.Text = "←";
             _upButton.Dock = DockStyle.Fill;
             _upButton.Margin = new Padding(0);
             _upButton.Enabled = false;
+            _upButton.FlatStyle = FlatStyle.Flat;
+            _upButton.FlatAppearance.BorderSize = 1;
+            _upButton.AccessibleName = Strings.ButtonBack;
+            _upButton.Font = new Font(
+                SystemFonts.MessageBoxFont.FontFamily,
+                12f,
+                FontStyle.Bold);
             _upButton.Click += async (s, e) => await NavigateUpAsync();
             pathPanel.Controls.Add(_upButton, 0, 0);
 
@@ -192,20 +223,18 @@ namespace NcTalkOutlookAddIn.UI
                 _icons.Images[FileLinkIconProvider.NextcloudSourceKey]);
             pathPanel.Controls.Add(_sourceIcon, 1, 0);
 
-            _accountLabel.Text = string.Format(
-                CultureInfo.CurrentCulture,
-                Strings.NextcloudPickerAccountFormat,
-                _service.NextcloudAccountName);
-            _accountLabel.AutoSize = true;
-            _accountLabel.Anchor = AnchorStyles.Left;
-            _accountLabel.Margin = new Padding(0, 0, ScaleLogical(10), 0);
-            pathPanel.Controls.Add(_accountLabel, 2, 0);
-
-            _pathLabel.Text = "/";
-            _pathLabel.AutoEllipsis = true;
-            _pathLabel.Dock = DockStyle.Fill;
-            _pathLabel.TextAlign = ContentAlignment.MiddleLeft;
-            pathPanel.Controls.Add(_pathLabel, 3, 0);
+            _breadcrumbPanel.Dock = DockStyle.Fill;
+            _breadcrumbPanel.AutoScroll = true;
+            _breadcrumbPanel.WrapContents = false;
+            _breadcrumbPanel.FlowDirection = FlowDirection.LeftToRight;
+            _breadcrumbPanel.Margin = new Padding(0);
+            _breadcrumbPanel.Padding = new Padding(
+                0,
+                ScaleLogical(5),
+                0,
+                0);
+            pathPanel.Controls.Add(_breadcrumbPanel, 2, 0);
+            UpdateBreadcrumb(string.Empty);
 
             var split = new SplitContainer
             {
@@ -238,10 +267,10 @@ namespace NcTalkOutlookAddIn.UI
             _itemsView.Columns.Add(
                 Strings.NextcloudPickerColumnModified,
                 ScaleLogical(130));
-            _itemsView.SelectedIndexChanged += (s, e) =>
+            _itemsView.SelectedIndexChanged += async (s, e) =>
             {
-                UpdatePreview();
                 UpdateSelectButton();
+                await UpdatePreviewAsync();
             };
             _itemsView.ItemActivate += async (s, e) =>
                 await ActivateSelectedItemAsync();
@@ -256,6 +285,12 @@ namespace NcTalkOutlookAddIn.UI
             _previewLabel.ForeColor = _palette.MutedText;
             _previewLabel.Padding = new Padding(ScaleLogical(16));
             split.Panel2.Controls.Add(_previewLabel);
+
+            _previewImage.Dock = DockStyle.Fill;
+            _previewImage.SizeMode = PictureBoxSizeMode.Zoom;
+            _previewImage.Padding = new Padding(ScaleLogical(16));
+            _previewImage.Visible = false;
+            split.Panel2.Controls.Add(_previewImage);
 
             var footer = new TableLayoutPanel
             {
@@ -307,6 +342,8 @@ namespace NcTalkOutlookAddIn.UI
 
         private async Task LoadFolderAsync(string relativePath)
         {
+            CancelCurrentPreview();
+            ShowPreviewText(Strings.NextcloudPickerNoSelection);
             CancelCurrentLoad();
             _loadCancellation = new CancellationTokenSource();
             CancellationToken token = _loadCancellation.Token;
@@ -329,7 +366,7 @@ namespace NcTalkOutlookAddIn.UI
                 {
                     _availableBytes = listing.AvailableBytes;
                 }
-                _pathLabel.Text = "/" + _currentPath;
+                UpdateBreadcrumb(_currentPath);
                 _upButton.Enabled = _currentPath.Length > 0;
                 PopulateItems();
                 UpdateStorageLabel();
@@ -409,7 +446,8 @@ namespace NcTalkOutlookAddIn.UI
             {
                 _itemsView.EndUpdate();
             }
-            UpdatePreview();
+            CancelCurrentPreview();
+            ShowPreviewText(Strings.NextcloudPickerNoSelection);
             UpdateSelectButton();
         }
 
@@ -420,6 +458,117 @@ namespace NcTalkOutlookAddIn.UI
                 return;
             }
             await LoadFolderAsync(NextcloudPath.GetParent(_currentPath));
+        }
+
+        private void UpdateBreadcrumb(string relativePath)
+        {
+            string normalizedPath = NextcloudPath.Normalize(relativePath);
+            _breadcrumbPanel.SuspendLayout();
+            Control lastPart = null;
+            try
+            {
+                while (_breadcrumbPanel.Controls.Count > 0)
+                {
+                    Control control = _breadcrumbPanel.Controls[0];
+                    _breadcrumbPanel.Controls.RemoveAt(0);
+                    control.Dispose();
+                }
+
+                bool atRoot = normalizedPath.Length == 0;
+                lastPart = AddBreadcrumbPart(
+                    "/",
+                    string.Empty,
+                    atRoot);
+                string currentPath = string.Empty;
+                string[] segments = normalizedPath.Split(
+                    new[] { '/' },
+                    StringSplitOptions.RemoveEmptyEntries);
+                for (int index = 0; index < segments.Length; index++)
+                {
+                    if (index > 0)
+                    {
+                        var separator = new Label
+                        {
+                            AutoSize = true,
+                            Text = "/",
+                            ForeColor = _palette.MutedText,
+                            Margin = new Padding(
+                                ScaleLogical(3),
+                                ScaleLogical(2),
+                                ScaleLogical(3),
+                                0)
+                        };
+                        _breadcrumbPanel.Controls.Add(separator);
+                    }
+
+                    currentPath = currentPath.Length == 0
+                        ? segments[index]
+                        : currentPath + "/" + segments[index];
+                    lastPart = AddBreadcrumbPart(
+                        segments[index],
+                        currentPath,
+                        index == segments.Length - 1);
+                }
+            }
+            finally
+            {
+                _breadcrumbPanel.ResumeLayout(true);
+            }
+            if (lastPart != null)
+            {
+                _breadcrumbPanel.ScrollControlIntoView(lastPart);
+            }
+        }
+
+        private Control AddBreadcrumbPart(
+            string text,
+            string targetPath,
+            bool current)
+        {
+            if (current)
+            {
+                var label = new Label
+                {
+                    AutoSize = true,
+                    Text = text,
+                    ForeColor = _palette.Text,
+                    Font = new Font(
+                        Font,
+                        FontStyle.Bold),
+                    Margin = new Padding(
+                        0,
+                        ScaleLogical(2),
+                        0,
+                        0)
+                };
+                _breadcrumbPanel.Controls.Add(label);
+                return label;
+            }
+
+            var link = new LinkLabel
+            {
+                AutoSize = true,
+                Text = text,
+                LinkColor = _palette.LinkText,
+                ActiveLinkColor = _palette.LinkText,
+                VisitedLinkColor = _palette.LinkText,
+                LinkBehavior = LinkBehavior.HoverUnderline,
+                Margin = new Padding(
+                    0,
+                    ScaleLogical(2),
+                    0,
+                    0)
+            };
+            string navigationTarget = targetPath;
+            link.LinkClicked += async (s, e) =>
+            {
+                if (!_loading)
+                {
+                    await LoadFolderAsync(navigationTarget);
+                }
+            };
+            _breadcrumbPanel.Controls.Add(link);
+            return link;
         }
 
         private async Task ActivateSelectedItemAsync()
@@ -576,21 +725,222 @@ namespace NcTalkOutlookAddIn.UI
                 : value.Trim();
         }
 
-        private void UpdatePreview()
+        private async Task UpdatePreviewAsync()
         {
-            if (_itemsView.SelectedItems.Count != 1)
+            CancelCurrentPreview();
+            int selectionCount = _itemsView.SelectedItems.Count;
+            if (selectionCount == 0)
             {
-                _previewLabel.Text = Strings.NextcloudPickerNoSelection;
+                ShowPreviewText(Strings.NextcloudPickerNoSelection);
                 return;
             }
+            if (selectionCount > 1)
+            {
+                ShowPreviewText(string.Format(
+                    CultureInfo.CurrentCulture,
+                    Strings.NextcloudPickerMultipleSelectionFormat,
+                    selectionCount));
+                return;
+            }
+
             NextcloudStorageEntry entry =
                 _itemsView.SelectedItems[0].Tag
                 as NextcloudStorageEntry;
-            _previewLabel.Text = entry == null
-                ? Strings.NextcloudPickerNoSelection
-                : entry.IsDirectory
-                    ? entry.DisplayName
-                    : Strings.NextcloudPickerNoPreview;
+            if (entry == null)
+            {
+                ShowPreviewText(Strings.NextcloudPickerNoSelection);
+                return;
+            }
+            if (entry.IsDirectory)
+            {
+                ShowPreviewText(entry.DisplayName);
+                return;
+            }
+            if (!PreviewImageExtensions.Contains(
+                Path.GetExtension(entry.DisplayName) ?? string.Empty))
+            {
+                ShowPreviewText(Strings.NextcloudPickerNoPreview);
+                return;
+            }
+            if (entry.Length > MaximumPreviewBytes)
+            {
+                ShowPreviewText(Strings.NextcloudPickerPreviewSkipped);
+                return;
+            }
+
+            var cancellation = new CancellationTokenSource();
+            _previewCancellation = cancellation;
+            int previewVersion = _previewVersion;
+            CancellationToken token = cancellation.Token;
+            ShowPreviewText(Strings.NextcloudPickerPreviewLoading);
+            try
+            {
+                Bitmap preview = await Task.Run(
+                    () =>
+                    {
+                        byte[] bytes = _service.ReadNextcloudFilePreview(
+                            entry,
+                            MaximumPreviewBytes,
+                            token);
+                        token.ThrowIfCancellationRequested();
+                        Bitmap bitmap = DecodePreviewImage(bytes);
+                        token.ThrowIfCancellationRequested();
+                        return bitmap;
+                    },
+                    token);
+                if (!IsCurrentPreview(
+                    cancellation,
+                    previewVersion))
+                {
+                    preview.Dispose();
+                    return;
+                }
+                ShowPreviewImage(preview);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsLogger.LogException(
+                    LogCategories.FileLink,
+                    "Nextcloud picker preview failed.",
+                    ex);
+                if (IsCurrentPreview(
+                    cancellation,
+                    previewVersion))
+                {
+                    ShowPreviewText(
+                        Strings.NextcloudPickerPreviewLoadFailed);
+                }
+            }
+            finally
+            {
+                if (ReferenceEquals(
+                    _previewCancellation,
+                    cancellation))
+                {
+                    _previewCancellation = null;
+                }
+                cancellation.Dispose();
+            }
+        }
+
+        private bool IsCurrentPreview(
+            CancellationTokenSource cancellation,
+            int previewVersion)
+        {
+            return !IsDisposed
+                   && !Disposing
+                   && ReferenceEquals(
+                       _previewCancellation,
+                       cancellation)
+                   && previewVersion == _previewVersion
+                   && !cancellation.IsCancellationRequested;
+        }
+
+        private static Bitmap DecodePreviewImage(byte[] bytes)
+        {
+            if (bytes == null || bytes.Length == 0)
+            {
+                throw new InvalidDataException(
+                    "The preview response did not contain image data.");
+            }
+
+            using (var stream = new MemoryStream(bytes, false))
+            using (Image source = Image.FromStream(
+                stream,
+                true,
+                true))
+            {
+                long pixelCount = checked(
+                    (long)source.Width * source.Height);
+                if (source.Width <= 0
+                    || source.Height <= 0
+                    || pixelCount > MaximumDecodedPreviewPixels)
+                {
+                    throw new InvalidDataException(
+                        "The image dimensions exceed the preview limit.");
+                }
+
+                double scale = Math.Min(
+                    1d,
+                    Math.Min(
+                        (double)MaximumPreviewDimension / source.Width,
+                        (double)MaximumPreviewDimension / source.Height));
+                int width = Math.Max(
+                    1,
+                    (int)Math.Round(source.Width * scale));
+                int height = Math.Max(
+                    1,
+                    (int)Math.Round(source.Height * scale));
+                var bitmap = new Bitmap(
+                    width,
+                    height,
+                    PixelFormat.Format32bppPArgb);
+                try
+                {
+                    using (Graphics graphics = Graphics.FromImage(bitmap))
+                    {
+                        graphics.Clear(Color.Transparent);
+                        graphics.CompositingQuality =
+                            CompositingQuality.HighQuality;
+                        graphics.InterpolationMode =
+                            InterpolationMode.HighQualityBicubic;
+                        graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                        graphics.SmoothingMode = SmoothingMode.HighQuality;
+                        graphics.DrawImage(
+                            source,
+                            new Rectangle(0, 0, width, height));
+                    }
+                    return bitmap;
+                }
+                catch
+                {
+                    bitmap.Dispose();
+                    throw;
+                }
+            }
+        }
+
+        private void ShowPreviewText(string text)
+        {
+            DisposePreviewImage();
+            _previewImage.Visible = false;
+            _previewLabel.Text = text ?? string.Empty;
+            _previewLabel.Visible = true;
+            _previewLabel.BringToFront();
+        }
+
+        private void ShowPreviewImage(Bitmap image)
+        {
+            if (image == null)
+            {
+                ShowPreviewText(Strings.NextcloudPickerPreviewLoadFailed);
+                return;
+            }
+            if (IsDisposed || Disposing)
+            {
+                image.Dispose();
+                return;
+            }
+
+            DisposePreviewImage();
+            _previewImage.Image = image;
+            _previewLabel.Visible = false;
+            _previewImage.Visible = true;
+            _previewImage.BringToFront();
+        }
+
+        private void DisposePreviewImage()
+        {
+            Image image = _previewImage.Image;
+            _previewImage.Image = null;
+            if (image != null)
+            {
+                image.Dispose();
+            }
         }
 
         private void UpdateSelectButton()
@@ -658,6 +1008,25 @@ namespace NcTalkOutlookAddIn.UI
             }
             _loadCancellation.Dispose();
             _loadCancellation = null;
+        }
+
+        private void CancelCurrentPreview()
+        {
+            _previewVersion++;
+            CancellationTokenSource cancellation =
+                _previewCancellation;
+            _previewCancellation = null;
+            if (cancellation == null)
+            {
+                return;
+            }
+            try
+            {
+                cancellation.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
         }
 
         private void UpdateColumnWidths()

@@ -1112,6 +1112,18 @@
   "outlook_nextcloud_picker_no_preview": {
     "message": "Geen voorbeeld beschikbaar"
   },
+  "outlook_nextcloud_picker_multiple_selection": {
+    "message": "Geselecteerde items: {0}"
+  },
+  "outlook_nextcloud_picker_preview_loading": {
+    "message": "Voorbeeld laden..."
+  },
+  "outlook_nextcloud_picker_preview_load_failed": {
+    "message": "Voorbeeld kon niet worden geladen"
+  },
+  "outlook_nextcloud_picker_preview_skipped": {
+    "message": "Voorbeeld overgeslagen voor een groot bestand"
+  },
   "outlook_nextcloud_picker_close_button": {
     "message": "Sluiten"
   },

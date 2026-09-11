@@ -1112,6 +1112,18 @@
   "outlook_nextcloud_picker_no_preview": {
     "message": "無法預覽"
   },
+  "outlook_nextcloud_picker_multiple_selection": {
+    "message": "已選取項目：{0}"
+  },
+  "outlook_nextcloud_picker_preview_loading": {
+    "message": "正在載入預覽..."
+  },
+  "outlook_nextcloud_picker_preview_load_failed": {
+    "message": "無法載入預覽"
+  },
+  "outlook_nextcloud_picker_preview_skipped": {
+    "message": "檔案過大，已略過預覽"
+  },
   "outlook_nextcloud_picker_close_button": {
     "message": "關閉"
   },

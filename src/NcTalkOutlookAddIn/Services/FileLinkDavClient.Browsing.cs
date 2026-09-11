@@ -80,6 +80,74 @@ namespace NcTalkOutlookAddIn.Services
                 response.ResponseText);
         }
 
+        internal byte[] ReadFilePreview(
+            string baseUrl,
+            string userId,
+            string relativePath,
+            long maximumBytes,
+            CancellationToken cancellationToken)
+        {
+            if (maximumBytes <= 0)
+            {
+                throw new ArgumentOutOfRangeException("maximumBytes");
+            }
+
+            string normalizedPath = NextcloudPath.Normalize(relativePath);
+            if (normalizedPath.Length == 0)
+            {
+                throw new ArgumentException(
+                    "A Nextcloud file path is required.",
+                    "relativePath");
+            }
+
+            NcHttpResponse response = SendWithRetry(
+                () => new NcHttpRequestOptions
+                {
+                    Method = "GET",
+                    Url = BuildNextcloudSourceUrl(
+                        baseUrl,
+                        userId,
+                        normalizedPath),
+                    Accept = "image/*, application/octet-stream",
+                    TimeoutMs = 60000,
+                    ReadWriteTimeoutMs = 60000,
+                    IncludeAuthHeader = true,
+                    IncludeOcsApiHeader = false,
+                    ParseJson = false,
+                    ReadResponseAsBytes = true,
+                    MaximumResponseBytes = maximumBytes,
+                    CancellationToken = cancellationToken,
+                    ConnectionLimit =
+                        FileLinkUploadPolicy.MaxParallelRequests
+                },
+                "nextcloud_file_preview",
+                cancellationToken,
+                null);
+
+            bool successful = response != null
+                              && response.HasHttpResponse
+                              && response.StatusCode == HttpStatusCode.OK;
+            if (!successful)
+            {
+                ThrowFailure(
+                    response,
+                    Strings.NextcloudPickerPreviewLoadFailed,
+                    cancellationToken,
+                    false);
+            }
+
+            byte[] bytes = response.ResponseBytes ?? new byte[0];
+            if (bytes.LongLength > maximumBytes)
+            {
+                throw new TalkServiceException(
+                    Strings.NextcloudPickerPreviewSkipped,
+                    false,
+                    response.StatusCode,
+                    null);
+            }
+            return bytes;
+        }
+
         internal static NextcloudStorageListing ParseDirectoryListing(
             string baseUrl,
             string userId,

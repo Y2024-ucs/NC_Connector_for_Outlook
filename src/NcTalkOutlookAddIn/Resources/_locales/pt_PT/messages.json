@@ -1112,6 +1112,18 @@
   "outlook_nextcloud_picker_no_preview": {
     "message": "Pré-visualização indisponível"
   },
+  "outlook_nextcloud_picker_multiple_selection": {
+    "message": "Itens selecionados: {0}"
+  },
+  "outlook_nextcloud_picker_preview_loading": {
+    "message": "A carregar a pré-visualização..."
+  },
+  "outlook_nextcloud_picker_preview_load_failed": {
+    "message": "Não foi possível carregar a pré-visualização"
+  },
+  "outlook_nextcloud_picker_preview_skipped": {
+    "message": "Pré-visualização ignorada para ficheiros grandes"
+  },
   "outlook_nextcloud_picker_close_button": {
     "message": "Fechar"
   },

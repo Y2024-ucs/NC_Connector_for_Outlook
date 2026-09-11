@@ -1112,6 +1112,18 @@
   "outlook_nextcloud_picker_no_preview": {
     "message": "Anteprima non disponibile"
   },
+  "outlook_nextcloud_picker_multiple_selection": {
+    "message": "Elementi selezionati: {0}"
+  },
+  "outlook_nextcloud_picker_preview_loading": {
+    "message": "Caricamento anteprima..."
+  },
+  "outlook_nextcloud_picker_preview_load_failed": {
+    "message": "Impossibile caricare l’anteprima"
+  },
+  "outlook_nextcloud_picker_preview_skipped": {
+    "message": "Anteprima saltata per i file di grandi dimensioni"
+  },
   "outlook_nextcloud_picker_close_button": {
     "message": "Chiudi"
   },
