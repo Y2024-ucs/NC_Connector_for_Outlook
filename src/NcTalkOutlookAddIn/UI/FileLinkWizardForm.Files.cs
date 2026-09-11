@@ -176,11 +176,31 @@ namespace NcTalkOutlookAddIn.UI
             button.TextAlign = ContentAlignment.MiddleLeft;
             button.ImageAlign = ContentAlignment.MiddleLeft;
             button.TextImageRelation = TextImageRelation.ImageBeforeText;
-            button.Image = _fileQueueImageList.Images[imageKey];
+            button.Image = CreateSourceButtonImage(
+                _fileQueueImageList.Images[imageKey],
+                ScaleLogical(6));
             button.Click += (s, e) => menu.Show(
                 button,
                 new Point(0, button.Height));
             button.Paint += DrawSourceButtonArrow;
+        }
+
+        private static Bitmap CreateSourceButtonImage(
+            Image source,
+            int trailingSpace)
+        {
+            if (source == null)
+            {
+                return null;
+            }
+            var image = new Bitmap(
+                source.Width + Math.Max(0, trailingSpace),
+                source.Height);
+            using (Graphics graphics = Graphics.FromImage(image))
+            {
+                graphics.DrawImageUnscaled(source, 0, 0);
+            }
+            return image;
         }
 
         private void AddSourceMenuItems(

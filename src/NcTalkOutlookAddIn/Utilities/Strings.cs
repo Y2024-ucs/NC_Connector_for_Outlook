@@ -1003,7 +1003,10 @@ namespace NcTalkOutlookAddIn.Utilities
         internal static string NextcloudPickerFilesTitle { get { return Get("outlook_nextcloud_picker_files_title", "Select files"); } }
         internal static string NextcloudPickerFolderTitle { get { return Get("outlook_nextcloud_picker_folder_title", "Select folder"); } }
         internal static string NextcloudPickerFilterPlaceholder { get { return Get("outlook_nextcloud_picker_filter_placeholder", "Filter by name..."); } }
-        internal static string NextcloudPickerAccountFormat { get { return Get("outlook_nextcloud_picker_account_format", "Nextcloud: {0}"); } }
+        internal static string NextcloudPickerNavigateBack { get { return Get("outlook_nextcloud_picker_navigate_back", "Back"); } }
+        internal static string NextcloudPickerNavigateForward { get { return Get("outlook_nextcloud_picker_navigate_forward", "Forward"); } }
+        internal static string NextcloudPickerNavigateUp { get { return Get("outlook_nextcloud_picker_navigate_up", "Up one level"); } }
+        internal static string NextcloudPickerRefresh { get { return Get("outlook_nextcloud_picker_refresh", "Refresh"); } }
         internal static string NextcloudPickerColumnName { get { return Get("outlook_nextcloud_picker_column_name", "Name"); } }
         internal static string NextcloudPickerColumnSize { get { return Get("outlook_nextcloud_picker_column_size", "Size"); } }
         internal static string NextcloudPickerColumnModified { get { return Get("outlook_nextcloud_picker_column_modified", "Modified"); } }

@@ -525,7 +525,7 @@ If a required final signature check cannot complete, Outlook keeps the message o
 
 ### Sharing and uploads
 
-The sharing wizard accepts local files and folders as well as existing content from the configured user's own Nextcloud. The queue shows the complete destination path, groups both sources, and reports entries, source count, total size, and the user's Nextcloud storage state. The **My Nextcloud** picker includes clickable breadcrumb navigation, filtering, familiar file icons, file details, multi-selection feedback, storage information, and an on-demand preview for supported images up to 5 MiB. This source works without NC Connector Backend.
+The sharing wizard accepts local files and folders as well as existing content from the configured user's own Nextcloud. The queue shows the complete destination path, groups both sources, and reports entries, source count, total size, and the user's Nextcloud storage state. The **My Nextcloud** picker includes Explorer-style back, forward, up and refresh controls, clickable path segments, filtering, familiar file icons, file details, multi-selection feedback, storage information, and an on-demand preview for supported images up to 5 MiB. This source works without NC Connector Backend.
 
 Selected Nextcloud content is copied within the same account into the new share folder. The original remains unchanged and is not downloaded to Outlook for the transfer. Only a supported image selected for preview is loaded temporarily on demand. Local content still uses the upload method supported by the server and selected files. Implementation details are in [DEVELOPMENT.md](DEVELOPMENT.md#sharing-flow-mail-compose).
 

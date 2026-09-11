@@ -1094,8 +1094,17 @@
   "outlook_nextcloud_picker_filter_placeholder": {
     "message": "Фильтр по имени..."
   },
-  "outlook_nextcloud_picker_account_format": {
-    "message": "Nextcloud: $1"
+  "outlook_nextcloud_picker_navigate_back": {
+    "message": "Назад"
+  },
+  "outlook_nextcloud_picker_navigate_forward": {
+    "message": "Вперёд"
+  },
+  "outlook_nextcloud_picker_navigate_up": {
+    "message": "На уровень вверх"
+  },
+  "outlook_nextcloud_picker_refresh": {
+    "message": "Обновить"
   },
   "outlook_nextcloud_picker_column_name": {
     "message": "Имя"

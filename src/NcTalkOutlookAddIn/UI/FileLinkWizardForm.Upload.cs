@@ -43,10 +43,22 @@ namespace NcTalkOutlookAddIn.UI
             _uploadProgressFlushTimer.Dispose();
             _localSourceMenu.Dispose();
             _nextcloudSourceMenu.Dispose();
+            DisposeSourceButtonImage(_localSourceButton);
+            DisposeSourceButtonImage(_nextcloudSourceButton);
             _fileQueueImageList.Dispose();
             QueueUnfinalizedUploadContextCleanup(
                 "wizard_closed_without_finalize");
             base.OnFormClosed(e);
+        }
+
+        private static void DisposeSourceButtonImage(Button button)
+        {
+            if (button == null || button.Image == null)
+            {
+                return;
+            }
+            button.Image.Dispose();
+            button.Image = null;
         }
 
         private void QueueUnfinalizedUploadContextCleanup(string reason)

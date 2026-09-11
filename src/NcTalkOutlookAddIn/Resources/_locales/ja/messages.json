@@ -1094,8 +1094,17 @@
   "outlook_nextcloud_picker_filter_placeholder": {
     "message": "名前で絞り込む..."
   },
-  "outlook_nextcloud_picker_account_format": {
-    "message": "Nextcloud: $1"
+  "outlook_nextcloud_picker_navigate_back": {
+    "message": "戻る"
+  },
+  "outlook_nextcloud_picker_navigate_forward": {
+    "message": "進む"
+  },
+  "outlook_nextcloud_picker_navigate_up": {
+    "message": "1 つ上のフォルダーへ"
+  },
+  "outlook_nextcloud_picker_refresh": {
+    "message": "更新"
   },
   "outlook_nextcloud_picker_column_name": {
     "message": "名前"

@@ -1094,8 +1094,17 @@
   "outlook_nextcloud_picker_filter_placeholder": {
     "message": "按名称筛选..."
   },
-  "outlook_nextcloud_picker_account_format": {
-    "message": "Nextcloud：$1"
+  "outlook_nextcloud_picker_navigate_back": {
+    "message": "后退"
+  },
+  "outlook_nextcloud_picker_navigate_forward": {
+    "message": "前进"
+  },
+  "outlook_nextcloud_picker_navigate_up": {
+    "message": "向上一级"
+  },
+  "outlook_nextcloud_picker_refresh": {
+    "message": "刷新"
   },
   "outlook_nextcloud_picker_column_name": {
     "message": "名称"

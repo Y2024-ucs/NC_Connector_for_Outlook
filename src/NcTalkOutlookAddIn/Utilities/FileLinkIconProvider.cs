@@ -764,25 +764,23 @@ namespace NcTalkOutlookAddIn.Utilities
         {
             Bitmap bitmap = CreateCanvas(width, height);
             using (Graphics graphics = Graphics.FromImage(bitmap))
+            using (var pen = new Pen(
+                Color.FromArgb(0, 130, 201),
+                1.9f))
             {
-                Image appIcon = BrandingAssets.AppIconPng;
-                if (appIcon != null)
-                {
-                    graphics.CompositingQuality =
-                        CompositingQuality.HighQuality;
-                    graphics.InterpolationMode =
-                        InterpolationMode.HighQualityBicubic;
-                    graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
-                    int size = Math.Min(
-                        Math.Min(width, height),
-                        20);
-                    Rectangle bounds = CenteredBounds(
-                        width,
-                        height,
-                        size,
-                        size);
-                    graphics.DrawImage(appIcon, bounds);
-                }
+                graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                float scale = Math.Min(width, height) / 24f;
+                graphics.TranslateTransform(
+                    (width - (24f * scale)) / 2f,
+                    (height - (24f * scale)) / 2f);
+                graphics.ScaleTransform(scale, scale);
+                pen.StartCap = LineCap.Round;
+                pen.EndCap = LineCap.Round;
+                graphics.DrawEllipse(pen, 8.5f, 8.5f, 7f, 7f);
+                graphics.DrawEllipse(pen, 2f, 9.5f, 5f, 5f);
+                graphics.DrawEllipse(pen, 17f, 9.5f, 5f, 5f);
+                graphics.DrawLine(pen, 7f, 12f, 8.5f, 12f);
+                graphics.DrawLine(pen, 15.5f, 12f, 17f, 12f);
             }
             return bitmap;
         }

@@ -1094,8 +1094,17 @@
   "outlook_nextcloud_picker_filter_placeholder": {
     "message": "Filter by name..."
   },
-  "outlook_nextcloud_picker_account_format": {
-    "message": "Nextcloud: $1"
+  "outlook_nextcloud_picker_navigate_back": {
+    "message": "Back"
+  },
+  "outlook_nextcloud_picker_navigate_forward": {
+    "message": "Forward"
+  },
+  "outlook_nextcloud_picker_navigate_up": {
+    "message": "Up one level"
+  },
+  "outlook_nextcloud_picker_refresh": {
+    "message": "Refresh"
   },
   "outlook_nextcloud_picker_column_name": {
     "message": "Name"

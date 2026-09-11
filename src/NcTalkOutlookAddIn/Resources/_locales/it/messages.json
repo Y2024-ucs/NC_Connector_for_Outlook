@@ -1094,8 +1094,17 @@
   "outlook_nextcloud_picker_filter_placeholder": {
     "message": "Filtra per nome..."
   },
-  "outlook_nextcloud_picker_account_format": {
-    "message": "Nextcloud: $1"
+  "outlook_nextcloud_picker_navigate_back": {
+    "message": "Indietro"
+  },
+  "outlook_nextcloud_picker_navigate_forward": {
+    "message": "Avanti"
+  },
+  "outlook_nextcloud_picker_navigate_up": {
+    "message": "Livello superiore"
+  },
+  "outlook_nextcloud_picker_refresh": {
+    "message": "Aggiorna"
   },
   "outlook_nextcloud_picker_column_name": {
     "message": "Nome"

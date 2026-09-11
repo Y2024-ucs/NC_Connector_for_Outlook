@@ -1094,8 +1094,17 @@
   "outlook_nextcloud_picker_filter_placeholder": {
     "message": "Filtrovat podle názvu..."
   },
-  "outlook_nextcloud_picker_account_format": {
-    "message": "Nextcloud: $1"
+  "outlook_nextcloud_picker_navigate_back": {
+    "message": "Zpět"
+  },
+  "outlook_nextcloud_picker_navigate_forward": {
+    "message": "Vpřed"
+  },
+  "outlook_nextcloud_picker_navigate_up": {
+    "message": "O úroveň výše"
+  },
+  "outlook_nextcloud_picker_refresh": {
+    "message": "Obnovit"
   },
   "outlook_nextcloud_picker_column_name": {
     "message": "Název"

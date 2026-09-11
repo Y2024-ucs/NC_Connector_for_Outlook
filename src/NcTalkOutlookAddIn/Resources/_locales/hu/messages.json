@@ -1094,8 +1094,17 @@
   "outlook_nextcloud_picker_filter_placeholder": {
     "message": "Szűrés név szerint..."
   },
-  "outlook_nextcloud_picker_account_format": {
-    "message": "Nextcloud: $1"
+  "outlook_nextcloud_picker_navigate_back": {
+    "message": "Vissza"
+  },
+  "outlook_nextcloud_picker_navigate_forward": {
+    "message": "Előre"
+  },
+  "outlook_nextcloud_picker_navigate_up": {
+    "message": "Egy szinttel feljebb"
+  },
+  "outlook_nextcloud_picker_refresh": {
+    "message": "Frissítés"
   },
   "outlook_nextcloud_picker_column_name": {
     "message": "Név"

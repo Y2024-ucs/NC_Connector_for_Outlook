@@ -28,6 +28,14 @@ namespace NcTalkOutlookAddIn.UI
 
     internal sealed class NextcloudFilePickerForm : ScaledForm
     {
+        private enum PickerNavigationIcon
+        {
+            Back,
+            Forward,
+            Up,
+            Refresh
+        }
+
         private const long MaximumPreviewBytes = 5L * 1024L * 1024L;
         private const long MaximumDecodedPreviewPixels = 80000000L;
         private const int MaximumPreviewDimension = 2048;
@@ -47,9 +55,15 @@ namespace NcTalkOutlookAddIn.UI
         private readonly NextcloudFilePickerMode _mode;
         private readonly UiThemePalette _palette =
             UiThemeManager.DetectPalette();
+        private readonly Button _backButton = new Button();
+        private readonly Button _forwardButton = new Button();
         private readonly TextBox _filterTextBox = new TextBox();
         private readonly Button _upButton = new Button();
-        private readonly PictureBox _sourceIcon = new PictureBox();
+        private readonly Button _refreshButton = new Button();
+        private readonly PictureBox _sourceButton = new PictureBox();
+        private readonly Panel _addressBar = new Panel();
+        private readonly TableLayoutPanel _addressLayout =
+            new TableLayoutPanel();
         private readonly FlowLayoutPanel _breadcrumbPanel =
             new FlowLayoutPanel();
         private readonly ListView _itemsView = new ListView();
@@ -59,7 +73,10 @@ namespace NcTalkOutlookAddIn.UI
         private readonly Label _statusLabel = new Label();
         private readonly Button _closeButton = new Button();
         private readonly Button _selectButton = new Button();
+        private readonly ToolTip _navigationToolTip = new ToolTip();
         private readonly ImageList _icons;
+        private readonly List<string> _navigationHistory =
+            new List<string>();
         private CancellationTokenSource _loadCancellation;
         private CancellationTokenSource _previewCancellation;
         private int _previewVersion;
@@ -67,6 +84,7 @@ namespace NcTalkOutlookAddIn.UI
         private NextcloudStorageListing _currentListing;
         private long? _usedBytes;
         private long? _availableBytes;
+        private int _navigationHistoryIndex = -1;
         private bool _loading;
 
         internal NextcloudFilePickerForm(
@@ -103,12 +121,13 @@ namespace NcTalkOutlookAddIn.UI
             Icon = BrandingAssets.GetAppIcon(32);
 
             InitializeLayout();
-            UiThemeManager.ApplyToForm(this);
-            _filterTextBox.ForeColor = _palette.MutedText;
-            _upButton.ForeColor = _palette.LinkText;
-            _upButton.FlatAppearance.BorderColor = _palette.Border;
+            UiThemeManager.ApplyToForm(this, _navigationToolTip);
+            ApplyNavigationTheme();
             Shown += async (s, e) =>
-                await LoadFolderAsync(string.Empty);
+            {
+                ApplyNavigationTheme();
+                await NavigateToAsync(string.Empty);
+            };
         }
 
         internal ReadOnlyCollection<NextcloudStorageEntry> SelectedEntries
@@ -122,11 +141,12 @@ namespace NcTalkOutlookAddIn.UI
             CancelCurrentLoad();
             CancelCurrentPreview();
             DisposePreviewImage();
-            if (_sourceIcon.Image != null)
-            {
-                _sourceIcon.Image.Dispose();
-                _sourceIcon.Image = null;
-            }
+            DisposeButtonBackgroundImage(_backButton);
+            DisposeButtonBackgroundImage(_forwardButton);
+            DisposeButtonBackgroundImage(_upButton);
+            DisposeButtonBackgroundImage(_refreshButton);
+            DisposePictureImage(_sourceButton);
+            _navigationToolTip.Dispose();
             _icons.Dispose();
             base.OnFormClosed(e);
         }
@@ -137,91 +157,116 @@ namespace NcTalkOutlookAddIn.UI
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 4,
+                RowCount = 3,
                 Padding = new Padding(0),
                 Margin = new Padding(0)
             };
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, ScaleLogical(36)));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, ScaleLogical(38)));
+            root.ColumnStyles.Add(
+                new ColumnStyle(SizeType.Percent, 100f));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, ScaleLogical(44)));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, ScaleLogical(56)));
             Controls.Add(root);
 
-            var searchPanel = new Panel
+            var navigationBar = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                Padding = new Padding(
-                    ScaleLogical(12),
-                    ScaleLogical(7),
-                    ScaleLogical(12),
-                    ScaleLogical(5))
-            };
-            root.Controls.Add(searchPanel, 0, 0);
-
-            _filterTextBox.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            _filterTextBox.Width = ScaleLogical(190);
-            _filterTextBox.Location = new Point(
-                Math.Max(
-                    0,
-                    searchPanel.ClientSize.Width
-                    - _filterTextBox.Width
-                    - ScaleLogical(12)),
-                ScaleLogical(7));
-            _filterTextBox.Text = Strings.NextcloudPickerFilterPlaceholder;
-            _filterTextBox.ForeColor = _palette.MutedText;
-            _filterTextBox.GotFocus += HandleFilterGotFocus;
-            _filterTextBox.LostFocus += HandleFilterLostFocus;
-            _filterTextBox.TextChanged += HandleFilterChanged;
-            searchPanel.Controls.Add(_filterTextBox);
-            searchPanel.Resize += (s, e) =>
-            {
-                _filterTextBox.Left = Math.Max(
-                    ScaleLogical(12),
-                    searchPanel.ClientSize.Width
-                    - _filterTextBox.Width
-                    - ScaleLogical(12));
-            };
-
-            var pathPanel = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 3,
+                ColumnCount = 6,
                 RowCount = 1,
                 Padding = new Padding(
                     ScaleLogical(8),
-                    ScaleLogical(3),
+                    ScaleLogical(6),
                     ScaleLogical(12),
-                    ScaleLogical(3)),
+                    ScaleLogical(6)),
                 Margin = new Padding(0)
             };
-            pathPanel.ColumnStyles.Add(
+            navigationBar.RowStyles.Add(
+                new RowStyle(SizeType.Percent, 100f));
+            navigationBar.ColumnStyles.Add(
                 new ColumnStyle(SizeType.Absolute, ScaleLogical(34)));
-            pathPanel.ColumnStyles.Add(
-                new ColumnStyle(SizeType.Absolute, ScaleLogical(28)));
-            pathPanel.ColumnStyles.Add(
+            navigationBar.ColumnStyles.Add(
+                new ColumnStyle(SizeType.Absolute, ScaleLogical(34)));
+            navigationBar.ColumnStyles.Add(
+                new ColumnStyle(SizeType.Absolute, ScaleLogical(34)));
+            navigationBar.ColumnStyles.Add(
+                new ColumnStyle(SizeType.Absolute, ScaleLogical(34)));
+            navigationBar.ColumnStyles.Add(
                 new ColumnStyle(SizeType.Percent, 100f));
-            root.Controls.Add(pathPanel, 0, 1);
+            navigationBar.ColumnStyles.Add(
+                new ColumnStyle(SizeType.Absolute, ScaleLogical(198)));
+            root.Controls.Add(navigationBar, 0, 0);
 
-            _upButton.Text = "←";
-            _upButton.Dock = DockStyle.Fill;
-            _upButton.Margin = new Padding(0);
-            _upButton.Enabled = false;
-            _upButton.FlatStyle = FlatStyle.Flat;
-            _upButton.FlatAppearance.BorderSize = 1;
-            _upButton.AccessibleName = Strings.ButtonBack;
-            _upButton.Font = new Font(
-                SystemFonts.MessageBoxFont.FontFamily,
-                12f,
-                FontStyle.Bold);
+            ConfigureNavigationButton(
+                _backButton,
+                PickerNavigationIcon.Back,
+                Strings.NextcloudPickerNavigateBack);
+            _backButton.Click += async (s, e) =>
+                await NavigateHistoryAsync(-1);
+            navigationBar.Controls.Add(_backButton, 0, 0);
+
+            ConfigureNavigationButton(
+                _forwardButton,
+                PickerNavigationIcon.Forward,
+                Strings.NextcloudPickerNavigateForward);
+            _forwardButton.Click += async (s, e) =>
+                await NavigateHistoryAsync(1);
+            navigationBar.Controls.Add(_forwardButton, 1, 0);
+
+            ConfigureNavigationButton(
+                _upButton,
+                PickerNavigationIcon.Up,
+                Strings.NextcloudPickerNavigateUp);
             _upButton.Click += async (s, e) => await NavigateUpAsync();
-            pathPanel.Controls.Add(_upButton, 0, 0);
+            navigationBar.Controls.Add(_upButton, 2, 0);
 
-            _sourceIcon.Dock = DockStyle.Fill;
-            _sourceIcon.SizeMode = PictureBoxSizeMode.CenterImage;
-            _sourceIcon.Margin = new Padding(0);
-            _sourceIcon.Image = new Bitmap(
+            ConfigureNavigationButton(
+                _refreshButton,
+                PickerNavigationIcon.Refresh,
+                Strings.NextcloudPickerRefresh);
+            _refreshButton.Click += async (s, e) =>
+                await RefreshCurrentFolderAsync();
+            navigationBar.Controls.Add(_refreshButton, 3, 0);
+
+            _addressBar.Dock = DockStyle.Fill;
+            _addressBar.BorderStyle = BorderStyle.FixedSingle;
+            _addressBar.Margin = new Padding(
+                ScaleLogical(7),
+                0,
+                ScaleLogical(8),
+                0);
+            _addressBar.Padding = new Padding(
+                ScaleLogical(4),
+                0,
+                ScaleLogical(4),
+                0);
+            navigationBar.Controls.Add(_addressBar, 4, 0);
+
+            _addressLayout.Dock = DockStyle.Fill;
+            _addressLayout.ColumnCount = 2;
+            _addressLayout.RowCount = 1;
+            _addressLayout.Margin = new Padding(0);
+            _addressLayout.Padding = new Padding(0);
+            _addressLayout.RowStyles.Add(
+                new RowStyle(SizeType.Percent, 100f));
+            _addressLayout.ColumnStyles.Add(
+                new ColumnStyle(SizeType.Absolute, ScaleLogical(28)));
+            _addressLayout.ColumnStyles.Add(
+                new ColumnStyle(SizeType.Percent, 100f));
+            _addressBar.Controls.Add(_addressLayout);
+
+            _sourceButton.Dock = DockStyle.Fill;
+            _sourceButton.Margin = new Padding(0);
+            _sourceButton.SizeMode = PictureBoxSizeMode.CenterImage;
+            _sourceButton.Image = new Bitmap(
                 _icons.Images[FileLinkIconProvider.NextcloudSourceKey]);
-            pathPanel.Controls.Add(_sourceIcon, 1, 0);
+            _sourceButton.AccessibleName =
+                Strings.FileLinkQueueSourceNextcloud;
+            _navigationToolTip.SetToolTip(
+                _sourceButton,
+                Strings.FileLinkQueueSourceNextcloud);
+            _sourceButton.Click += async (s, e) =>
+                await NavigateToAsync(string.Empty);
+            _addressLayout.Controls.Add(_sourceButton, 0, 0);
 
             _breadcrumbPanel.Dock = DockStyle.Fill;
             _breadcrumbPanel.AutoScroll = true;
@@ -230,11 +275,25 @@ namespace NcTalkOutlookAddIn.UI
             _breadcrumbPanel.Margin = new Padding(0);
             _breadcrumbPanel.Padding = new Padding(
                 0,
-                ScaleLogical(5),
+                ScaleLogical(7),
                 0,
                 0);
-            pathPanel.Controls.Add(_breadcrumbPanel, 2, 0);
+            _addressLayout.Controls.Add(_breadcrumbPanel, 1, 0);
             UpdateBreadcrumb(string.Empty);
+
+            _filterTextBox.Dock = DockStyle.Fill;
+            _filterTextBox.Margin = new Padding(
+                0,
+                ScaleLogical(5),
+                0,
+                ScaleLogical(5));
+            _filterTextBox.Text =
+                Strings.NextcloudPickerFilterPlaceholder;
+            _filterTextBox.ForeColor = _palette.MutedText;
+            _filterTextBox.GotFocus += HandleFilterGotFocus;
+            _filterTextBox.LostFocus += HandleFilterLostFocus;
+            _filterTextBox.TextChanged += HandleFilterChanged;
+            navigationBar.Controls.Add(_filterTextBox, 5, 0);
 
             var split = new SplitContainer
             {
@@ -249,7 +308,7 @@ namespace NcTalkOutlookAddIn.UI
                 Panel2MinSize = ScaleLogical(180),
                 Margin = new Padding(0)
             };
-            root.Controls.Add(split, 0, 2);
+            root.Controls.Add(split, 0, 1);
 
             _itemsView.Dock = DockStyle.Fill;
             _itemsView.BorderStyle = BorderStyle.FixedSingle;
@@ -309,7 +368,7 @@ namespace NcTalkOutlookAddIn.UI
             footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            root.Controls.Add(footer, 0, 3);
+            root.Controls.Add(footer, 0, 2);
 
             _storageLabel.AutoSize = true;
             _storageLabel.Anchor = AnchorStyles.Left;
@@ -340,8 +399,178 @@ namespace NcTalkOutlookAddIn.UI
             UpdateColumnWidths();
         }
 
-        private async Task LoadFolderAsync(string relativePath)
+        private void ConfigureNavigationButton(
+            Button button,
+            PickerNavigationIcon icon,
+            string accessibleName)
         {
+            button.Dock = DockStyle.Fill;
+            button.Margin = new Padding(1, 0, 1, 0);
+            button.FlatStyle = FlatStyle.Flat;
+            button.FlatAppearance.BorderSize = 0;
+            button.AccessibleName = accessibleName;
+            button.Enabled = false;
+            button.BackgroundImage = CreateNavigationIcon(icon);
+            button.BackgroundImageLayout = ImageLayout.Center;
+            _navigationToolTip.SetToolTip(button, accessibleName);
+        }
+
+        private void ApplyNavigationTheme()
+        {
+            _filterTextBox.BackColor = _palette.InputBackground;
+            _filterTextBox.ForeColor = _palette.MutedText;
+            _addressBar.BackColor = _palette.InputBackground;
+            _addressLayout.BackColor = _palette.InputBackground;
+            _breadcrumbPanel.BackColor = _palette.InputBackground;
+            _sourceButton.BackColor = _palette.InputBackground;
+            foreach (Button button in new[]
+            {
+                _backButton,
+                _forwardButton,
+                _upButton,
+                _refreshButton
+            })
+            {
+                button.BackColor = _palette.WindowBackground;
+                button.FlatAppearance.BorderSize = 0;
+                button.FlatAppearance.MouseOverBackColor =
+                    _palette.SelectionBackground;
+                button.FlatAppearance.MouseDownBackColor =
+                    _palette.SelectionBackground;
+            }
+        }
+
+        private void DrawNavigationIcon(
+            Graphics graphics,
+            Rectangle bounds,
+            PickerNavigationIcon icon,
+            Color color)
+        {
+            int size = ScaleLogical(16);
+            float scale = size / 16f;
+            float left = Math.Max(0f, (bounds.Width - size) / 2f);
+            float top = Math.Max(0f, (bounds.Height - size) / 2f);
+            using (var pen = new Pen(
+                color,
+                Math.Max(1.4f, 1.7f * scale)))
+            {
+                graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                pen.StartCap = LineCap.Round;
+                pen.EndCap = LineCap.Round;
+                pen.LineJoin = LineJoin.Round;
+                switch (icon)
+                {
+                    case PickerNavigationIcon.Back:
+                        graphics.DrawLine(
+                            pen,
+                            left + (3f * scale),
+                            top + (8f * scale),
+                            left + (13f * scale),
+                            top + (8f * scale));
+                        graphics.DrawLines(
+                            pen,
+                            new[]
+                            {
+                                new PointF(left + (7f * scale), top + (4f * scale)),
+                                new PointF(left + (3f * scale), top + (8f * scale)),
+                                new PointF(left + (7f * scale), top + (12f * scale))
+                            });
+                        break;
+                    case PickerNavigationIcon.Forward:
+                        graphics.DrawLine(
+                            pen,
+                            left + (3f * scale),
+                            top + (8f * scale),
+                            left + (13f * scale),
+                            top + (8f * scale));
+                        graphics.DrawLines(
+                            pen,
+                            new[]
+                            {
+                                new PointF(left + (9f * scale), top + (4f * scale)),
+                                new PointF(left + (13f * scale), top + (8f * scale)),
+                                new PointF(left + (9f * scale), top + (12f * scale))
+                            });
+                        break;
+                    case PickerNavigationIcon.Up:
+                        graphics.DrawLine(
+                            pen,
+                            left + (8f * scale),
+                            top + (3f * scale),
+                            left + (8f * scale),
+                            top + (13f * scale));
+                        graphics.DrawLines(
+                            pen,
+                            new[]
+                            {
+                                new PointF(left + (4f * scale), top + (7f * scale)),
+                                new PointF(left + (8f * scale), top + (3f * scale)),
+                                new PointF(left + (12f * scale), top + (7f * scale))
+                            });
+                        break;
+                    case PickerNavigationIcon.Refresh:
+                        graphics.DrawArc(
+                            pen,
+                            left + (3f * scale),
+                            top + (3f * scale),
+                            10f * scale,
+                            10f * scale,
+                            -65f,
+                            285f);
+                        using (var brush = new SolidBrush(color))
+                        {
+                            graphics.FillPolygon(
+                                brush,
+                                new[]
+                                {
+                                    new PointF(left + (12.5f * scale), top + (2f * scale)),
+                                    new PointF(left + (13.5f * scale), top + (6f * scale)),
+                                    new PointF(left + (9.5f * scale), top + (4.5f * scale))
+                                });
+                        }
+                        break;
+                }
+            }
+        }
+
+        private Bitmap CreateNavigationIcon(PickerNavigationIcon icon)
+        {
+            int size = ScaleLogical(16);
+            var bitmap = new Bitmap(size, size);
+            using (Graphics graphics = Graphics.FromImage(bitmap))
+            {
+                DrawNavigationIcon(
+                    graphics,
+                    new Rectangle(0, 0, size, size),
+                    icon,
+                    _palette.Text);
+            }
+            return bitmap;
+        }
+
+        private static void DisposeButtonBackgroundImage(Button button)
+        {
+            if (button == null || button.BackgroundImage == null)
+            {
+                return;
+            }
+            button.BackgroundImage.Dispose();
+            button.BackgroundImage = null;
+        }
+
+        private static void DisposePictureImage(PictureBox picture)
+        {
+            if (picture == null || picture.Image == null)
+            {
+                return;
+            }
+            picture.Image.Dispose();
+            picture.Image = null;
+        }
+
+        private async Task<bool> LoadFolderAsync(string relativePath)
+        {
+            bool loaded = false;
             CancelCurrentPreview();
             ShowPreviewText(Strings.NextcloudPickerNoSelection);
             CancelCurrentLoad();
@@ -367,13 +596,12 @@ namespace NcTalkOutlookAddIn.UI
                     _availableBytes = listing.AvailableBytes;
                 }
                 UpdateBreadcrumb(_currentPath);
-                _upButton.Enabled = _currentPath.Length > 0;
                 PopulateItems();
                 UpdateStorageLabel();
+                loaded = true;
             }
             catch (OperationCanceledException)
             {
-                return;
             }
             catch (Exception ex)
             {
@@ -394,6 +622,100 @@ namespace NcTalkOutlookAddIn.UI
                     SetLoading(false, string.Empty);
                 }
             }
+            return loaded;
+        }
+
+        private async Task NavigateToAsync(string relativePath)
+        {
+            if (_loading)
+            {
+                return;
+            }
+            string targetPath = NextcloudPath.Normalize(relativePath);
+            if (_currentListing != null
+                && string.Equals(
+                    targetPath,
+                    _currentPath,
+                    StringComparison.Ordinal))
+            {
+                return;
+            }
+            if (await LoadFolderAsync(targetPath))
+            {
+                RecordNavigation(_currentPath);
+            }
+        }
+
+        private async Task NavigateHistoryAsync(int offset)
+        {
+            if (_loading)
+            {
+                return;
+            }
+            int targetIndex = _navigationHistoryIndex + offset;
+            if (targetIndex < 0
+                || targetIndex >= _navigationHistory.Count)
+            {
+                return;
+            }
+            if (await LoadFolderAsync(_navigationHistory[targetIndex]))
+            {
+                _navigationHistoryIndex = targetIndex;
+                _navigationHistory[targetIndex] = _currentPath;
+                UpdateNavigationButtons();
+            }
+        }
+
+        private async Task RefreshCurrentFolderAsync()
+        {
+            if (_loading || _currentListing == null)
+            {
+                return;
+            }
+            await LoadFolderAsync(_currentPath);
+            UpdateNavigationButtons();
+        }
+
+        private void RecordNavigation(string relativePath)
+        {
+            string normalizedPath = NextcloudPath.Normalize(relativePath);
+            if (_navigationHistoryIndex >= 0
+                && _navigationHistoryIndex < _navigationHistory.Count
+                && string.Equals(
+                    _navigationHistory[_navigationHistoryIndex],
+                    normalizedPath,
+                    StringComparison.Ordinal))
+            {
+                UpdateNavigationButtons();
+                return;
+            }
+            int firstForwardIndex = _navigationHistoryIndex + 1;
+            if (firstForwardIndex < _navigationHistory.Count)
+            {
+                _navigationHistory.RemoveRange(
+                    firstForwardIndex,
+                    _navigationHistory.Count - firstForwardIndex);
+            }
+            _navigationHistory.Add(normalizedPath);
+            _navigationHistoryIndex = _navigationHistory.Count - 1;
+            UpdateNavigationButtons();
+        }
+
+        private void UpdateNavigationButtons()
+        {
+            bool enabled = !_loading;
+            _backButton.Enabled =
+                enabled && _navigationHistoryIndex > 0;
+            _forwardButton.Enabled =
+                enabled
+                && _navigationHistoryIndex >= 0
+                && _navigationHistoryIndex
+                    < _navigationHistory.Count - 1;
+            _upButton.Enabled =
+                enabled && _currentPath.Length > 0;
+            _refreshButton.Enabled =
+                enabled && _currentListing != null;
+            _sourceButton.Enabled = true;
         }
 
         private void PopulateItems()
@@ -457,7 +779,7 @@ namespace NcTalkOutlookAddIn.UI
             {
                 return;
             }
-            await LoadFolderAsync(NextcloudPath.GetParent(_currentPath));
+            await NavigateToAsync(NextcloudPath.GetParent(_currentPath));
         }
 
         private void UpdateBreadcrumb(string relativePath)
@@ -474,32 +796,25 @@ namespace NcTalkOutlookAddIn.UI
                     control.Dispose();
                 }
 
-                bool atRoot = normalizedPath.Length == 0;
-                lastPart = AddBreadcrumbPart(
-                    "/",
-                    string.Empty,
-                    atRoot);
                 string currentPath = string.Empty;
                 string[] segments = normalizedPath.Split(
                     new[] { '/' },
                     StringSplitOptions.RemoveEmptyEntries);
                 for (int index = 0; index < segments.Length; index++)
                 {
-                    if (index > 0)
+                    var separator = new Label
                     {
-                        var separator = new Label
-                        {
-                            AutoSize = true,
-                            Text = "/",
-                            ForeColor = _palette.MutedText,
-                            Margin = new Padding(
-                                ScaleLogical(3),
-                                ScaleLogical(2),
-                                ScaleLogical(3),
-                                0)
-                        };
-                        _breadcrumbPanel.Controls.Add(separator);
-                    }
+                        AutoSize = true,
+                        Text = "›",
+                        BackColor = _palette.InputBackground,
+                        ForeColor = _palette.MutedText,
+                        Margin = new Padding(
+                            ScaleLogical(3),
+                            ScaleLogical(2),
+                            ScaleLogical(3),
+                            0)
+                    };
+                    _breadcrumbPanel.Controls.Add(separator);
 
                     currentPath = currentPath.Length == 0
                         ? segments[index]
@@ -531,6 +846,7 @@ namespace NcTalkOutlookAddIn.UI
                 {
                     AutoSize = true,
                     Text = text,
+                    BackColor = _palette.InputBackground,
                     ForeColor = _palette.Text,
                     Font = new Font(
                         Font,
@@ -549,6 +865,7 @@ namespace NcTalkOutlookAddIn.UI
             {
                 AutoSize = true,
                 Text = text,
+                BackColor = _palette.InputBackground,
                 LinkColor = _palette.LinkText,
                 ActiveLinkColor = _palette.LinkText,
                 VisitedLinkColor = _palette.LinkText,
@@ -564,7 +881,7 @@ namespace NcTalkOutlookAddIn.UI
             {
                 if (!_loading)
                 {
-                    await LoadFolderAsync(navigationTarget);
+                    await NavigateToAsync(navigationTarget);
                 }
             };
             _breadcrumbPanel.Controls.Add(link);
@@ -586,7 +903,7 @@ namespace NcTalkOutlookAddIn.UI
             }
             if (entry.IsDirectory)
             {
-                await LoadFolderAsync(entry.RelativePath);
+                await NavigateToAsync(entry.RelativePath);
             }
             else if (_mode == NextcloudFilePickerMode.Files)
             {
@@ -676,6 +993,27 @@ namespace NcTalkOutlookAddIn.UI
         private async Task HandleItemsKeyDownAsync(
             KeyEventArgs e)
         {
+            if (e.Alt && e.KeyCode == Keys.Left)
+            {
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+                await NavigateHistoryAsync(-1);
+                return;
+            }
+            if (e.Alt && e.KeyCode == Keys.Right)
+            {
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+                await NavigateHistoryAsync(1);
+                return;
+            }
+            if (e.KeyCode == Keys.F5)
+            {
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+                await RefreshCurrentFolderAsync();
+                return;
+            }
             if (e.KeyCode == Keys.Back)
             {
                 e.Handled = true;
@@ -988,7 +1326,7 @@ namespace NcTalkOutlookAddIn.UI
             _statusLabel.Text = status ?? string.Empty;
             _itemsView.Enabled = !loading;
             _filterTextBox.Enabled = !loading;
-            _upButton.Enabled = !loading && _currentPath.Length > 0;
+            UpdateNavigationButtons();
             UseWaitCursor = loading;
             UpdateSelectButton();
         }
