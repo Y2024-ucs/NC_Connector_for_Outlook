@@ -36,7 +36,7 @@ Key points:
 
 - available in compose windows, replies, forwards, and inline replies
 - the queue groups `Local` and `My Nextcloud` items and shows folders as an expandable tree
-- the `My Nextcloud` picker provides Explorer-style back, forward, up, refresh and clickable path navigation, familiar file icons, clear multi-selection feedback, and an on-demand preview for supported images up to 5 MiB
+- the `My Nextcloud` picker provides Explorer-style back, forward, up, refresh and clickable path navigation, familiar file icons, clear multi-selection feedback, and on-demand previews for images and documents supported by the Nextcloud server
 - existing Nextcloud files and folders are copied into the new share inside Nextcloud; the originals remain unchanged and are not downloaded to Outlook for the transfer
 - optional expiration date and custom permissions per share
 - attachment automation for large attachments or always through NC Connector, with a selectable `ZIP download` (default) or `Nextcloud share page` link target

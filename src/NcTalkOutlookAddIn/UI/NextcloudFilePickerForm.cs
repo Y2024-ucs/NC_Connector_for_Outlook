@@ -39,6 +39,7 @@ namespace NcTalkOutlookAddIn.UI
         private const long MaximumPreviewBytes = 5L * 1024L * 1024L;
         private const long MaximumDecodedPreviewPixels = 80000000L;
         private const int MaximumPreviewDimension = 2048;
+        private const int RequestedGeneratedPreviewDimension = 1024;
 
         private static readonly ISet<string> PreviewImageExtensions =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -1094,17 +1095,12 @@ namespace NcTalkOutlookAddIn.UI
                 ShowPreviewText(entry.DisplayName);
                 return;
             }
-            if (!PreviewImageExtensions.Contains(
-                Path.GetExtension(entry.DisplayName) ?? string.Empty))
-            {
-                ShowPreviewText(Strings.NextcloudPickerNoPreview);
-                return;
-            }
-            if (entry.Length > MaximumPreviewBytes)
-            {
-                ShowPreviewText(Strings.NextcloudPickerPreviewSkipped);
-                return;
-            }
+            bool supportsOriginalImagePreview =
+                PreviewImageExtensions.Contains(
+                    Path.GetExtension(entry.DisplayName) ?? string.Empty);
+            bool originalImageExceedsLimit =
+                supportsOriginalImagePreview
+                && entry.Length > MaximumPreviewBytes;
 
             var cancellation = new CancellationTokenSource();
             _previewCancellation = cancellation;
@@ -1116,10 +1112,26 @@ namespace NcTalkOutlookAddIn.UI
                 Bitmap preview = await Task.Run(
                     () =>
                     {
-                        byte[] bytes = _service.ReadNextcloudFilePreview(
-                            entry,
-                            MaximumPreviewBytes,
-                            token);
+                        byte[] bytes =
+                            _service.TryReadNextcloudGeneratedPreview(
+                                entry,
+                                RequestedGeneratedPreviewDimension,
+                                RequestedGeneratedPreviewDimension,
+                                MaximumPreviewBytes,
+                                token);
+                        if (bytes == null
+                            && supportsOriginalImagePreview
+                            && !originalImageExceedsLimit)
+                        {
+                            bytes = _service.ReadNextcloudFilePreview(
+                                entry,
+                                MaximumPreviewBytes,
+                                token);
+                        }
+                        if (bytes == null)
+                        {
+                            return null;
+                        }
                         token.ThrowIfCancellationRequested();
                         Bitmap bitmap = DecodePreviewImage(bytes);
                         token.ThrowIfCancellationRequested();
@@ -1130,7 +1142,17 @@ namespace NcTalkOutlookAddIn.UI
                     cancellation,
                     previewVersion))
                 {
-                    preview.Dispose();
+                    if (preview != null)
+                    {
+                        preview.Dispose();
+                    }
+                    return;
+                }
+                if (preview == null)
+                {
+                    ShowPreviewText(originalImageExceedsLimit
+                        ? Strings.NextcloudPickerPreviewSkipped
+                        : Strings.NextcloudPickerNoPreview);
                     return;
                 }
                 ShowPreviewImage(preview);

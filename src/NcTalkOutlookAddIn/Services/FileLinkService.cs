@@ -130,6 +130,29 @@ namespace NcTalkOutlookAddIn.Services
                 cancellationToken);
         }
 
+        internal byte[] TryReadNextcloudGeneratedPreview(
+            NextcloudStorageEntry entry,
+            int width,
+            int height,
+            long maximumBytes,
+            CancellationToken cancellationToken)
+        {
+            if (entry == null || entry.IsDirectory)
+            {
+                throw new ArgumentException(
+                    "A Nextcloud file is required.",
+                    "entry");
+            }
+
+            return _davClient.TryReadGeneratedPreview(
+                _configuration.GetNormalizedBaseUrl(),
+                entry.RelativePath,
+                width,
+                height,
+                maximumBytes,
+                cancellationToken);
+        }
+
         internal IList<NextcloudStorageEntry> SnapshotNextcloudFolder(
             NextcloudStorageEntry root,
             IProgress<int> progress,

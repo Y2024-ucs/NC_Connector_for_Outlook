@@ -148,6 +148,111 @@ namespace NcTalkOutlookAddIn.Services
             return bytes;
         }
 
+        internal byte[] TryReadGeneratedPreview(
+            string baseUrl,
+            string relativePath,
+            int width,
+            int height,
+            long maximumBytes,
+            CancellationToken cancellationToken)
+        {
+            if (width <= 0)
+            {
+                throw new ArgumentOutOfRangeException("width");
+            }
+            if (height <= 0)
+            {
+                throw new ArgumentOutOfRangeException("height");
+            }
+            if (maximumBytes <= 0)
+            {
+                throw new ArgumentOutOfRangeException("maximumBytes");
+            }
+
+            string normalizedPath = NextcloudPath.Normalize(relativePath);
+            if (normalizedPath.Length == 0)
+            {
+                throw new ArgumentException(
+                    "A Nextcloud file path is required.",
+                    "relativePath");
+            }
+
+            NcHttpResponse response = SendWithRetry(
+                () => new NcHttpRequestOptions
+                {
+                    Method = "GET",
+                    Url = BuildGeneratedPreviewUrl(
+                        baseUrl,
+                        normalizedPath,
+                        width,
+                        height),
+                    Accept = "image/*",
+                    TimeoutMs = 60000,
+                    ReadWriteTimeoutMs = 60000,
+                    IncludeAuthHeader = true,
+                    IncludeOcsApiHeader = false,
+                    ParseJson = false,
+                    ReadResponseAsBytes = true,
+                    MaximumResponseBytes = maximumBytes,
+                    CancellationToken = cancellationToken,
+                    ConnectionLimit =
+                        FileLinkUploadPolicy.MaxParallelRequests
+                },
+                "nextcloud_generated_preview",
+                cancellationToken,
+                null);
+
+            if (response != null
+                && response.HasHttpResponse
+                && response.StatusCode == HttpStatusCode.OK)
+            {
+                byte[] bytes = response.ResponseBytes ?? new byte[0];
+                if (bytes.LongLength > maximumBytes)
+                {
+                    throw new TalkServiceException(
+                        Strings.NextcloudPickerPreviewSkipped,
+                        false,
+                        response.StatusCode,
+                        null);
+                }
+                return bytes;
+            }
+
+            if (response != null
+                && response.HasHttpResponse
+                && (response.StatusCode == HttpStatusCode.BadRequest
+                    || response.StatusCode == HttpStatusCode.Forbidden
+                    || response.StatusCode == HttpStatusCode.NotFound))
+            {
+                return null;
+            }
+
+            ThrowFailure(
+                response,
+                Strings.NextcloudPickerPreviewLoadFailed,
+                cancellationToken,
+                false);
+            return null;
+        }
+
+        internal static string BuildGeneratedPreviewUrl(
+            string baseUrl,
+            string relativePath,
+            int width,
+            int height)
+        {
+            string normalizedPath = NextcloudPath.Normalize(relativePath);
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                "{0}/index.php/core/preview.png?file={1}"
+                + "&x={2}&y={3}&a=1&forceIcon=0"
+                + "&mode=fill&mimeFallback=0",
+                baseUrl.TrimEnd('/'),
+                Uri.EscapeDataString("/" + normalizedPath),
+                width,
+                height);
+        }
+
         internal static NextcloudStorageListing ParseDirectoryListing(
             string baseUrl,
             string userId,

@@ -264,8 +264,12 @@ internal static class FileLinkProtocolTests
         TestAutoMkcolHeader();
         TestDavPathNormalization();
         TestNextcloudDirectoryListing();
-        TestNextcloudPreviewDownload();
-        TestNextcloudPreviewLimit();
+        TestNextcloudGeneratedPreviewDownload();
+        TestNextcloudGeneratedPreviewUnavailable();
+        TestNextcloudGeneratedPreviewAuthenticationFailure();
+        TestNextcloudGeneratedPreviewLimit();
+        TestNextcloudOriginalImagePreviewDownload();
+        TestNextcloudOriginalImagePreviewLimit();
         TestNextcloudServerCopy();
         TestMissingResourcePreflight();
         TestExistingResourcePreflight();
@@ -363,7 +367,7 @@ internal static class FileLinkProtocolTests
         Equal("Nextcloud listing reads available storage", 900L, listing.AvailableBytes.Value);
     }
 
-    private static void TestNextcloudPreviewDownload()
+    private static void TestNextcloudOriginalImagePreviewDownload()
     {
         var requests = new List<NcHttpRequestOptions>();
         var client = new FileLinkDavClient(options =>
@@ -384,26 +388,196 @@ internal static class FileLinkProtocolTests
             5L * 1024L * 1024L,
             CancellationToken.None);
 
-        Equal("Nextcloud preview returns the response bytes", 3, preview.Length);
-        Equal("Nextcloud preview sends one request", 1, requests.Count);
-        Equal("Nextcloud preview uses DAV GET", "GET", requests[0].Method);
+        Equal("Original image preview returns the response bytes", 3, preview.Length);
+        Equal("Original image preview sends one request", 1, requests.Count);
+        Equal("Original image preview uses DAV GET", "GET", requests[0].Method);
         Equal(
-            "Nextcloud preview encodes the canonical DAV path",
+            "Original image preview encodes the canonical DAV path",
             "https://cloud.example.test/nextcloud/remote.php/dav/files/user%20name/Photos/Summer%20%231.png",
             requests[0].Url);
         Check(
-            "Nextcloud preview reads a binary response",
+            "Original image preview reads a binary response",
             requests[0].ReadResponseAsBytes);
         Equal(
-            "Nextcloud preview carries the five MiB response limit",
+            "Original image preview carries the five MiB response limit",
             5L * 1024L * 1024L,
             requests[0].MaximumResponseBytes);
         Check(
-            "Nextcloud preview does not send the OCS header",
+            "Original image preview does not send the OCS header",
             !requests[0].IncludeOcsApiHeader);
     }
 
-    private static void TestNextcloudPreviewLimit()
+    private static void TestNextcloudGeneratedPreviewDownload()
+    {
+        var requests = new List<NcHttpRequestOptions>();
+        var client = new FileLinkDavClient(options =>
+        {
+            requests.Add(options);
+            return new NcHttpResponse
+            {
+                HasHttpResponse = true,
+                StatusCode = HttpStatusCode.OK,
+                ResponseBytes = new byte[] { 1, 2, 3 }
+            };
+        });
+        using (var cancellation = new CancellationTokenSource())
+        {
+            CancellationToken token = cancellation.Token;
+
+            byte[] preview = client.TryReadGeneratedPreview(
+                "https://cloud.example.test/nextcloud",
+                "Reports/Q3 #1 & \u00dcbersichten.xlsx",
+                1024,
+                768,
+                5L * 1024L * 1024L,
+                token);
+
+            Equal(
+                "Generated Nextcloud preview returns the response bytes",
+                3,
+                preview.Length);
+            Equal(
+                "Generated Nextcloud preview sends one request",
+                1,
+                requests.Count);
+            Equal(
+                "Generated Nextcloud preview uses GET",
+                "GET",
+                requests[0].Method);
+            Equal(
+                "Generated Nextcloud preview preserves the server subpath and encodes the file path",
+                "https://cloud.example.test/nextcloud/index.php/core/preview.png"
+                + "?file=%2FReports%2FQ3%20%231%20%26%20%C3%9Cbersichten.xlsx"
+                + "&x=1024&y=768&a=1&forceIcon=0&mode=fill&mimeFallback=0",
+                requests[0].Url);
+            Equal(
+                "Generated Nextcloud preview requests image content",
+                "image/*",
+                requests[0].Accept);
+            Check(
+                "Generated Nextcloud preview is authenticated",
+                requests[0].IncludeAuthHeader);
+            Check(
+                "Generated Nextcloud preview reads a binary response",
+                requests[0].ReadResponseAsBytes);
+            Equal(
+                "Generated Nextcloud preview carries the five MiB response limit",
+                5L * 1024L * 1024L,
+                requests[0].MaximumResponseBytes);
+            Equal(
+                "Generated Nextcloud preview carries the cancellation token",
+                token,
+                requests[0].CancellationToken);
+            Check(
+                "Generated Nextcloud preview does not send the OCS header",
+                !requests[0].IncludeOcsApiHeader);
+            Check(
+                "Generated Nextcloud preview does not bypass no-download restrictions",
+                requests[0].Headers == null
+                || !requests[0].Headers.ContainsKey("X-NC-Preview"));
+        }
+    }
+
+    private static void TestNextcloudGeneratedPreviewUnavailable()
+    {
+        var unavailableStatuses = new[]
+        {
+            HttpStatusCode.BadRequest,
+            HttpStatusCode.Forbidden,
+            HttpStatusCode.NotFound
+        };
+
+        foreach (HttpStatusCode status in unavailableStatuses)
+        {
+            var client = new FileLinkDavClient(options =>
+                new NcHttpResponse
+                {
+                    HasHttpResponse = true,
+                    StatusCode = status
+                });
+
+            byte[] preview = client.TryReadGeneratedPreview(
+                "https://cloud.example.test",
+                "Documents/report.pdf",
+                1024,
+                1024,
+                5L * 1024L * 1024L,
+                CancellationToken.None);
+            Check(
+                "Unavailable generated preview returns no image for HTTP "
+                + ((int)status).ToString(),
+                preview == null);
+        }
+    }
+
+    private static void TestNextcloudGeneratedPreviewAuthenticationFailure()
+    {
+        var client = new FileLinkDavClient(options =>
+            new NcHttpResponse
+            {
+                HasHttpResponse = true,
+                StatusCode = HttpStatusCode.Unauthorized
+            });
+
+        bool rejected = false;
+        try
+        {
+            client.TryReadGeneratedPreview(
+                "https://cloud.example.test",
+                "Documents/report.pdf",
+                1024,
+                1024,
+                5L * 1024L * 1024L,
+                CancellationToken.None);
+        }
+        catch (TalkServiceException ex)
+        {
+            rejected = ex.IsAuthenticationError
+                       && ex.StatusCode == HttpStatusCode.Unauthorized
+                       && string.Equals(
+                           ex.Message,
+                           "preview load failed",
+                           StringComparison.Ordinal);
+        }
+        Check(
+            "Generated preview preserves authentication failures",
+            rejected);
+    }
+
+    private static void TestNextcloudGeneratedPreviewLimit()
+    {
+        var client = new FileLinkDavClient(options =>
+            new NcHttpResponse
+            {
+                HasHttpResponse = true,
+                StatusCode = HttpStatusCode.OK,
+                ResponseBytes = new byte[] { 1, 2, 3, 4 }
+            });
+
+        bool rejected = false;
+        try
+        {
+            client.TryReadGeneratedPreview(
+                "https://cloud.example.test",
+                "Documents/report.pdf",
+                1024,
+                1024,
+                3,
+                CancellationToken.None);
+        }
+        catch (TalkServiceException ex)
+        {
+            rejected = string.Equals(
+                ex.Message,
+                "preview skipped",
+                StringComparison.Ordinal);
+        }
+        Check(
+            "Generated preview rejects a response above its byte limit",
+            rejected);
+    }
+
+    private static void TestNextcloudOriginalImagePreviewLimit()
     {
         var client = new FileLinkDavClient(options =>
             new NcHttpResponse
@@ -431,7 +605,7 @@ internal static class FileLinkProtocolTests
                 StringComparison.Ordinal);
         }
         Check(
-            "Nextcloud preview rejects a response above its byte limit",
+            "Original image preview rejects a response above its byte limit",
             rejected);
     }
 

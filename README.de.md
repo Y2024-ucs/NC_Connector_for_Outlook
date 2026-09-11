@@ -37,7 +37,7 @@ Weitere Punkte:
 
 - verfügbar in Compose-Fenstern, Antworten, Weiterleitungen und Inline-Antworten
 - die Warteschlange gruppiert `Lokal` und `Meine Nextcloud` und zeigt Ordner als aufklappbaren Baum
-- der Picker `Meine Nextcloud` bietet eine Explorer-artige Navigation mit Zurück, Vorwärts, Hoch, Aktualisieren und klickbaren Pfadsegmenten, vertraute Dateisymbole, einen eindeutigen Status bei Mehrfachauswahl und eine bei Bedarf geladene Vorschau für unterstützte Bilder bis 5 MiB
+- der Picker `Meine Nextcloud` bietet eine Explorer-artige Navigation mit Zurück, Vorwärts, Hoch, Aktualisieren und klickbaren Pfadsegmenten, vertraute Dateisymbole, einen eindeutigen Status bei Mehrfachauswahl und bei Bedarf geladene Vorschauen für Bilder und vom Nextcloud-Server unterstützte Dokumente
 - vorhandene Nextcloud-Dateien und -Ordner werden innerhalb von Nextcloud in die neue Freigabe kopiert; die Originale bleiben unverändert und werden für die Übertragung nicht nach Outlook heruntergeladen
 - optionales Ablaufdatum und eigene Berechtigungen pro Freigabe
 - Anhangsautomatisierung für große Anhänge oder immer über NC Connector, mit wählbarem Linkziel `ZIP-Download` (Standard) oder `Nextcloud-Freigabeseite`
