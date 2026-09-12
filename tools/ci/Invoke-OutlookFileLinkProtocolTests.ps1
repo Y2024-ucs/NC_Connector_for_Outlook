@@ -317,6 +317,13 @@ internal static class FileLinkProtocolTests
                 "https://cloud.example.test",
                 "user",
                 "safe/../file.txt"));
+        Equal(
+            "Nextcloud source DAV URL uses the shared segment encoding",
+            "https://cloud.example.test/remote.php/dav/files/user/Design%3A2026/report%20draft.pdf",
+            FileLinkDavClient.BuildNextcloudSourceUrl(
+                "https://cloud.example.test/",
+                "user",
+                "/Design:2026/report draft.pdf"));
     }
 
     private static void TestNextcloudDirectoryListing()

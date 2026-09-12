@@ -145,18 +145,7 @@ namespace NcTalkOutlookAddIn.Services
         {
             string normalizedPath =
                 FileLinkPath.NormalizeRelativePath(relativePath);
-            string[] segments = normalizedPath.Split(
-                new[] { '/' },
-                StringSplitOptions.RemoveEmptyEntries);
-            string encoded = string.Join(
-                "/",
-                segments.Select(Uri.EscapeDataString));
-            return string.Format(
-                CultureInfo.InvariantCulture,
-                "{0}/remote.php/dav/files/{1}/{2}",
-                baseUrl.TrimEnd('/'),
-                Uri.EscapeDataString(userId ?? string.Empty),
-                encoded);
+            return BuildDavFileUrl(baseUrl, userId, normalizedPath);
         }
 
         internal static string BuildNextcloudSourceUrl(
@@ -165,6 +154,14 @@ namespace NcTalkOutlookAddIn.Services
             string relativePath)
         {
             string normalizedPath = NextcloudPath.Normalize(relativePath);
+            return BuildDavFileUrl(baseUrl, userId, normalizedPath);
+        }
+
+        private static string BuildDavFileUrl(
+            string baseUrl,
+            string userId,
+            string normalizedPath)
+        {
             string[] segments = normalizedPath.Split(
                 new[] { '/' },
                 StringSplitOptions.RemoveEmptyEntries);

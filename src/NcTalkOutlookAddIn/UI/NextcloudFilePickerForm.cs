@@ -939,7 +939,7 @@ namespace NcTalkOutlookAddIn.UI
 
             string folderName = _currentPath.Length == 0
                 ? Strings.FileLinkSourceMyNextcloud
-                : ResolvePathName(_currentPath);
+                : NextcloudPath.GetName(_currentPath);
             var root = new NextcloudStorageEntry(
                 _currentPath,
                 folderName,
@@ -1407,9 +1407,5 @@ namespace NcTalkOutlookAddIn.UI
             _itemsView.Columns[2].Width = modifiedWidth;
         }
 
-        private static string ResolvePathName(string path)
-        {
-            return NextcloudPath.GetName(path);
-        }
     }
 }

@@ -334,7 +334,7 @@ namespace NcTalkOutlookAddIn.Services
                         "displayname");
                     if (string.IsNullOrWhiteSpace(displayName))
                     {
-                        displayName = ResolvePathName(entryPath);
+                        displayName = NextcloudPath.GetName(entryPath);
                     }
                     long length = isDirectory
                         ? 0
@@ -421,15 +421,6 @@ namespace NcTalkOutlookAddIn.Services
         {
             return Uri.UnescapeDataString(value ?? string.Empty)
                 .Replace('\\', '/');
-        }
-
-        private static string ResolvePathName(string path)
-        {
-            string normalized = (path ?? string.Empty).Trim('/');
-            int separator = normalized.LastIndexOf('/');
-            return separator >= 0
-                ? normalized.Substring(separator + 1)
-                : normalized;
         }
 
         private static string ReadDavValue(
