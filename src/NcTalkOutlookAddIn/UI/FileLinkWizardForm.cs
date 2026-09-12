@@ -97,6 +97,7 @@ namespace NcTalkOutlookAddIn.UI
         private FileLinkUploadContext _uploadContext;
         private bool _uploadInProgress;
         private bool _preflightInProgress;
+        private bool _queueScanInProgress;
         private bool _uploadCompleted;
         private bool _allowEmptyUpload;
         private bool _shareFinalized;
@@ -256,7 +257,12 @@ namespace NcTalkOutlookAddIn.UI
 
         private bool IsWizardBusy
         {
-            get { return _uploadInProgress || _preflightInProgress; }
+            get
+            {
+                return _uploadInProgress
+                       || _preflightInProgress
+                       || _queueScanInProgress;
+            }
         }
 
         private async Task NavigateAsync(int direction)
@@ -656,7 +662,7 @@ namespace NcTalkOutlookAddIn.UI
                         : selection);
             }
 
-            AddSelections(validSelections);
+            AddInitialSelections(validSelections);
         }
 
         private void ApplyAttachmentModeDefaults()
@@ -808,6 +814,9 @@ namespace NcTalkOutlookAddIn.UI
         {
             bool onFileStep = _currentStepIndex == 2;
             bool onLastStep = _currentStepIndex == _steps.Count - 1;
+            bool queueInputEnabled = onFileStep && !IsWizardBusy;
+            _localSourceButton.Enabled = queueInputEnabled;
+            _nextcloudSourceButton.Enabled = queueInputEnabled;
 
             if (_attachmentMode)
             {

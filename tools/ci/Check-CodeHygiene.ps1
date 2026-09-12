@@ -62,7 +62,8 @@ $asyncVoidAllowList = @(
     'OnSelectedTabChanged',
     'OnUpdateCheckButtonClick',
     'OnLoginFlowButtonClick',
-    'OnTestButtonClick'
+    'OnTestButtonClick',
+    'HandleFileListViewDragDrop'
 )
 
 foreach ($file in $sourceFiles) {

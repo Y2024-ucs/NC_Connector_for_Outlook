@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License v3.0.
 // See LICENSE.txt for details.
 
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
@@ -35,22 +36,38 @@ namespace NcTalkOutlookAddIn.UI
                 return;
             }
 
-            e.Effect = ResolveFileDropEffect(e);
+            e.Effect = IsWizardBusy
+                ? DragDropEffects.None
+                : ResolveFileDropEffect(e);
         }
 
-        private void HandleFileListViewDragDrop(object sender, DragEventArgs e)
+        // WinForms drag-and-drop handlers must stay async void; keep the awaited flow inside this method-level try/catch.
+        private async void HandleFileListViewDragDrop(
+            object sender,
+            DragEventArgs e)
         {
-            if (e == null)
+            try
             {
-                return;
-            }
-            var selections = BuildSelectionsFromFileDropData(e.Data);
-            if (selections.Count == 0)
-            {
-                return;
-            }
+                if (e == null || IsWizardBusy)
+                {
+                    return;
+                }
+                var selections = BuildSelectionsFromFileDropData(
+                    e.Data);
+                if (selections.Count == 0)
+                {
+                    return;
+                }
 
-            AddSelections(selections);
+                await AddSelectionsAsync(selections);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsLogger.LogException(
+                    LogCategories.FileLink,
+                    "Queue drag-and-drop handler failed.",
+                    ex);
+            }
         }
 
         private static DragDropEffects ResolveFileDropEffect(DragEventArgs e)
@@ -88,7 +105,32 @@ namespace NcTalkOutlookAddIn.UI
             return selections;
         }
 
-        private bool TryAddSelection(FileLinkSelection selection, HashSet<string> existingPaths)
+        private bool TryAddInitialFileSelection(
+            FileLinkSelection selection,
+            HashSet<string> existingPaths)
+        {
+            if (selection == null
+                || selection.SelectionType
+                   != FileLinkSelectionType.File)
+            {
+                return false;
+            }
+            if (!TryReserveSelection(selection, existingPaths))
+            {
+                return false;
+            }
+
+            FileLinkQueueNode snapshot =
+                FileLinkQueueSnapshotBuilder.Build(
+                    selection,
+                    CancellationToken.None);
+            AddPreparedSelection(selection, snapshot);
+            return true;
+        }
+
+        private bool TryReserveSelection(
+            FileLinkSelection selection,
+            HashSet<string> existingPaths)
         {
             if (selection == null
                 || (selection.Source == FileLinkSelectionSource.Local
@@ -105,11 +147,18 @@ namespace NcTalkOutlookAddIn.UI
 
                 existingPaths.Add(selection.IdentityPath);
             }
+            return true;
+        }
 
-            FileLinkQueueNode snapshot =
-                FileLinkQueueSnapshotBuilder.Build(
-                    selection,
-                    CancellationToken.None);
+        private void AddPreparedSelection(
+            FileLinkSelection selection,
+            FileLinkQueueNode snapshot)
+        {
+            if (selection == null || snapshot == null)
+            {
+                throw new IOException(
+                    Strings.FileLinkUploadSourceChanged);
+            }
             _items.Add(selection);
             _queueSnapshots.Add(selection, snapshot);
             if (snapshot.IsDirectory && snapshot.Children.Count > 0)
@@ -120,7 +169,6 @@ namespace NcTalkOutlookAddIn.UI
 
             var state = new SelectionUploadState(selection);
             _selectionStates[selection] = state;
-            return true;
         }
 
         private static bool SelectionPathExists(FileLinkSelection selection)

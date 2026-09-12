@@ -7,6 +7,8 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using NcTalkOutlookAddIn.Models;
 using NcTalkOutlookAddIn.Services;
@@ -205,8 +207,8 @@ namespace NcTalkOutlookAddIn.UI
 
         private void AddSourceMenuItems(
             ContextMenuStrip menu,
-            Action addFiles,
-            Action addFolder)
+            Func<Task> addFiles,
+            Func<Task> addFolder)
         {
             menu.BackColor = _themePalette.ControlBackground;
             menu.ForeColor = _themePalette.Text;
@@ -217,13 +219,13 @@ namespace NcTalkOutlookAddIn.UI
                 new Bitmap(
                     _fileQueueImageList.Images[
                         FileLinkIconProvider.GenericFileKey]),
-                (s, e) => addFiles());
+                async (s, e) => await addFiles());
             var folderItem = new ToolStripMenuItem(
                 Strings.FileLinkQueueSelectFolder,
                 new Bitmap(
                     _fileQueueImageList.Images[
                         FileLinkIconProvider.FolderKey]),
-                (s, e) => addFolder());
+                async (s, e) => await addFolder());
             menu.Items.Add(filesItem);
             menu.Items.Add(folderItem);
         }
@@ -550,7 +552,7 @@ namespace NcTalkOutlookAddIn.UI
         {
         }
 
-        private void AddFiles()
+        private async Task AddFiles()
         {
             using (var dialog = new OpenFileDialog())
             {
@@ -558,7 +560,7 @@ namespace NcTalkOutlookAddIn.UI
                 dialog.CheckFileExists = true;
                 if (dialog.ShowDialog(this) == DialogResult.OK)
                 {
-                    AddSelections(
+                    await AddSelectionsAsync(
                         dialog.FileNames.Select(
                             file => new FileLinkSelection(
                                 FileLinkSelectionType.File,
@@ -567,14 +569,14 @@ namespace NcTalkOutlookAddIn.UI
             }
         }
 
-        private void AddFolder()
+        private async Task AddFolder()
         {
             using (var dialog = new FolderBrowserDialog())
             {
                 if (dialog.ShowDialog(this) == DialogResult.OK
                     && !string.IsNullOrWhiteSpace(dialog.SelectedPath))
                 {
-                    AddSelections(
+                    await AddSelectionsAsync(
                         new[]
                         {
                             new FileLinkSelection(
@@ -585,7 +587,7 @@ namespace NcTalkOutlookAddIn.UI
             }
         }
 
-        private void AddNextcloudFiles()
+        private async Task AddNextcloudFiles()
         {
             using (var dialog = new NextcloudFilePickerForm(
                 _service,
@@ -595,14 +597,14 @@ namespace NcTalkOutlookAddIn.UI
                 {
                     return;
                 }
-                AddSelections(
+                await AddSelectionsAsync(
                     dialog.SelectedEntries
                         .Where(entry => entry != null && !entry.IsDirectory)
                         .Select(FileLinkSelection.FromNextcloudFile));
             }
         }
 
-        private void AddNextcloudFolder()
+        private async Task AddNextcloudFolder()
         {
             using (var dialog = new NextcloudFilePickerForm(
                 _service,
@@ -614,7 +616,7 @@ namespace NcTalkOutlookAddIn.UI
                     return;
                 }
                 NextcloudStorageEntry root = dialog.SelectedEntries[0];
-                AddSelections(
+                await AddSelectionsAsync(
                     new[]
                     {
                         FileLinkSelection.FromNextcloudFolder(
@@ -677,10 +679,117 @@ namespace NcTalkOutlookAddIn.UI
             InvalidateUpload();
         }
 
-        private void AddSelections(
+        private async Task AddSelectionsAsync(
             IEnumerable<FileLinkSelection> selections)
         {
             if (IsWizardBusy || selections == null)
+            {
+                return;
+            }
+            var pendingSelections = selections
+                .Where(
+                    selection => selection != null
+                                 && (selection.Source
+                                     == FileLinkSelectionSource.Nextcloud
+                                     || !string.IsNullOrWhiteSpace(
+                                         selection.LocalPath)))
+                .ToList();
+            if (pendingSelections.Count == 0)
+            {
+                return;
+            }
+            var existingPaths = _attachmentMode
+                ? null
+                : new HashSet<string>(
+                    _items.Select(item => item.IdentityPath),
+                    StringComparer.OrdinalIgnoreCase);
+
+            int requestedCount = pendingSelections.Count;
+            int addedCount = 0;
+            Exception firstFailure = null;
+            bool scanCancelled = false;
+            _queueScanInProgress = true;
+            _progressBar.Style = ProgressBarStyle.Marquee;
+            _progressLabel.Text = Strings.FileLinkWizardStatusScanning;
+            SetProgressPanelVisible(true);
+            UpdateNavigationState();
+            UpdateUploadButtonState();
+            _cancellationSource = new CancellationTokenSource();
+            CancellationToken token = _cancellationSource.Token;
+            try
+            {
+                foreach (FileLinkSelection selection in pendingSelections)
+                {
+                    token.ThrowIfCancellationRequested();
+                    if (!TryReserveSelection(
+                        selection,
+                        existingPaths))
+                    {
+                        continue;
+                    }
+                    try
+                    {
+                        FileLinkQueueNode snapshot = await Task.Run(
+                            () => FileLinkQueueSnapshotBuilder.Build(
+                                selection,
+                                token),
+                            token);
+                        token.ThrowIfCancellationRequested();
+                        AddPreparedSelection(selection, snapshot);
+                        addedCount++;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        if (firstFailure == null)
+                        {
+                            firstFailure = ex;
+                        }
+                        DiagnosticsLogger.LogException(
+                            LogCategories.FileLink,
+                            "Queue selection could not be read.",
+                            ex);
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                scanCancelled = true;
+                DiagnosticsLogger.Log(
+                    LogCategories.FileLink,
+                    "Queue selection scan cancelled.");
+            }
+            finally
+            {
+                if (_cancellationSource != null)
+                {
+                    _cancellationSource.Dispose();
+                    _cancellationSource = null;
+                }
+                _queueScanInProgress = false;
+                SetProgressPanelVisible(false);
+                _progressBar.Style = ProgressBarStyle.Blocks;
+                UpdateNavigationState();
+                UpdateUploadButtonState();
+                CloseAfterCancellation();
+            }
+
+            if (!scanCancelled)
+            {
+                CompleteSelectionAdd(
+                    requestedCount,
+                    addedCount,
+                    firstFailure);
+            }
+        }
+
+        private void AddInitialSelections(
+            IEnumerable<FileLinkSelection> selections)
+        {
+            if (selections == null)
             {
                 return;
             }
@@ -709,7 +818,9 @@ namespace NcTalkOutlookAddIn.UI
             {
                 try
                 {
-                    if (TryAddSelection(selection, existingPaths))
+                    if (TryAddInitialFileSelection(
+                        selection,
+                        existingPaths))
                     {
                         addedCount++;
                     }
@@ -727,6 +838,17 @@ namespace NcTalkOutlookAddIn.UI
                 }
             }
 
+            CompleteSelectionAdd(
+                requestedCount,
+                addedCount,
+                firstFailure);
+        }
+
+        private void CompleteSelectionAdd(
+            int requestedCount,
+            int addedCount,
+            Exception firstFailure)
+        {
             if (addedCount > 0)
             {
                 _allowEmptyUpload = false;

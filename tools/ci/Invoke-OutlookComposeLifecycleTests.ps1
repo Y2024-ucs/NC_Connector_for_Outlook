@@ -77,6 +77,8 @@ $hooksPath = "src\NcTalkOutlookAddIn\NextcloudTalkAddIn.Hooks.cs"
 $fileLinkPath = "src\NcTalkOutlookAddIn\Controllers\FileLinkLaunchController.cs"
 $fileLinkLaunchOptionsPath = "src\NcTalkOutlookAddIn\Models\FileLinkWizardLaunchOptions.cs"
 $fileLinkWizardPath = "src\NcTalkOutlookAddIn\UI\FileLinkWizardForm.cs"
+$fileLinkWizardFilesPath = "src\NcTalkOutlookAddIn\UI\FileLinkWizardForm.Files.cs"
+$fileLinkWizardDragDropPath = "src\NcTalkOutlookAddIn\UI\FileLinkWizardForm.DragDrop.cs"
 $projectPath = "src\NcTalkOutlookAddIn\NcTalkOutlookAddIn.csproj"
 
 $compose = Read-Source $composePath
@@ -91,6 +93,8 @@ $hooks = Read-Source $hooksPath
 $fileLink = Read-Source $fileLinkPath
 $fileLinkLaunchOptions = Read-Source $fileLinkLaunchOptionsPath
 $fileLinkWizard = Read-Source $fileLinkWizardPath
+$fileLinkWizardFiles = Read-Source $fileLinkWizardFilesPath
+$fileLinkWizardDragDrop = Read-Source $fileLinkWizardDragDropPath
 $project = Read-Source $projectPath
 $directPasswordDispatch = Get-MethodSlice `
     $compose `
@@ -153,6 +157,14 @@ $removeLastAttachmentBatch = Get-MethodSlice `
     $attachmentFlow `
     "private void RemoveLastAddedAttachmentBatch(" `
     "private void EndAttachmentSuppression("
+$queueSelectionScan = Get-MethodSlice `
+    $fileLinkWizardFiles `
+    "private async Task AddSelectionsAsync(" `
+    "private void AddInitialSelections("
+$initialFileSelection = Get-MethodSlice `
+    $fileLinkWizardDragDrop `
+    "private bool TryAddInitialFileSelection(" `
+    "private bool TryReserveSelection("
 
 Assert-Precedes `
     "Hidden attachments are ignored before post-add batching" `
@@ -238,6 +250,40 @@ Assert-NotContains `
     "The threshold prompt does not label a batch total as the last file size" `
     $lastAddedBatch `
     "total +="
+Assert-Contains `
+    "Local queue snapshots are built off the wizard thread" `
+    $queueSelectionScan `
+    "FileLinkQueueNode snapshot = await Task.Run("
+Assert-Contains `
+    "Local queue snapshots use the cancellable scan token" `
+    $queueSelectionScan `
+    "selection,`r`n                                token)"
+Assert-NotContains `
+    "Interactive queue scans do not use an uncancellable token" `
+    $queueSelectionScan `
+    "CancellationToken.None"
+Assert-Precedes `
+    "Queue snapshots return to the wizard before UI state changes" `
+    $queueSelectionScan `
+    "FileLinkQueueNode snapshot = await Task.Run(" `
+    "AddPreparedSelection(selection, snapshot);"
+Assert-NotContains `
+    "Queue scans retain the captured WinForms context" `
+    $queueSelectionScan `
+    "ConfigureAwait(false)"
+Assert-Contains `
+    "The wizard busy state includes local queue scans" `
+    $fileLinkWizard `
+    "|| _queueScanInProgress;"
+Assert-Contains `
+    "Drag and drop awaits the background queue scan" `
+    $fileLinkWizardDragDrop `
+    "await AddSelectionsAsync(selections);"
+Assert-Precedes `
+    "Only individual attachment files use synchronous initial capture" `
+    $initialFileSelection `
+    "!= FileLinkSelectionType.File" `
+    "CancellationToken.None"
 Assert-Precedes `
     "Suppressed host cleanup preserves hidden attachments" `
     $removeSuppressedAttachment `
