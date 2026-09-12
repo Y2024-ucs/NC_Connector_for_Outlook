@@ -3,6 +3,7 @@
 // See LICENSE.txt for details.
 
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
 using System.Threading;
@@ -261,12 +262,19 @@ namespace NcTalkOutlookAddIn.UI
                     HandleUploadProgress);
                 var phaseProgress = new Progress<FileLinkUploadPhaseProgress>(
                     HandleUploadPhaseProgress);
+                List<FileLinkSelection> uploadSelections;
+                Dictionary<FileLinkSelection, FileLinkQueueNode>
+                    uploadSnapshots;
+                CaptureUploadQueue(
+                    out uploadSelections,
+                    out uploadSnapshots);
 
                 await Task.Run(() =>
                 {
                     preparedContext = _service.PrepareUpload(
                         _request,
-                        _items,
+                        uploadSelections,
+                        uploadSnapshots,
                         HandleDuplicate,
                         phaseProgress,
                         token);
@@ -362,11 +370,18 @@ namespace NcTalkOutlookAddIn.UI
                 var phaseProgress =
                     new Progress<FileLinkUploadPhaseProgress>(
                         HandleUploadPhaseProgress);
+                List<FileLinkSelection> uploadSelections;
+                Dictionary<FileLinkSelection, FileLinkQueueNode>
+                    uploadSnapshots;
+                CaptureUploadQueue(
+                    out uploadSelections,
+                    out uploadSnapshots);
 
                 preparedContext = await Task.Run(
                     () => _service.PrepareUpload(
                         _request,
-                        _items,
+                        uploadSelections,
+                        uploadSnapshots,
                         HandleDuplicate,
                         phaseProgress,
                         token));
@@ -424,6 +439,32 @@ namespace NcTalkOutlookAddIn.UI
 
             await cleanupTask;
             return uploadPrepared;
+        }
+
+        private void CaptureUploadQueue(
+            out List<FileLinkSelection> selections,
+            out Dictionary<FileLinkSelection, FileLinkQueueNode>
+                snapshots)
+        {
+            selections = new List<FileLinkSelection>(_items);
+            snapshots =
+                new Dictionary<FileLinkSelection, FileLinkQueueNode>();
+            foreach (FileLinkSelection selection in selections)
+            {
+                FileLinkQueueNode snapshot;
+                if (!_queueSnapshots.TryGetValue(
+                    selection,
+                    out snapshot)
+                    || snapshot == null)
+                {
+                    throw new TalkServiceException(
+                        Strings.FileLinkUploadSourceChanged,
+                        false,
+                        0,
+                        null);
+                }
+                snapshots.Add(selection, snapshot);
+            }
         }
 
         private void CloseAfterCancellation()

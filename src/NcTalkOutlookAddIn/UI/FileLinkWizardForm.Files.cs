@@ -680,7 +680,7 @@ namespace NcTalkOutlookAddIn.UI
         private void AddSelections(
             IEnumerable<FileLinkSelection> selections)
         {
-            if (selections == null)
+            if (IsWizardBusy || selections == null)
             {
                 return;
             }

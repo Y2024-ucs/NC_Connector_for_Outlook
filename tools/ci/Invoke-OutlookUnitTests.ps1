@@ -565,7 +565,7 @@ internal static class OutlookUtilityTests
             var bulkSelection = new FileLinkSelection(
                 FileLinkSelectionType.Directory,
                 bulkRoot);
-            var bulkPlan = FileLinkUploadPlanBuilder.Build(
+            var bulkPlan = BuildFileLinkUploadPlan(
                 new List<FileLinkSelection> { bulkSelection },
                 true,
                 1,
@@ -582,7 +582,7 @@ internal static class OutlookUtilityTests
                 "FileLink planner preserves an empty directory",
                 bulkPlan.DirectoriesToCreate.Any(path => path.EndsWith("/empty", StringComparison.OrdinalIgnoreCase)));
 
-            var directPlan = FileLinkUploadPlanBuilder.Build(
+            var directPlan = BuildFileLinkUploadPlan(
                 new List<FileLinkSelection> { bulkSelection },
                 false,
                 1,
@@ -602,7 +602,7 @@ internal static class OutlookUtilityTests
             File.WriteAllText(
                 Path.Combine(directOnlyRoot, "file.txt"),
                 "direct");
-            var directOnlyPlan = FileLinkUploadPlanBuilder.Build(
+            var directOnlyPlan = BuildFileLinkUploadPlan(
                 new List<FileLinkSelection>
                 {
                     new FileLinkSelection(
@@ -635,7 +635,7 @@ internal static class OutlookUtilityTests
             File.WriteAllText(
                 Path.Combine(sharedDirectRight, "right.txt"),
                 "right");
-            var sharedDirectPlan = FileLinkUploadPlanBuilder.Build(
+            var sharedDirectPlan = BuildFileLinkUploadPlan(
                 new List<FileLinkSelection>
                 {
                     new FileLinkSelection(
@@ -687,7 +687,7 @@ internal static class OutlookUtilityTests
                                 0,
                                 DateTimeKind.Utc))
                     });
-            var nextcloudPlan = FileLinkUploadPlanBuilder.Build(
+            var nextcloudPlan = BuildFileLinkUploadPlan(
                 new List<FileLinkSelection> { nextcloudSelection },
                 true,
                 1,
@@ -712,6 +712,75 @@ internal static class OutlookUtilityTests
                         "/Empty",
                         StringComparison.OrdinalIgnoreCase)));
 
+            string stableRoot = Path.Combine(
+                fixtureRoot,
+                "stable-queue");
+            Directory.CreateDirectory(stableRoot);
+            string queuedFile = Path.Combine(
+                stableRoot,
+                "queued.txt");
+            File.WriteAllText(queuedFile, "queued");
+            var stableSelection = new FileLinkSelection(
+                FileLinkSelectionType.Directory,
+                stableRoot);
+            var stableSelections = new List<FileLinkSelection>
+            {
+                stableSelection
+            };
+            var stableSnapshots =
+                new Dictionary<FileLinkSelection, FileLinkQueueNode>
+                {
+                    {
+                        stableSelection,
+                        FileLinkQueueSnapshotBuilder.Build(
+                            stableSelection,
+                            CancellationToken.None)
+                    }
+                };
+            File.WriteAllText(
+                Path.Combine(stableRoot, "late.txt"),
+                "late");
+            FileLinkUploadPlan stablePlan =
+                FileLinkUploadPlanBuilder.Build(
+                    stableSelections,
+                    stableSnapshots,
+                    false,
+                    1,
+                    null,
+                    CancellationToken.None);
+            Equal(
+                "FileLink planner uploads only files captured in the queue",
+                1,
+                stablePlan.Files.Count);
+            Check(
+                "FileLink planner keeps the queued local file",
+                stablePlan.Files[0].LocalPath.EndsWith(
+                    "queued.txt",
+                    StringComparison.OrdinalIgnoreCase));
+
+            File.Delete(queuedFile);
+            bool removedQueuedFileRejected = false;
+            try
+            {
+                FileLinkUploadPlanBuilder.Build(
+                    stableSelections,
+                    stableSnapshots,
+                    false,
+                    1,
+                    null,
+                    CancellationToken.None);
+            }
+            catch (TalkServiceException ex)
+            {
+                removedQueuedFileRejected = string.Equals(
+                    ex.Message,
+                    "source changed",
+                    StringComparison.Ordinal);
+            }
+            Check(
+                "FileLink planner rejects a file removed from the queue snapshot",
+                removedQueuedFileRejected);
+
         }
         finally
         {
@@ -720,6 +789,32 @@ internal static class OutlookUtilityTests
                 Directory.Delete(fixtureRoot, true);
             }
         }
+    }
+
+    private static FileLinkUploadPlan BuildFileLinkUploadPlan(
+        IList<FileLinkSelection> selections,
+        bool bulkUploadSupported,
+        int fixedRequestCount,
+        Func<FileLinkDuplicateInfo, string> duplicateResolver,
+        CancellationToken cancellationToken)
+    {
+        var snapshots =
+            new Dictionary<FileLinkSelection, FileLinkQueueNode>();
+        foreach (FileLinkSelection selection in selections)
+        {
+            snapshots.Add(
+                selection,
+                FileLinkQueueSnapshotBuilder.Build(
+                    selection,
+                    cancellationToken));
+        }
+        return FileLinkUploadPlanBuilder.Build(
+            selections,
+            snapshots,
+            bulkUploadSupported,
+            fixedRequestCount,
+            duplicateResolver,
+            cancellationToken);
     }
 
     private static void TestFileLinkQueueSnapshotBuilder()
@@ -750,6 +845,7 @@ internal static class OutlookUtilityTests
             Check("Queue snapshot keeps local folders before files", local.Children.Count == 3 && local.Children[0].IsDirectory && local.Children[1].IsDirectory && !local.Children[2].IsDirectory);
             FileLinkQueueNode nested = local.Children.First(node => node.DisplayName == "Nested");
             Check("Queue snapshot includes nested local files", nested.Children.Count == 1 && nested.Children[0].DisplayName == "child.pdf" && nested.Children[0].Length == 5);
+            Check("Queue snapshot captures local modification time", nested.Children[0].LastWriteTimeUtc.HasValue);
             FileLinkQueueNode empty = local.Children.First(node => node.DisplayName == "Empty");
             Check("Queue snapshot preserves empty local folders", empty.Children.Count == 0);
 

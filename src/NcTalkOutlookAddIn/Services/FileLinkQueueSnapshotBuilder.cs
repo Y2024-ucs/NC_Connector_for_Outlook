@@ -86,6 +86,7 @@ namespace NcTalkOutlookAddIn.Services
                 displayName,
                 true,
                 null,
+                null,
                 children);
         }
 
@@ -101,6 +102,7 @@ namespace NcTalkOutlookAddIn.Services
                 file.Name,
                 false,
                 file.Length,
+                file.LastWriteTimeUtc,
                 null);
         }
 
@@ -144,6 +146,7 @@ namespace NcTalkOutlookAddIn.Services
                     file.DisplayName,
                     false,
                     file.Length,
+                    file.LastModifiedUtc,
                     null);
             }
 
@@ -204,7 +207,10 @@ namespace NcTalkOutlookAddIn.Services
                     entry.RelativePath,
                     entry.DisplayName,
                     entry.IsDirectory,
-                    entry.IsDirectory ? null : (long?)entry.Length);
+                    entry.IsDirectory ? null : (long?)entry.Length,
+                    entry.IsDirectory
+                        ? null
+                        : entry.LastModifiedUtc);
                 nodes.Add(entry.RelativePath, node);
                 parent.Children.Add(node);
             }
@@ -239,6 +245,7 @@ namespace NcTalkOutlookAddIn.Services
                 source.DisplayName,
                 source.IsDirectory,
                 source.Length,
+                source.LastWriteTimeUtc,
                 orderedChildren.Select(ConvertNode));
         }
 
@@ -254,12 +261,14 @@ namespace NcTalkOutlookAddIn.Services
                 string sourcePath,
                 string displayName,
                 bool isDirectory,
-                long? length)
+                long? length,
+                DateTime? lastWriteTimeUtc = null)
             {
                 SourcePath = sourcePath ?? string.Empty;
                 DisplayName = displayName ?? string.Empty;
                 IsDirectory = isDirectory;
                 Length = length;
+                LastWriteTimeUtc = lastWriteTimeUtc;
                 Children = new List<MutableNode>();
             }
 
@@ -270,6 +279,8 @@ namespace NcTalkOutlookAddIn.Services
             internal bool IsDirectory { get; private set; }
 
             internal long? Length { get; private set; }
+
+            internal DateTime? LastWriteTimeUtc { get; private set; }
 
             internal List<MutableNode> Children { get; private set; }
         }

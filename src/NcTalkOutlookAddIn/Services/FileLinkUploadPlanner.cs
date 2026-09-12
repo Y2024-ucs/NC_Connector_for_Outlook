@@ -15,6 +15,8 @@ namespace NcTalkOutlookAddIn.Services
     {
         internal static FileLinkUploadPlan Build(
             IList<FileLinkSelection> selections,
+            IDictionary<FileLinkSelection, FileLinkQueueNode>
+                queueSnapshots,
             bool bulkUploadSupported,
             int fixedRequestCount,
             Func<FileLinkDuplicateInfo, string> duplicateResolver,
@@ -23,6 +25,7 @@ namespace NcTalkOutlookAddIn.Services
             FileLinkSelectionScanResult scan =
                 FileLinkSelectionScanner.Scan(
                     selections,
+                    queueSnapshots,
                     duplicateResolver,
                     cancellationToken);
             IList<FileLinkPlannedFile> files = scan.Files;

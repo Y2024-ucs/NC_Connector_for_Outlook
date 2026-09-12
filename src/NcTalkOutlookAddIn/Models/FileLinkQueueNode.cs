@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License v3.0.
 // See LICENSE.txt for details.
 
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -16,12 +17,16 @@ namespace NcTalkOutlookAddIn.Models
             string displayName,
             bool isDirectory,
             long? length,
+            DateTime? lastWriteTimeUtc,
             IEnumerable<FileLinkQueueNode> children)
         {
             SourcePath = sourcePath ?? string.Empty;
             DisplayName = displayName ?? string.Empty;
             IsDirectory = isDirectory;
             Length = isDirectory ? null : length;
+            LastWriteTimeUtc = isDirectory
+                ? null
+                : lastWriteTimeUtc;
             Children = new ReadOnlyCollection<FileLinkQueueNode>(
                 new List<FileLinkQueueNode>(
                     children ?? Enumerable.Empty<FileLinkQueueNode>()));
@@ -34,6 +39,8 @@ namespace NcTalkOutlookAddIn.Models
         internal bool IsDirectory { get; private set; }
 
         internal long? Length { get; private set; }
+
+        internal DateTime? LastWriteTimeUtc { get; private set; }
 
         internal ReadOnlyCollection<FileLinkQueueNode> Children
         {

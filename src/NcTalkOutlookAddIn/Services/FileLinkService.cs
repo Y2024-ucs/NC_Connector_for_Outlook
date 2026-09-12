@@ -207,6 +207,8 @@ namespace NcTalkOutlookAddIn.Services
         internal FileLinkUploadContext PrepareUpload(
             FileLinkRequest request,
             IList<FileLinkSelection> selections,
+            IDictionary<FileLinkSelection, FileLinkQueueNode>
+                queueSnapshots,
             Func<FileLinkDuplicateInfo, string> duplicateResolver,
             IProgress<FileLinkUploadPhaseProgress> phaseProgress,
             CancellationToken cancellationToken)
@@ -218,6 +220,10 @@ namespace NcTalkOutlookAddIn.Services
             if (selections == null)
             {
                 throw new ArgumentNullException("selections");
+            }
+            if (queueSnapshots == null)
+            {
+                throw new ArgumentNullException("queueSnapshots");
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -246,6 +252,7 @@ namespace NcTalkOutlookAddIn.Services
                     ResolveShareTarget(request);
                 FileLinkUploadPlan plan = FileLinkUploadPlanBuilder.Build(
                     selections,
+                    queueSnapshots,
                     capabilities.BulkUploadSupported,
                     FileLinkPath.GetDepth(shareTarget.BasePath) + 1,
                     duplicateResolver,
