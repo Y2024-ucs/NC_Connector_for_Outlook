@@ -289,6 +289,7 @@ Compose runtime parity additions in `NextcloudTalkAddIn.cs` (`MailComposeSubscri
 - The FileLink ribbon entry is exposed in mail inspectors and in the Explorer inline reply/forward `Message` tab. Both entries call the same `FileLinkLaunchController` path.
 - Inline replies/forwards insert the rendered share HTML through `Explorer.ActiveInlineResponseWordEditor`; the inline path does not rewrite `MailItem.HTMLBody` and keeps two empty paragraphs above the share block for the sender's own text.
 - Debounced attachment evaluation (`ComposeAttachmentEvalDebounceMs`) after compose attachment changes.
+- Open compose windows invalidate their attachment-rule snapshot immediately after local settings are saved. Backend policy snapshots expire after five minutes; synchronous attachment events start a refresh when they encounter an expired snapshot, and Send waits for a current snapshot before enforcing mandatory routing.
 - Attachment automation modes:
   - always route attachments into NC sharing flow, or
   - threshold mode with a two-action prompt (`Share with NC Connector` / `Remove last selected attachments`).

@@ -69,8 +69,10 @@ $composePath = "src\NcTalkOutlookAddIn\Controllers\ComposeShareLifecycleControll
 $trackerPath = "src\NcTalkOutlookAddIn\Controllers\ComposeShareCleanupTracker.cs"
 $sendPath = "src\NcTalkOutlookAddIn\NextcloudTalkAddIn.MailComposeSubscription.Send.cs"
 $shareCleanupPath = "src\NcTalkOutlookAddIn\NextcloudTalkAddIn.MailComposeSubscription.ShareCleanup.cs"
+$addinPath = "src\NcTalkOutlookAddIn\NextcloudTalkAddIn.cs"
 $subscriptionPath = "src\NcTalkOutlookAddIn\NextcloudTalkAddIn.MailComposeSubscription.cs"
 $attachmentFlowPath = "src\NcTalkOutlookAddIn\NextcloudTalkAddIn.MailComposeSubscription.AttachmentFlow.cs"
+$subscriptionRegistryPath = "src\NcTalkOutlookAddIn\Controllers\MailComposeSubscriptionRegistryController.cs"
 $hooksPath = "src\NcTalkOutlookAddIn\NextcloudTalkAddIn.Hooks.cs"
 $fileLinkPath = "src\NcTalkOutlookAddIn\Controllers\FileLinkLaunchController.cs"
 $fileLinkLaunchOptionsPath = "src\NcTalkOutlookAddIn\Models\FileLinkWizardLaunchOptions.cs"
@@ -81,8 +83,10 @@ $compose = Read-Source $composePath
 $tracker = Read-Source $trackerPath
 $send = Read-Source $sendPath
 $shareCleanup = Read-Source $shareCleanupPath
+$addin = Read-Source $addinPath
 $subscription = Read-Source $subscriptionPath
 $attachmentFlow = Read-Source $attachmentFlowPath
+$subscriptionRegistry = Read-Source $subscriptionRegistryPath
 $hooks = Read-Source $hooksPath
 $fileLink = Read-Source $fileLinkPath
 $fileLinkLaunchOptions = Read-Source $fileLinkLaunchOptionsPath
@@ -129,6 +133,14 @@ $startAttachmentShareFlow = Get-MethodSlice `
     $attachmentFlow `
     "private async Task StartComposeAttachmentShareFlowAsync(" `
     "private bool TryBuildBeforeAddAttachmentCandidate("
+$readAttachmentSettings = Get-MethodSlice `
+    $attachmentFlow `
+    "private AttachmentAutomationSettings ReadAttachmentAutomationSettings()" `
+    "private async Task<AttachmentAutomationSettings> ReadAttachmentAutomationSettingsAsync()"
+$attachmentSendGate = Get-MethodSlice `
+    $attachmentFlow `
+    "private bool TryValidateAttachmentPolicyBeforeSend(" `
+    "private int CountPolicyRelevantAttachments()"
 $removeSuppressedAttachment = Get-MethodSlice `
     $attachmentFlow `
     "private void RemoveSuppressedBeforeAddAttachmentByName(" `
@@ -193,6 +205,27 @@ Assert-Precedes `
     $fileLinkWizardUi `
     "launchOptions.OnInitialQueueAdopted();" `
     "wizard.ShowDialog()"
+Assert-Precedes `
+    "Synchronous attachment events refresh an expired settings snapshot" `
+    $readAttachmentSettings `
+    "HasFreshAttachmentAutomationSettingsSnapshot()" `
+    "BeginAttachmentAutomationSettingsRefresh();"
+Assert-Contains `
+    "The send gate waits for a current attachment policy snapshot" `
+    $attachmentSendGate `
+    "if (!HasFreshAttachmentAutomationSettingsSnapshot()"
+Assert-Contains `
+    "Settings changes invalidate open compose attachment caches" `
+    $addin `
+    ".RefreshAttachmentAutomationSettings();"
+Assert-Contains `
+    "The compose registry refreshes every open subscription" `
+    $subscriptionRegistry `
+    "current[i].RefreshAttachmentAutomationSettings();"
+Assert-Contains `
+    "Superseded attachment-policy requests cannot replace current settings" `
+    $attachmentFlow `
+    "== _attachmentAutomationSettingsRefreshGeneration"
 Assert-Precedes `
     "Suppressed host cleanup preserves hidden attachments" `
     $removeSuppressedAttachment `

@@ -97,6 +97,7 @@ namespace NcTalkOutlookAddIn
             private AttachmentAutomationSettings _attachmentAutomationSettingsSnapshot;
             private DateTime _attachmentAutomationSettingsSnapshotUtc;
             private Task<AttachmentAutomationSettings> _attachmentAutomationSettingsRefreshTask;
+            private int _attachmentAutomationSettingsRefreshGeneration;
             private bool _attachmentSuppressed;
             private bool _attachmentPromptOpen;
             private bool _beforeAddShareFlowRunning;
@@ -110,6 +111,8 @@ namespace NcTalkOutlookAddIn
             private const int BeforeAddShareBatchDebounceMs = 3000;
             private const int EmailSignatureApplyDebounceMs = 900;
             private const int EmailSignatureInlineApplyDebounceMs = 250;
+            private static readonly TimeSpan AttachmentAutomationSettingsCacheLifetime =
+                TimeSpan.FromMinutes(5);
 
             internal MailComposeSubscription(
                 NextcloudTalkAddIn owner,

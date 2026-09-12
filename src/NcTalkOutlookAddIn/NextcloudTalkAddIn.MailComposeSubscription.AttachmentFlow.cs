@@ -413,7 +413,7 @@ namespace NcTalkOutlookAddIn
 
             private AttachmentAutomationSettings ReadAttachmentAutomationSettings()
             {
-                if (_attachmentAutomationSettingsSnapshot != null)
+                if (HasFreshAttachmentAutomationSettingsSnapshot())
                 {
                     return _attachmentAutomationSettingsSnapshot;
                 }
@@ -424,21 +424,59 @@ namespace NcTalkOutlookAddIn
 
             private async Task<AttachmentAutomationSettings> ReadAttachmentAutomationSettingsAsync()
             {
-                if (_attachmentAutomationSettingsSnapshot != null
-                    && DateTime.UtcNow - _attachmentAutomationSettingsSnapshotUtc
-                    < TimeSpan.FromMinutes(5))
+                if (HasFreshAttachmentAutomationSettingsSnapshot())
                 {
                     return _attachmentAutomationSettingsSnapshot;
                 }
 
-                BeginAttachmentAutomationSettingsRefresh();
-                Task<AttachmentAutomationSettings> refreshTask =
-                    _attachmentAutomationSettingsRefreshTask;
-                if (refreshTask != null)
+                while (!_disposed)
                 {
-                    return await refreshTask;
+                    BeginAttachmentAutomationSettingsRefresh();
+                    Task<AttachmentAutomationSettings> refreshTask =
+                        _attachmentAutomationSettingsRefreshTask;
+                    if (refreshTask == null)
+                    {
+                        return ReadLocalAttachmentAutomationSettings();
+                    }
+
+                    AttachmentAutomationSettings refreshed =
+                        await refreshTask;
+                    if (ReferenceEquals(
+                        refreshTask,
+                        _attachmentAutomationSettingsRefreshTask))
+                    {
+                        return _attachmentAutomationSettingsSnapshot
+                               ?? refreshed;
+                    }
                 }
                 return ReadLocalAttachmentAutomationSettings();
+            }
+
+            private bool HasFreshAttachmentAutomationSettingsSnapshot()
+            {
+                return _attachmentAutomationSettingsSnapshot != null
+                       && DateTime.UtcNow
+                       - _attachmentAutomationSettingsSnapshotUtc
+                       < AttachmentAutomationSettingsCacheLifetime;
+            }
+
+            internal void RefreshAttachmentAutomationSettings()
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _attachmentAutomationSettingsRefreshGeneration++;
+                _attachmentAutomationSettingsSnapshot = null;
+                _attachmentAutomationSettingsSnapshotUtc =
+                    DateTime.MinValue;
+                _attachmentAutomationSettingsRefreshTask = null;
+                BeginAttachmentAutomationSettingsRefresh();
+                LogFileLink(
+                    "Compose attachment settings refresh requested (composeKey="
+                    + _composeKey
+                    + ").");
             }
 
             private void BeginAttachmentAutomationSettingsRefresh()
@@ -464,9 +502,12 @@ namespace NcTalkOutlookAddIn
                     current.ServerUrl,
                     current.Username,
                     current.AppPassword);
+                int refreshGeneration =
+                    _attachmentAutomationSettingsRefreshGeneration;
                 _attachmentAutomationSettingsRefreshTask = RefreshAttachmentAutomationSettingsAsync(
                     local,
-                    configuration);
+                    configuration,
+                    refreshGeneration);
                 RunAttachmentFlowTask(
                     _attachmentAutomationSettingsRefreshTask,
                     "Compose attachment policy refresh failed");
@@ -474,7 +515,8 @@ namespace NcTalkOutlookAddIn
 
             private async Task<AttachmentAutomationSettings> RefreshAttachmentAutomationSettingsAsync(
                 AttachmentAutomationSettings local,
-                TalkServiceConfiguration configuration)
+                TalkServiceConfiguration configuration,
+                int refreshGeneration)
             {
                 AttachmentAutomationSettings resolved = local;
                 if (configuration != null && configuration.IsComplete())
@@ -488,8 +530,14 @@ namespace NcTalkOutlookAddIn
                         policyStatus);
                 }
 
-                _attachmentAutomationSettingsSnapshot = resolved;
-                _attachmentAutomationSettingsSnapshotUtc = DateTime.UtcNow;
+                if (!_disposed
+                    && refreshGeneration
+                    == _attachmentAutomationSettingsRefreshGeneration)
+                {
+                    _attachmentAutomationSettingsSnapshot = resolved;
+                    _attachmentAutomationSettingsSnapshotUtc =
+                        DateTime.UtcNow;
+                }
                 return resolved;
             }
 
@@ -564,7 +612,7 @@ namespace NcTalkOutlookAddIn
                     return true;
                 }
 
-                if (_attachmentAutomationSettingsSnapshot == null
+                if (!HasFreshAttachmentAutomationSettingsSnapshot()
                     && _owner.SettingsAreComplete())
                 {
                     BeginAttachmentAutomationSettingsRefresh();

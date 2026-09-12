@@ -241,7 +241,12 @@ namespace NcTalkOutlookAddIn
             return new SettingsWorkflowController(
                 _outlookApplication,
                 () => _currentSettings,
-                settings => _currentSettings = settings,
+                settings =>
+                {
+                    _currentSettings = settings;
+                    _mailComposeSubscriptionRegistry
+                        .RefreshAttachmentAutomationSettings();
+                },
                 (configuration, trigger) => FetchBackendPolicyStatus(configuration, trigger),
                 settings => ConfigureDiagnosticsLogger(settings),
                 (settings, source, showWarning) =>
