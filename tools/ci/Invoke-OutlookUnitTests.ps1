@@ -822,6 +822,7 @@ internal static class OutlookUtilityTests
         string fixtureRoot = Path.Combine(
             Path.GetTempPath(),
             "nc4ol-queue-tests-" + Guid.NewGuid().ToString("N"));
+        string junctionPath = string.Empty;
         Directory.CreateDirectory(fixtureRoot);
         try
         {
@@ -848,6 +849,50 @@ internal static class OutlookUtilityTests
             Check("Queue snapshot captures local modification time", nested.Children[0].LastWriteTimeUtc.HasValue);
             FileLinkQueueNode empty = local.Children.First(node => node.DisplayName == "Empty");
             Check("Queue snapshot preserves empty local folders", empty.Children.Count == 0);
+
+            string reparseRoot = Path.Combine(
+                fixtureRoot,
+                "reparse-selection");
+            string reparseTarget = Path.Combine(
+                fixtureRoot,
+                "reparse-target");
+            junctionPath = Path.Combine(
+                reparseRoot,
+                "linked");
+            Directory.CreateDirectory(reparseRoot);
+            Directory.CreateDirectory(reparseTarget);
+            File.WriteAllText(
+                Path.Combine(reparseTarget, "outside.txt"),
+                "outside");
+
+            bool junctionCreated = TryCreateDirectoryJunction(
+                junctionPath,
+                reparseTarget);
+            Check(
+                "Queue snapshot test creates a directory junction",
+                junctionCreated);
+            if (junctionCreated)
+            {
+                bool linkedItemRejected = false;
+                try
+                {
+                    FileLinkQueueSnapshotBuilder.Build(
+                        new FileLinkSelection(
+                            FileLinkSelectionType.Directory,
+                            reparseRoot),
+                        CancellationToken.None);
+                }
+                catch (IOException ex)
+                {
+                    linkedItemRejected = string.Equals(
+                        ex.Message,
+                        "linked item unsupported",
+                        StringComparison.Ordinal);
+                }
+                Check(
+                    "Queue snapshot rejects a nested directory junction",
+                    linkedItemRejected);
+            }
 
             var remoteRoot = new NextcloudStorageEntry(
                 "Projects",
@@ -905,6 +950,11 @@ internal static class OutlookUtilityTests
         }
         finally
         {
+            if (!string.IsNullOrEmpty(junctionPath)
+                && Directory.Exists(junctionPath))
+            {
+                Directory.Delete(junctionPath);
+            }
             if (Directory.Exists(fixtureRoot))
             {
                 Directory.Delete(fixtureRoot, true);
@@ -917,7 +967,6 @@ internal static class OutlookUtilityTests
         string fixtureRoot = Path.Combine(
             Path.GetTempPath(),
             "nc4ol-scan-tests-" + Guid.NewGuid().ToString("N"));
-        string junctionPath = string.Empty;
         Directory.CreateDirectory(fixtureRoot);
         try
         {
@@ -941,9 +990,20 @@ internal static class OutlookUtilityTests
             var selection = new FileLinkSelection(
                 FileLinkSelectionType.Directory,
                 selectionRoot);
+            var queueSnapshots =
+                new Dictionary<FileLinkSelection, FileLinkQueueNode>
+                {
+                    {
+                        selection,
+                        FileLinkQueueSnapshotBuilder.Build(
+                            selection,
+                            CancellationToken.None)
+                    }
+                };
             FileLinkSelectionScanResult scan =
                 FileLinkSelectionScanner.Scan(
                     new List<FileLinkSelection> { selection },
+                    queueSnapshots,
                     info =>
                     {
                         resolverCalls++;
@@ -986,61 +1046,48 @@ internal static class OutlookUtilityTests
                 6L,
                 scan.TotalBytes);
 
-            string reparseRoot = Path.Combine(
-                fixtureRoot,
-                "reparse-selection");
-            string reparseTarget = Path.Combine(
-                fixtureRoot,
-                "reparse-target");
-            junctionPath = Path.Combine(
-                reparseRoot,
-                "linked");
-            Directory.CreateDirectory(reparseRoot);
-            Directory.CreateDirectory(reparseTarget);
-            File.WriteAllText(
-                Path.Combine(reparseTarget, "outside.txt"),
-                "outside");
-
-            bool junctionCreated = TryCreateDirectoryJunction(
-                junctionPath,
-                reparseTarget);
-            Check(
-                "FileLink scanner test creates a directory junction",
-                junctionCreated);
-            if (junctionCreated)
+            bool missingSnapshotMapRejected = false;
+            try
             {
-                bool linkedItemRejected = false;
-                try
-                {
-                    FileLinkSelectionScanner.Scan(
-                        new List<FileLinkSelection>
-                        {
-                            new FileLinkSelection(
-                                FileLinkSelectionType.Directory,
-                                reparseRoot)
-                        },
-                        null,
-                        CancellationToken.None);
-                }
-                catch (TalkServiceException ex)
-                {
-                    linkedItemRejected = string.Equals(
-                        ex.Message,
-                        "linked item unsupported",
-                        StringComparison.Ordinal);
-                }
-                Check(
-                    "FileLink scanner rejects a nested directory junction",
-                    linkedItemRejected);
+                FileLinkSelectionScanner.Scan(
+                    new List<FileLinkSelection> { selection },
+                    null,
+                    null,
+                    CancellationToken.None);
             }
+            catch (ArgumentNullException ex)
+            {
+                missingSnapshotMapRejected = string.Equals(
+                    ex.ParamName,
+                    "queueSnapshots",
+                    StringComparison.Ordinal);
+            }
+            Check(
+                "FileLink scanner rejects a missing snapshot map",
+                missingSnapshotMapRejected);
+
+            bool missingSnapshotRejected = false;
+            try
+            {
+                FileLinkSelectionScanner.Scan(
+                    new List<FileLinkSelection> { selection },
+                    new Dictionary<FileLinkSelection, FileLinkQueueNode>(),
+                    null,
+                    CancellationToken.None);
+            }
+            catch (TalkServiceException ex)
+            {
+                missingSnapshotRejected = string.Equals(
+                    ex.Message,
+                    "source changed",
+                    StringComparison.Ordinal);
+            }
+            Check(
+                "FileLink scanner rejects a missing selection snapshot",
+                missingSnapshotRejected);
         }
         finally
         {
-            if (!string.IsNullOrEmpty(junctionPath)
-                && Directory.Exists(junctionPath))
-            {
-                Directory.Delete(junctionPath);
-            }
             if (Directory.Exists(fixtureRoot))
             {
                 Directory.Delete(fixtureRoot, true);

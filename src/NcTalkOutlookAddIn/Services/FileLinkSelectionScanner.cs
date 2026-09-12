@@ -83,18 +83,6 @@ namespace NcTalkOutlookAddIn.Services
 
         internal static FileLinkSelectionScanResult Scan(
             IList<FileLinkSelection> selections,
-            Func<FileLinkDuplicateInfo, string> duplicateResolver,
-            CancellationToken cancellationToken)
-        {
-            return Scan(
-                selections,
-                null,
-                duplicateResolver,
-                cancellationToken);
-        }
-
-        internal static FileLinkSelectionScanResult Scan(
-            IList<FileLinkSelection> selections,
             IDictionary<FileLinkSelection, FileLinkQueueNode>
                 queueSnapshots,
             Func<FileLinkDuplicateInfo, string> duplicateResolver,
@@ -103,6 +91,10 @@ namespace NcTalkOutlookAddIn.Services
             if (selections == null)
             {
                 throw new ArgumentNullException("selections");
+            }
+            if (queueSnapshots == null)
+            {
+                throw new ArgumentNullException("queueSnapshots");
             }
 
             return new FileLinkSelectionScanner(
@@ -125,12 +117,11 @@ namespace NcTalkOutlookAddIn.Services
 
                 _selectionBytes[selection] = 0;
                 _selectionFileCounts[selection] = 0;
-                FileLinkQueueNode queueSnapshot = null;
-                if (_queueSnapshots != null
-                    && (!_queueSnapshots.TryGetValue(
+                FileLinkQueueNode queueSnapshot;
+                if (!_queueSnapshots.TryGetValue(
                         selection,
                         out queueSnapshot)
-                        || queueSnapshot == null))
+                    || queueSnapshot == null)
                 {
                     throw CreateSourceChangedException();
                 }
@@ -142,21 +133,9 @@ namespace NcTalkOutlookAddIn.Services
                     continue;
                 }
 
-                if (queueSnapshot != null)
-                {
-                    AddLocalSnapshot(
-                        selection,
-                        queueSnapshot);
-                }
-                else if (selection.SelectionType
-                         == FileLinkSelectionType.File)
-                {
-                    AddSingleFile(selection);
-                }
-                else
-                {
-                    AddDirectory(selection);
-                }
+                AddLocalSnapshot(
+                    selection,
+                    queueSnapshot);
             }
 
             return new FileLinkSelectionScanResult(
@@ -566,153 +545,6 @@ namespace NcTalkOutlookAddIn.Services
             return isDirectory ? "Folder" : "File";
         }
 
-        private void AddSingleFile(FileLinkSelection selection)
-        {
-            var fileInfo = new FileInfo(selection.LocalPath);
-            if (!fileInfo.Exists)
-            {
-                throw CreateSourceChangedException();
-            }
-            RejectReparsePoint(fileInfo);
-
-            string fileName = FileLinkPath.SanitizeComponent(
-                fileInfo.Name);
-            if (string.IsNullOrWhiteSpace(fileName))
-            {
-                throw CreateSourceChangedException();
-            }
-            string uniqueName = ReserveUniqueName(
-                string.Empty,
-                fileName,
-                selection,
-                false);
-            AddPlannedFile(
-                selection,
-                fileInfo,
-                uniqueName);
-        }
-
-        private void AddDirectory(FileLinkSelection selection)
-        {
-            var rootInfo = new DirectoryInfo(selection.LocalPath);
-            if (!rootInfo.Exists)
-            {
-                throw CreateSourceChangedException();
-            }
-            RejectReparsePoint(rootInfo);
-
-            string rootName = FileLinkPath.SanitizeComponent(
-                rootInfo.Name);
-            if (string.IsNullOrWhiteSpace(rootName))
-            {
-                rootName = "Folder";
-            }
-            string remoteRoot = ReserveUniqueName(
-                string.Empty,
-                rootName,
-                selection,
-                true);
-
-            var pending = new Stack<DirectoryScanEntry>();
-            pending.Push(new DirectoryScanEntry(
-                rootInfo,
-                remoteRoot));
-
-            while (pending.Count > 0)
-            {
-                _cancellationToken.ThrowIfCancellationRequested();
-                DirectoryScanEntry current = pending.Pop();
-                _directories.Add(current.RemotePath);
-
-                FileSystemInfo[] children = current.LocalDirectory
-                    .GetFileSystemInfos()
-                    .OrderBy(
-                        item => item.Name,
-                        StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
-                var childDirectoryEntries =
-                    new List<DirectoryScanEntry>();
-                foreach (DirectoryInfo child
-                    in children.OfType<DirectoryInfo>())
-                {
-                    _cancellationToken.ThrowIfCancellationRequested();
-                    RejectReparsePoint(child);
-                    string childName = FileLinkPath.SanitizeComponent(
-                        child.Name);
-                    if (string.IsNullOrWhiteSpace(childName))
-                    {
-                        childName = "Folder";
-                    }
-                    string uniqueChildName = ReserveUniqueName(
-                        current.RemotePath,
-                        childName,
-                        selection,
-                        true);
-                    childDirectoryEntries.Add(
-                        new DirectoryScanEntry(
-                            child,
-                            FileLinkPath.Combine(
-                                current.RemotePath,
-                                uniqueChildName)));
-                }
-                for (int index = childDirectoryEntries.Count - 1;
-                    index >= 0;
-                    index--)
-                {
-                    pending.Push(childDirectoryEntries[index]);
-                }
-
-                foreach (FileInfo childFile
-                    in children.OfType<FileInfo>())
-                {
-                    _cancellationToken.ThrowIfCancellationRequested();
-                    RejectReparsePoint(childFile);
-                    string fileName = FileLinkPath.SanitizeComponent(
-                        childFile.Name);
-                    if (string.IsNullOrWhiteSpace(fileName))
-                    {
-                        fileName = "File";
-                    }
-                    string uniqueFileName = ReserveUniqueName(
-                        current.RemotePath,
-                        fileName,
-                        selection,
-                        false);
-                    AddPlannedFile(
-                        selection,
-                        childFile,
-                        FileLinkPath.Combine(
-                            current.RemotePath,
-                            uniqueFileName));
-                }
-            }
-        }
-
-        private void AddPlannedFile(
-            FileLinkSelection selection,
-            FileInfo fileInfo,
-            string remotePath)
-        {
-            fileInfo.Refresh();
-            if (!fileInfo.Exists)
-            {
-                throw CreateSourceChangedException();
-            }
-
-            long length = Math.Max(0, fileInfo.Length);
-            _totalBytes = checked(_totalBytes + length);
-            _selectionBytes[selection] = checked(
-                _selectionBytes[selection] + length);
-            _selectionFileCounts[selection] = checked(
-                _selectionFileCounts[selection] + 1);
-            _files.Add(new FileLinkPlannedFile(
-                selection,
-                fileInfo.FullName,
-                remotePath,
-                length,
-                fileInfo.LastWriteTimeUtc));
-        }
-
         private static void RejectReparsePoint(
             FileSystemInfo item)
         {
@@ -795,23 +627,5 @@ namespace NcTalkOutlookAddIn.Services
                 null);
         }
 
-        private sealed class DirectoryScanEntry
-        {
-            internal DirectoryScanEntry(
-                DirectoryInfo localDirectory,
-                string remotePath)
-            {
-                LocalDirectory = localDirectory;
-                RemotePath = remotePath;
-            }
-
-            internal DirectoryInfo LocalDirectory
-            {
-                get;
-                private set;
-            }
-
-            internal string RemotePath { get; private set; }
-        }
     }
 }
