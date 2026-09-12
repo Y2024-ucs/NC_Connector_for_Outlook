@@ -199,6 +199,11 @@ namespace NcTalkOutlookAddIn.UI
             get { return _requestSnapshot; }
         }
 
+        internal int QueuedSelectionCount
+        {
+            get { return _items.Count; }
+        }
+
 
 
         private void ShowStep(int index)

@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License v3.0.
 // See LICENSE.txt for details.
 
+using System;
 using System.Collections.Generic;
 
 namespace NcTalkOutlookAddIn.Models
@@ -26,6 +27,8 @@ namespace NcTalkOutlookAddIn.Models
         internal string AttachmentLastName { get; set; }
 
         internal long AttachmentLastSizeBytes { get; set; }
+
+        internal Action OnInitialQueueAdopted { get; set; }
 
         internal IList<FileLinkSelection> InitialSelections { get; private set; }
     }

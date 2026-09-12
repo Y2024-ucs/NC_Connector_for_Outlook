@@ -172,6 +172,33 @@ namespace NcTalkOutlookAddIn.Controllers
                 basePath,
                 launchOptions))
             {
+                if (launchOptions != null && launchOptions.AttachmentMode)
+                {
+                    int expectedSelectionCount =
+                        launchOptions.InitialSelections != null
+                            ? launchOptions.InitialSelections.Count
+                            : 0;
+                    if (expectedSelectionCount <= 0
+                        || wizard.QueuedSelectionCount
+                        != expectedSelectionCount)
+                    {
+                        NextcloudTalkAddIn.LogFileLinkMessage(
+                            "Attachment queue handoff rejected (expected="
+                            + expectedSelectionCount.ToString(
+                                CultureInfo.InvariantCulture)
+                            + ", queued="
+                            + wizard.QueuedSelectionCount.ToString(
+                                CultureInfo.InvariantCulture)
+                            + ").");
+                        return false;
+                    }
+
+                    if (launchOptions.OnInitialQueueAdopted != null)
+                    {
+                        launchOptions.OnInitialQueueAdopted();
+                    }
+                }
+
                 if (wizard.ShowDialog() == DialogResult.OK && wizard.Result != null)
                 {
                     string languageOverride = settings != null ? settings.ShareBlockLang : "default";

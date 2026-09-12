@@ -73,6 +73,8 @@ $subscriptionPath = "src\NcTalkOutlookAddIn\NextcloudTalkAddIn.MailComposeSubscr
 $attachmentFlowPath = "src\NcTalkOutlookAddIn\NextcloudTalkAddIn.MailComposeSubscription.AttachmentFlow.cs"
 $hooksPath = "src\NcTalkOutlookAddIn\NextcloudTalkAddIn.Hooks.cs"
 $fileLinkPath = "src\NcTalkOutlookAddIn\Controllers\FileLinkLaunchController.cs"
+$fileLinkLaunchOptionsPath = "src\NcTalkOutlookAddIn\Models\FileLinkWizardLaunchOptions.cs"
+$fileLinkWizardPath = "src\NcTalkOutlookAddIn\UI\FileLinkWizardForm.cs"
 $projectPath = "src\NcTalkOutlookAddIn\NcTalkOutlookAddIn.csproj"
 
 $compose = Read-Source $composePath
@@ -83,6 +85,8 @@ $subscription = Read-Source $subscriptionPath
 $attachmentFlow = Read-Source $attachmentFlowPath
 $hooks = Read-Source $hooksPath
 $fileLink = Read-Source $fileLinkPath
+$fileLinkLaunchOptions = Read-Source $fileLinkLaunchOptionsPath
+$fileLinkWizard = Read-Source $fileLinkWizardPath
 $project = Read-Source $projectPath
 $directPasswordDispatch = Get-MethodSlice `
     $compose `
@@ -96,6 +100,10 @@ $manualPasswordFallback = Get-MethodSlice `
     $compose `
     "private bool TryOpenSeparatePasswordFallback(" `
     "private static bool ReadSubmittedOrAmbiguous("
+$fileLinkWizardUi = Get-MethodSlice `
+    $fileLink `
+    "private bool RunFileLinkWizardOnUiThread(" `
+    "private static FileLinkResult BuildSecretPlaceholderResult("
 
 $attachmentAdd = Get-MethodSlice `
     $attachmentFlow `
@@ -117,6 +125,10 @@ $collectAttachments = Get-MethodSlice `
     $attachmentFlow `
     "private void CollectAttachmentSelectionsForShare(" `
     "private bool TryResolveAttachmentLocalPath("
+$startAttachmentShareFlow = Get-MethodSlice `
+    $attachmentFlow `
+    "private async Task StartComposeAttachmentShareFlowAsync(" `
+    "private bool TryBuildBeforeAddAttachmentCandidate("
 $removeSuppressedAttachment = Get-MethodSlice `
     $attachmentFlow `
     "private void RemoveSuppressedBeforeAddAttachmentByName(" `
@@ -154,6 +166,33 @@ Assert-Precedes `
     $collectAttachments `
     "IsHiddenAttachment(attachment)" `
     "TryResolveAttachmentLocalPath("
+Assert-Precedes `
+    "Post-add attachments are detached only through queue adoption" `
+    $startAttachmentShareFlow `
+    "OnInitialQueueAdopted = () =>" `
+    "bool wizardAccepted = await _owner.RunFileLinkWizardForMailAsync(_mail, launchOptions);"
+Assert-Contains `
+    "Queue adoption removes the original Outlook attachments" `
+    $startAttachmentShareFlow `
+    'RemoveAttachmentsByIndices('
+Assert-Contains `
+    "Attachment launch options expose the queue-adoption boundary" `
+    $fileLinkLaunchOptions `
+    "internal Action OnInitialQueueAdopted { get; set; }"
+Assert-Contains `
+    "The wizard reports its accepted queue size" `
+    $fileLinkWizard `
+    "internal int QueuedSelectionCount"
+Assert-Precedes `
+    "The complete attachment queue is checked before adoption" `
+    $fileLinkWizardUi `
+    "wizard.QueuedSelectionCount" `
+    "launchOptions.OnInitialQueueAdopted();"
+Assert-Precedes `
+    "Attachment ownership transfers before the wizard opens" `
+    $fileLinkWizardUi `
+    "launchOptions.OnInitialQueueAdopted();" `
+    "wizard.ShowDialog()"
 Assert-Precedes `
     "Suppressed host cleanup preserves hidden attachments" `
     $removeSuppressedAttachment `

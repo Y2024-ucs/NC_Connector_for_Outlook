@@ -833,8 +833,6 @@ namespace NcTalkOutlookAddIn
                     return;
                 }
 
-                RemoveAttachmentsByIndices(removeIndices, "share_flow");
-
                 var launchOptions = new FileLinkWizardLaunchOptions
                 {
                     AttachmentMode = true,
@@ -842,7 +840,11 @@ namespace NcTalkOutlookAddIn
                     AttachmentTotalBytes = Math.Max(0, totalBytes),
                     AttachmentThresholdMb = Math.Max(1, thresholdMb),
                     AttachmentLastName = lastAdded != null ? (lastAdded.Name ?? string.Empty) : string.Empty,
-                    AttachmentLastSizeBytes = lastAdded != null ? Math.Max(0, lastAdded.SizeBytes) : 0
+                    AttachmentLastSizeBytes = lastAdded != null ? Math.Max(0, lastAdded.SizeBytes) : 0,
+                    OnInitialQueueAdopted = () =>
+                        RemoveAttachmentsByIndices(
+                            removeIndices,
+                            "share_flow")
                 };
                 for (int i = 0; i < selections.Count; i++)
                 {

@@ -302,8 +302,9 @@ Compose runtime parity additions in `NextcloudTalkAddIn.cs` (`MailComposeSubscri
   - pre-prompt-action handling
   - wizard finalize (enforced in `UI/FileLinkWizardForm.cs` via `Services/OutlookAttachmentAutomationGuardService.cs`).
 - Attachment-mode wizard launch:
-  - removes selected compose attachments
-  - queues files as initial wizard selections
+  - materializes selected compose attachments and queues them as initial wizard selections
+  - removes the Outlook attachments only after the complete initial queue has accepted them
+  - does not restore adopted attachments when the user later cancels the wizard
   - opens directly in file-step-equivalent mode.
   - copies the effective attachment link target into `FileLinkRequest`; no per-share target switch is exposed.
 - Outlook body resources with `PR_ATTACHMENT_HIDDEN=true`, such as signature images, are excluded from attachment batching, threshold totals, FileLink selection, host removal, and the required-routing send gate.
