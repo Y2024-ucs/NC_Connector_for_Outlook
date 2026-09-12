@@ -181,8 +181,10 @@ namespace NcTalkOutlookAddIn.UI
             _titleLabel.AutoSize = true;
 
             _roomTypeComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
-            _roomTypeComboBox.Items.Add(new RoomTypeOption(TalkRoomType.EventConversation, Strings.TalkEventRadio));
-            _roomTypeComboBox.Items.Add(new RoomTypeOption(TalkRoomType.StandardRoom, Strings.TalkStandardRadio));
+            TalkRoomTypeComboHelper.Populate(
+                _roomTypeComboBox,
+                Strings.TalkEventRadio,
+                Strings.TalkStandardRadio);
             _roomTypeComboBox.SelectedIndexChanged += (s, e) => UpdateRoomTypeTooltip();
 
             _roomTypeLabel.Text = Strings.TalkRoomGroup;
@@ -227,37 +229,16 @@ namespace NcTalkOutlookAddIn.UI
             _moderatorClearButton.Click += (s, e) => ClearModerator();
             _moderatorGroup.Controls.Add(_moderatorClearButton);
 
-            _moderatorAddressbookWarningPanel.Visible = false;
-            _moderatorAddressbookWarningPanel.BackColor = Color.FromArgb(20, 176, 0, 32);
-            _moderatorAddressbookWarningPanel.Paint += (s, e) =>
-            {
-                ControlPaint.DrawBorder(
-                    e.Graphics,
-                    _moderatorAddressbookWarningPanel.ClientRectangle,
-                    Color.FromArgb(176, 0, 32),
-                    ButtonBorderStyle.Solid);
-            };
+            WarningPanelUiHelper.Initialize(
+                _moderatorAddressbookWarningPanel,
+                _moderatorAddressbookWarningTitleLabel,
+                _moderatorAddressbookWarningTextLabel,
+                _moderatorAddressbookWarningLinkLabel,
+                "\u26a0 " + Strings.TalkSystemAddressbookRequiredShort,
+                Strings.TalkSystemAddressbookRequiredMessage,
+                Strings.TalkSystemAddressbookAdminLinkLabel);
             _moderatorGroup.Controls.Add(_moderatorAddressbookWarningPanel);
-
-            _moderatorAddressbookWarningTitleLabel.AutoSize = true;
-            _moderatorAddressbookWarningTitleLabel.ForeColor = Color.FromArgb(176, 0, 32);
-            _moderatorAddressbookWarningTitleLabel.Font = new Font(
-                _moderatorAddressbookWarningTitleLabel.Font,
-                FontStyle.Bold);
-            _moderatorAddressbookWarningTitleLabel.Text = "\u26a0 " + Strings.TalkSystemAddressbookRequiredShort;
-            _moderatorAddressbookWarningPanel.Controls.Add(_moderatorAddressbookWarningTitleLabel);
-
-            _moderatorAddressbookWarningTextLabel.AutoSize = true;
-            _moderatorAddressbookWarningTextLabel.Text = Strings.TalkSystemAddressbookRequiredMessage;
-            _moderatorAddressbookWarningPanel.Controls.Add(_moderatorAddressbookWarningTextLabel);
-
-            _moderatorAddressbookWarningLinkLabel.AutoSize = true;
-            _moderatorAddressbookWarningLinkLabel.Text = Strings.TalkSystemAddressbookAdminLinkLabel;
-            _moderatorAddressbookWarningLinkLabel.LinkColor = Color.FromArgb(0, 130, 201);
-            _moderatorAddressbookWarningLinkLabel.ActiveLinkColor = Color.FromArgb(0, 102, 153);
-            _moderatorAddressbookWarningLinkLabel.VisitedLinkColor = Color.FromArgb(0, 130, 201);
             _moderatorAddressbookWarningLinkLabel.LinkClicked += (s, e) => OpenSystemAddressbookSetupGuide();
-            _moderatorAddressbookWarningPanel.Controls.Add(_moderatorAddressbookWarningLinkLabel);
 
             _moderatorListBox.DrawMode = DrawMode.OwnerDrawFixed;
             _moderatorListBox.ItemHeight = 34;
@@ -296,11 +277,14 @@ namespace NcTalkOutlookAddIn.UI
             };
             _moderatorGroup.Controls.Add(_moderatorHintLabel);
 
-            PolicyUiHelper.InitializePolicyWarningPanel(
+            WarningPanelUiHelper.Initialize(
                 _policyWarningPanel,
                 _policyWarningTitleLabel,
                 _policyWarningTextLabel,
-                _policyWarningLinkLabel);
+                _policyWarningLinkLabel,
+                "\u26a0 " + Strings.PolicyWarningTitle,
+                string.Empty,
+                Strings.PolicyWarningAdminLinkLabel);
             _policyWarningLinkLabel.LinkClicked += (s, e) =>
                 BrowserLauncher.OpenUrl(
                     Strings.PolicyAdminGuideUrl,
@@ -399,29 +383,21 @@ namespace NcTalkOutlookAddIn.UI
                 _roomTypeComboBox.SetBounds(inputX, y, inputWidth, roomTypeComboHeight);
                 y = Math.Max(_roomTypeLabel.Bottom, _roomTypeComboBox.Bottom) + rowGap;
 
-                if (_policyWarningPanel.Visible)
+                int policyWarningHeight = WarningPanelUiHelper.Layout(
+                    _policyWarningPanel,
+                    _policyWarningTitleLabel,
+                    _policyWarningTextLabel,
+                    _policyWarningLinkLabel,
+                    outerPadding,
+                    y,
+                    Math.Max(ScaleLogical(260), ClientSize.Width - (outerPadding * 2)),
+                    ScaleLogical(8),
+                    ScaleLogical(160),
+                    ScaleLogical(4),
+                    ScaleLogical(6));
+                if (policyWarningHeight > 0)
                 {
-                    int warningPadding = ScaleLogical(8);
-                    int panelWidth = Math.Max(ScaleLogical(260), ClientSize.Width - (outerPadding * 2));
-                    int warningTextWidth = Math.Max(ScaleLogical(160), panelWidth - (warningPadding * 2));
-
-                    _policyWarningTitleLabel.Location = new Point(warningPadding, warningPadding);
-                    _policyWarningTitleLabel.MaximumSize = new Size(warningTextWidth, 0);
-
-                    int warningTextTop = _policyWarningTitleLabel.Bottom + ScaleLogical(4);
-                    _policyWarningTextLabel.Location = new Point(warningPadding, warningTextTop);
-                    _policyWarningTextLabel.MaximumSize = new Size(warningTextWidth, 0);
-
-                    int warningLinkTop = _policyWarningTextLabel.Bottom + ScaleLogical(6);
-                    _policyWarningLinkLabel.Location = new Point(warningPadding, warningLinkTop);
-
-                    int panelHeight = _policyWarningLinkLabel.Bottom + warningPadding;
-                    _policyWarningPanel.SetBounds(outerPadding, y, panelWidth, panelHeight);
                     y = _policyWarningPanel.Bottom + verticalGap;
-                }
-                else
-                {
-                    _policyWarningPanel.SetBounds(outerPadding, y, Math.Max(ScaleLogical(260), ClientSize.Width - (outerPadding * 2)), 0);
                 }
 
                 _passwordToggleCheckBox.Location = new Point(outerPadding, y);
@@ -521,24 +497,20 @@ namespace NcTalkOutlookAddIn.UI
                 Math.Max(_moderatorTextBox.Bottom, _moderatorClearButton.Bottom));
             int contentTop = rowBottom + ScaleLogical(8);
 
-            if (_moderatorAddressbookWarningPanel.Visible)
+            int addressbookWarningHeight = WarningPanelUiHelper.Layout(
+                _moderatorAddressbookWarningPanel,
+                _moderatorAddressbookWarningTitleLabel,
+                _moderatorAddressbookWarningTextLabel,
+                _moderatorAddressbookWarningLinkLabel,
+                innerPadding,
+                contentTop,
+                Math.Max(ScaleLogical(160), _moderatorGroup.ClientSize.Width - (innerPadding * 2)),
+                ScaleLogical(8),
+                ScaleLogical(120),
+                ScaleLogical(4),
+                ScaleLogical(6));
+            if (addressbookWarningHeight > 0)
             {
-                int panelPadding = ScaleLogical(8);
-                int panelWidth = Math.Max(ScaleLogical(160), _moderatorGroup.ClientSize.Width - (innerPadding * 2));
-                int warningTextWidth = Math.Max(ScaleLogical(120), panelWidth - (panelPadding * 2));
-
-                _moderatorAddressbookWarningTitleLabel.Location = new Point(panelPadding, panelPadding);
-                _moderatorAddressbookWarningTitleLabel.MaximumSize = new Size(warningTextWidth, 0);
-
-                int warningTextTop = _moderatorAddressbookWarningTitleLabel.Bottom + ScaleLogical(4);
-                _moderatorAddressbookWarningTextLabel.Location = new Point(panelPadding, warningTextTop);
-                _moderatorAddressbookWarningTextLabel.MaximumSize = new Size(warningTextWidth, 0);
-
-                int warningLinkTop = _moderatorAddressbookWarningTextLabel.Bottom + ScaleLogical(6);
-                _moderatorAddressbookWarningLinkLabel.Location = new Point(panelPadding, warningLinkTop);
-
-                int panelHeight = _moderatorAddressbookWarningLinkLabel.Bottom + panelPadding;
-                _moderatorAddressbookWarningPanel.SetBounds(innerPadding, contentTop, panelWidth, panelHeight);
                 contentTop = _moderatorAddressbookWarningPanel.Bottom + ScaleLogical(8);
             }
             int hintTop = contentTop;
@@ -618,7 +590,9 @@ namespace NcTalkOutlookAddIn.UI
             _lobbyCheckBox.Checked = lobbyDefault;
             _searchCheckBox.Checked = searchDefault;
 
-            SelectRoomType(roomTypeDefault);
+            TalkRoomTypeComboHelper.Select(
+                _roomTypeComboBox,
+                roomTypeDefault);
 
             LobbyUntilStart = _lobbyCheckBox.Checked;
             SearchVisible = _searchCheckBox.Checked;
@@ -777,8 +751,9 @@ namespace NcTalkOutlookAddIn.UI
                 _disabledTooltipHints.Apply(_roomTypeComboBox, Strings.PolicyAdminControlledTooltip, true, _roomTypeLabel);
                 return;
             }
-            var selected = _roomTypeComboBox.SelectedItem as RoomTypeOption;
-            var roomType = selected != null ? selected.Value : TalkRoomType.EventConversation;
+            TalkRoomType roomType = TalkRoomTypeComboHelper.GetSelected(
+                _roomTypeComboBox,
+                TalkRoomType.EventConversation);
             _disabledTooltipHints.Apply(
                 _roomTypeComboBox,
                 roomType == TalkRoomType.EventConversation ? Strings.TooltipRoomTypeEvent : Strings.TooltipRoomTypeStandard,
@@ -812,8 +787,9 @@ namespace NcTalkOutlookAddIn.UI
             AddUsers = _addUsersCheckBox.Checked;
             AddGuests = _addGuestsCheckBox.Checked;
 
-            var selected = _roomTypeComboBox.SelectedItem as RoomTypeOption;
-            SelectedRoomType = selected != null ? selected.Value : TalkRoomType.StandardRoom;
+            SelectedRoomType = TalkRoomTypeComboHelper.GetSelected(
+                _roomTypeComboBox,
+                TalkRoomType.StandardRoom);
 
             string moderatorCandidate = _selectedModerator != null ? _selectedModerator.UserId : _moderatorTextBox.Text.Trim();
             DelegateModeratorId = string.IsNullOrWhiteSpace(moderatorCandidate) ? string.Empty : moderatorCandidate.Trim();
@@ -845,41 +821,6 @@ namespace NcTalkOutlookAddIn.UI
                 _passwordPolicy,
                 DefaultMinPasswordLength,
                 LogCategories.Talk);
-        }
-
-        private void SelectRoomType(TalkRoomType type)
-        {
-            foreach (var item in _roomTypeComboBox.Items)
-            {
-                var option = item as RoomTypeOption;
-                if (option != null && option.Value == type)
-                {
-                    _roomTypeComboBox.SelectedItem = option;
-                    return;
-                }
-            }
-            if (_roomTypeComboBox.Items.Count > 0)
-            {
-                _roomTypeComboBox.SelectedIndex = 0;
-            }
-        }
-
-        private sealed class RoomTypeOption
-        {
-            internal RoomTypeOption(TalkRoomType value, string label)
-            {
-                Value = value;
-                Label = label ?? value.ToString();
-            }
-
-            internal TalkRoomType Value { get; private set; }
-
-            internal string Label { get; private set; }
-
-            public override string ToString()
-            {
-                return Label;
-            }
         }
 
     }

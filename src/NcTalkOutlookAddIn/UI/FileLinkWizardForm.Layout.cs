@@ -52,11 +52,14 @@ namespace NcTalkOutlookAddIn.UI
 
         private void InitializePolicyWarningPanel()
         {
-            PolicyUiHelper.InitializePolicyWarningPanel(
+            WarningPanelUiHelper.Initialize(
                 _policyWarningPanel,
                 _policyWarningTitleLabel,
                 _policyWarningTextLabel,
-                _policyWarningLinkLabel);
+                _policyWarningLinkLabel,
+                "\u26a0 " + Strings.PolicyWarningTitle,
+                string.Empty,
+                Strings.PolicyWarningAdminLinkLabel);
             Controls.Add(_policyWarningPanel);
             _policyWarningLinkLabel.LinkClicked += (s, e) => OpenPolicyAdminGuide();
         }
@@ -117,25 +120,18 @@ namespace NcTalkOutlookAddIn.UI
             int left = ScaleLogical(20);
             int top = _titleLabel.Bottom + ScaleLogical(10);
             int width = Math.Max(ScaleLogical(240), ClientSize.Width - ScaleLogical(40));
-            if (!_policyWarningPanel.Visible)
-            {
-                _policyWarningPanel.SetBounds(left, top, width, 0);
-                return;
-            }
-            int padding = ScaleLogical(8);
-            int textWidth = Math.Max(ScaleLogical(180), width - (padding * 2));
-            _policyWarningTitleLabel.Location = new Point(padding, padding);
-            _policyWarningTitleLabel.MaximumSize = new Size(textWidth, 0);
-
-            int textTop = _policyWarningTitleLabel.Bottom + ScaleLogical(4);
-            _policyWarningTextLabel.Location = new Point(padding, textTop);
-            _policyWarningTextLabel.MaximumSize = new Size(textWidth, 0);
-
-            int linkTop = _policyWarningTextLabel.Bottom + ScaleLogical(6);
-            _policyWarningLinkLabel.Location = new Point(padding, linkTop);
-
-            int height = _policyWarningLinkLabel.Bottom + padding;
-            _policyWarningPanel.SetBounds(left, top, width, height);
+            WarningPanelUiHelper.Layout(
+                _policyWarningPanel,
+                _policyWarningTitleLabel,
+                _policyWarningTextLabel,
+                _policyWarningLinkLabel,
+                left,
+                top,
+                width,
+                ScaleLogical(8),
+                ScaleLogical(180),
+                ScaleLogical(4),
+                ScaleLogical(6));
         }
 
         private void UpdateStepHostBounds()

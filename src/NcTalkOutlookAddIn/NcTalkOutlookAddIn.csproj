@@ -231,6 +231,8 @@
     <Compile Include="Utilities\PasswordGenerationHelper.cs" />
     <Compile Include="Utilities\ParallelExecution.cs" />
     <Compile Include="Utilities\PolicyUiHelper.cs" />
+    <Compile Include="Utilities\TalkRoomTypeComboHelper.cs" />
+    <Compile Include="Utilities\WarningPanelUiHelper.cs" />
     <Compile Include="Utilities\SecretsCrypto.cs" />
     <Compile Include="Utilities\TimeUtilities.cs" />
     <Compile Include="Utilities\DpiScaling.cs" />

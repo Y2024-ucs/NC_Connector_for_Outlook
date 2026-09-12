@@ -35,24 +35,6 @@ namespace NcTalkOutlookAddIn.UI
             }
         }
 
-        private sealed class TalkRoomTypeOption
-        {
-            internal TalkRoomTypeOption(TalkRoomType value, string label)
-            {
-                Value = value;
-                Label = label ?? value.ToString();
-            }
-
-            internal TalkRoomType Value { get; private set; }
-
-            internal string Label { get; private set; }
-
-            public override string ToString()
-            {
-                return Label;
-            }
-        }
-
         private static string NormalizeLanguageChoice(string value)
         {
             if (string.Equals((value ?? string.Empty).Trim(), "custom", StringComparison.OrdinalIgnoreCase))
@@ -222,29 +204,6 @@ namespace NcTalkOutlookAddIn.UI
             combo.Tag = selected.Value;
         }
 
-        private void SelectTalkRoomType(TalkRoomType value)
-        {
-            foreach (var item in _talkDefaultRoomTypeCombo.Items)
-            {
-                var option = item as TalkRoomTypeOption;
-                if (option != null && option.Value == value)
-                {
-                    _talkDefaultRoomTypeCombo.SelectedItem = option;
-                    return;
-                }
-            }
-            if (_talkDefaultRoomTypeCombo.Items.Count > 0)
-            {
-                _talkDefaultRoomTypeCombo.SelectedIndex = 0;
-            }
-        }
-
-        private TalkRoomType GetSelectedTalkRoomType()
-        {
-            var selected = _talkDefaultRoomTypeCombo.SelectedItem as TalkRoomTypeOption;
-            return selected != null ? selected.Value : TalkRoomType.StandardRoom;
-        }
-
         private void UpdateTalkRoomTypeTooltip()
         {
             if (IsPolicyLocked("talk", "talk_room_type"))
@@ -256,8 +215,9 @@ namespace NcTalkOutlookAddIn.UI
                     _talkDefaultRoomTypeLabel);
                 return;
             }
-            var selected = _talkDefaultRoomTypeCombo.SelectedItem as TalkRoomTypeOption;
-            TalkRoomType roomType = selected != null ? selected.Value : TalkRoomType.EventConversation;
+            TalkRoomType roomType = TalkRoomTypeComboHelper.GetSelected(
+                _talkDefaultRoomTypeCombo,
+                TalkRoomType.EventConversation);
             _disabledTooltipHints.Apply(
                 _talkDefaultRoomTypeCombo,
                 roomType == TalkRoomType.EventConversation ? Strings.TooltipRoomTypeEvent : Strings.TooltipRoomTypeStandard,
