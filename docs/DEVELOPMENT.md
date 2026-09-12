@@ -293,6 +293,7 @@ Compose runtime parity additions in `NextcloudTalkAddIn.cs` (`MailComposeSubscri
 - Attachment automation modes:
   - always route attachments into NC sharing flow, or
   - threshold mode with a two-action prompt (`Share with NC Connector` / `Remove last selected attachments`).
+- For a multi-file addition, the prompt pairs the last file's name with that file's size while the remove action still covers the complete added batch.
 - Pre-add attachment interception:
   - `BeforeAttachmentAdd` path resolves candidate file metadata early
   - can best-effort cancel host attachment add and launch NC sharing before Outlook post-add handling.

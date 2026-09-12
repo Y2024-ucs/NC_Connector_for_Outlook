@@ -133,6 +133,10 @@ $startAttachmentShareFlow = Get-MethodSlice `
     $attachmentFlow `
     "private async Task StartComposeAttachmentShareFlowAsync(" `
     "private bool TryBuildBeforeAddAttachmentCandidate("
+$lastAddedBatch = Get-MethodSlice `
+    $attachmentFlow `
+    "private AttachmentBatchInfo BuildLastAddedBatchInfo(" `
+    "private async Task StartComposeAttachmentShareFlowAsync("
 $readAttachmentSettings = Get-MethodSlice `
     $attachmentFlow `
     "private AttachmentAutomationSettings ReadAttachmentAutomationSettings()" `
@@ -226,6 +230,14 @@ Assert-Contains `
     "Superseded attachment-policy requests cannot replace current settings" `
     $attachmentFlow `
     "== _attachmentAutomationSettingsRefreshGeneration"
+Assert-Contains `
+    "The threshold prompt uses the last attachment size" `
+    $lastAddedBatch `
+    "latestBatchEntry.SizeBytes)"
+Assert-NotContains `
+    "The threshold prompt does not label a batch total as the last file size" `
+    $lastAddedBatch `
+    "total +="
 Assert-Precedes `
     "Suppressed host cleanup preserves hidden attachments" `
     $removeSuppressedAttachment `

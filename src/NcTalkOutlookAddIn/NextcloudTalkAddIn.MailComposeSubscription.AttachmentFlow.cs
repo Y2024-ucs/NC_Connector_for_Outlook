@@ -829,16 +829,16 @@ namespace NcTalkOutlookAddIn
             {
                 if (_pendingAddedBatch.Count > 0)
                 {
-                    long total = 0;
-                    for (int i = 0; i < _pendingAddedBatch.Count; i++)
-                    {
-                        total += Math.Max(0, _pendingAddedBatch[i].SizeBytes);
-                    }
+                    AttachmentBatchEntry latestBatchEntry =
+                        _pendingAddedBatch[
+                            _pendingAddedBatch.Count - 1];
                     var info = new AttachmentBatchInfo
                     {
                         Count = _pendingAddedBatch.Count,
-                        Name = _pendingAddedBatch[_pendingAddedBatch.Count - 1].Name ?? string.Empty,
-                        SizeBytes = total
+                        Name = latestBatchEntry.Name ?? string.Empty,
+                        SizeBytes = Math.Max(
+                            0,
+                            latestBatchEntry.SizeBytes)
                     };
                     _pendingAddedBatch.Clear();
                     return info;
