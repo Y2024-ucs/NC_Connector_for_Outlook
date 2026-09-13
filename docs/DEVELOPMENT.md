@@ -223,7 +223,7 @@ Runtime rules:
 2. `UI/TalkLinkForm.cs` collects: title, password, lobby, listable flag, room type, participant sync options, optional delegation target.
 3. `Controllers/TalkRibbonController.cs` prefetches backend policy status and password policy in parallel (`Task.WhenAll`) before opening the wizard.
    - A delegation target is rejected as self when it matches the canonical UID, configured login, or known primary email. Directory selections remain keyed by canonical UID.
-4. `Services/TalkService.cs` creates the room via OCS.
+4. Before the server request, the add-in captures the current subject, location, body and all `X-NCTALK-*` properties. `Services/TalkService.cs` then creates the new room via OCS while an existing room remains available.
 5. `Controllers/TalkAppointmentController.ApplyRoomToAppointment(...)` (invoked by `NextcloudTalkAddIn`) updates the appointment:
    - `Location` (Talk URL)
    - a localized plain-text body block (incl. password and help URL)
@@ -231,14 +231,15 @@ Runtime rules:
    - backend-provided custom Talk templates are sanitized before rendering (no raw HTML fallback)
    - talk appointment HTML is passed through an explicit compatibility transform (`HtmlTemplateSanitizer.PrepareTalkAppointmentHtmlForOutlookRtfBridge(...)`) before insert
    - appointment HTML insert uses the HTML->RTF bridge (`MailItem.HTMLBody` -> `AppointmentItem.RTFBody`), not `AppointmentItem.HTMLBody` and not `HTMLEditor.body.innerHTML`
-6. A runtime subscription is registered for the appointment (`AppointmentSubscription` in `NextcloudTalkAddIn.AppointmentSubscription.cs`):
+6. Only after all appointment writes succeed, the new runtime subscription is registered and an existing room is retired. If a write fails, the captured appointment state is restored and the newly created room is deleted; failed cleanup is placed in the unconditional durable deletion queue. If retiring the old room fails after a successful replacement, the new room stays attached and deletion of the old room is queued for retry.
+7. The runtime subscription (`AppointmentSubscription` in `NextcloudTalkAddIn.AppointmentSubscription.cs`) then handles appointment events:
    - **Write** captures the required Outlook values on the STA thread. `TalkAppointmentSyncCoordinator` coalesces the immutable snapshots and performs lobby, description, participant, and delegation requests in the background.
    - If Outlook exposes the final changed start time only shortly after `Write`, a short deferred post-write capture reads that same opened appointment instead of scanning calendars.
    - **Close** of a newly created, unsaved appointment queues orphan-room cleanup.
    - **BeforeDelete** uses Outlook's appointment-specific deletion event. Organizer, token, delegation, and recurrence checks run on that appointment before `QueueSavedTalkRoomDeletion(...)` creates a deletion job with `PolicyRequired=true`; URL/location parsing is not a deletion source. The background worker resolves the effective `TalkDeleteRoomOnEventDelete` policy before deleting the room. The same event path covers deletion from an open appointment and from the calendar view.
    - `Explorer.SelectionChange` rebinds only selected Talk appointments. The current selection is processed once when each Explorer is hooked, so calendar-view deletion also works immediately after an Outlook restart without opening the appointment.
-7. Startup initializes only the persistent deletion retry worker and hooks existing Explorer surfaces. It does not enumerate Outlook stores or calendar folders, scan calendar items, or retain folder-level `Items` subscriptions.
-8. The DPAPI-protected deletion queue uses a primary file and backup. Nextcloud deletion runs in the background, and queued failures are retried after delay and after an Outlook restart. Cleanup of a newly created room from an unsaved, discarded appointment uses the same queue with `PolicyRequired=false`. When older state is loaded, only records already marked for deletion survive; tracking-only records are discarded.
+8. Startup initializes only the persistent deletion retry worker and hooks existing Explorer surfaces. It does not enumerate Outlook stores or calendar folders, scan calendar items, or retain folder-level `Items` subscriptions.
+9. The DPAPI-protected deletion queue uses a primary file and backup. Nextcloud deletion runs in the background, and queued failures are retried after delay and after an Outlook restart. Cleanup of a newly created room from an unsaved, discarded appointment uses the same queue with `PolicyRequired=false`. When older state is loaded, only records already marked for deletion survive; tracking-only records are discarded.
 
 #### Talk appointment-safe HTML subset (backend custom templates)
 

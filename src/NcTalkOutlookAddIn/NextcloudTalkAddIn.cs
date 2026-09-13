@@ -634,9 +634,9 @@ namespace NcTalkOutlookAddIn
                 _currentSettings.AppPassword));
         }
 
-        internal void ApplyRoomToAppointment(Outlook.AppointmentItem appointment, TalkRoomRequest request, TalkRoomCreationResult result)
+        internal bool ApplyRoomToAppointment(Outlook.AppointmentItem appointment, TalkRoomRequest request, TalkRoomCreationResult result)
         {
-            _talkAppointmentController.ApplyRoomToAppointment(appointment, request, result);
+            return _talkAppointmentController.ApplyRoomToAppointment(appointment, request, result);
         }
 
         private static long? GetIcalStartEpochOrNull(Outlook.AppointmentItem appointment)
@@ -790,12 +790,11 @@ namespace NcTalkOutlookAddIn
                 AppointmentSubscription existingByEntry;
                 if (_subscriptionByEntryId.TryGetValue(entryId, out existingByEntry))
                 {
-                    if (existingByEntry.IsFor(appointment))
+                    if (existingByEntry.IsFor(appointment)
+                        && existingByEntry.MatchesToken(normalizedRoomToken))
                     {
                         return;
                     }
-
-                    existingByEntry.Dispose();
                 }
             }
 
@@ -811,6 +810,15 @@ namespace NcTalkOutlookAddIn
             }
             var key = Guid.NewGuid().ToString("N");
             var subscription = new AppointmentSubscription(this, appointment, key, normalizedRoomToken, normalizedRoomUrl, lobbyEnabled, isEventConversation, entryId);
+
+            AppointmentSubscription staleByEntry;
+            if (!string.IsNullOrEmpty(entryId)
+                && _subscriptionByEntryId.TryGetValue(entryId, out staleByEntry)
+                && staleByEntry != subscription)
+            {
+                staleByEntry.Dispose();
+            }
+
             _activeSubscriptions[key] = subscription;
             _subscriptionByToken[normalizedRoomToken] = subscription;
 
@@ -852,7 +860,7 @@ namespace NcTalkOutlookAddIn
             return TryDeleteRoom(roomToken, isEventConversation, true);
         }
 
-        private bool TryDeleteRoom(string roomToken, bool isEventConversation, bool showWarning)
+        internal bool TryDeleteRoom(string roomToken, bool isEventConversation, bool showWarning)
         {
             if (string.IsNullOrWhiteSpace(roomToken))
             {

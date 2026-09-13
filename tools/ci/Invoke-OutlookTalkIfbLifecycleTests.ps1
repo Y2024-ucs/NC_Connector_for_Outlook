@@ -46,10 +46,53 @@ function Assert-PathAbsent {
     Write-Host "[OK] $Name"
 }
 
+function Get-SourceSlice {
+    param(
+        [string]$Path,
+        [string]$Start,
+        [string]$End
+    )
+
+    $source = Get-Content -LiteralPath $Path -Raw
+    $startIndex = $source.IndexOf($Start, [StringComparison]::Ordinal)
+    $endIndex = $source.IndexOf(
+        $End,
+        $startIndex + $Start.Length,
+        [StringComparison]::Ordinal)
+    if ($startIndex -lt 0 -or $endIndex -le $startIndex) {
+        throw "Could not isolate source slice starting at '$Start'."
+    }
+    return $source.Substring($startIndex, $endIndex - $startIndex)
+}
+
+function Assert-LiteralOrder {
+    param(
+        [string]$Name,
+        [string]$Source,
+        [string[]]$Fragments
+    )
+
+    $position = 0
+    foreach ($fragment in $Fragments) {
+        $position = $Source.IndexOf(
+            $fragment,
+            $position,
+            [StringComparison]::Ordinal)
+        if ($position -lt 0) {
+            throw "Source check failed: $Name"
+        }
+        $position += $fragment.Length
+    }
+    Write-Host "[OK] $Name"
+}
+
 $calendarLifecycle = Join-Path $SourceRoot "NextcloudTalkAddIn.TalkCalendarLifecycle.cs"
 $calendarMonitor = Join-Path $SourceRoot "Services\TalkCalendarLifecycleMonitor.cs"
 $appointmentController = Join-Path $SourceRoot "Controllers\TalkAppointmentController.cs"
+$appointmentUserProperties = Join-Path $SourceRoot "Controllers\TalkAppointmentController.UserProperties.cs"
 $appointmentSyncController = Join-Path $SourceRoot "Controllers\TalkAppointmentController.Sync.cs"
+$talkRibbonController = Join-Path $SourceRoot "Controllers\TalkRibbonController.cs"
+$addin = Join-Path $SourceRoot "NextcloudTalkAddIn.cs"
 $appointmentSubscription = Join-Path $SourceRoot "NextcloudTalkAddIn.AppointmentSubscription.cs"
 $calendarSelection = Join-Path $SourceRoot "NextcloudTalkAddIn.CalendarSelection.cs"
 $hooks = Join-Path $SourceRoot "NextcloudTalkAddIn.Hooks.cs"
@@ -143,6 +186,158 @@ Assert-SourceContract `
     "Unsaved appointment cleanup creates an unconditional durable job" `
     $talkLifecycle `
     'QueueUnsavedTalkRoomDeletion[\s\S]*QueueTalkRoomDeletion\([\s\S]*false\s*\)'
+
+$talkDialogFlow = Get-SourceSlice `
+    $talkRibbonController `
+    "private bool RunTalkDialogOnUiThread(" `
+    "private void CleanupCreatedRoom("
+Assert-LiteralOrder `
+    "Talk replacement captures and attaches before retiring the existing room" `
+    $talkDialogFlow `
+    @(
+        "TryCaptureAppointmentState(appointment",
+        "result = service.CreateRoom(request);",
+        "_owner.ApplyRoomToAppointment(appointment, request, result);",
+        "_owner.TryDeleteRoom(existingToken, existingIsEvent)"
+    )
+Assert-LiteralOrder `
+    "Failed Talk attachment restores the appointment before cleaning the created room" `
+    $talkDialogFlow `
+    @(
+        "if (!roomAttached)",
+        "RestoreAppointmentState(appointment, appointmentState)",
+        "CleanupCreatedRoom(result)"
+    )
+Assert-SourceContract `
+    "Failed old-room cleanup is queued without rolling back the replacement" `
+    $talkRibbonController `
+    'if\s*\(\s*!_owner\.TryDeleteRoom\(existingToken,\s*existingIsEvent\)\s*\)[\s\S]{0,240}_owner\.QueueUnsavedTalkRoomDeletion\(existingToken,\s*existingIsEvent\)'
+
+$createdRoomCleanup = Get-SourceSlice `
+    $talkRibbonController `
+    "private void CleanupCreatedRoom(" `
+    "private static void ShowAppointmentAttachError("
+Assert-LiteralOrder `
+    "Failed created-room cleanup is retried through the durable queue" `
+    $createdRoomCleanup `
+    @(
+        "_owner.TryDeleteRoom(roomToken, result.CreatedAsEventConversation, false)",
+        "_owner.QueueUnsavedTalkRoomDeletion("
+    )
+Assert-SourceContract `
+    "Talk dialog and appointment mutation remain on the captured Outlook STA" `
+    $talkRibbonController `
+    'RunOnOutlookUiThreadAsync\([\s\S]{0,160}RunTalkDialogOnUiThread\('
+
+$applyRoom = Get-SourceSlice `
+    $appointmentController `
+    "internal bool ApplyRoomToAppointment(" `
+    "internal bool PersistCoreIcalProperties("
+Assert-LiteralOrder `
+    "Talk subscription and synchronization start only after local metadata succeeds" `
+    $applyRoom `
+    @(
+        "if (!metadataStored)",
+        "_owner.RegisterSubscription(appointment, result);",
+        "_owner.QueueTalkAppointmentSync(descriptionSnapshot);"
+    )
+Assert-SourceContract `
+    "Talk appointment apply result is returned to the ribbon flow" `
+    $addin `
+    'internal\s+bool\s+ApplyRoomToAppointment[\s\S]{0,220}return\s+_talkAppointmentController\.ApplyRoomToAppointment'
+
+$registration = Get-SourceSlice `
+    $addin `
+    "internal void RegisterSubscription(Outlook.AppointmentItem appointment, string roomToken, string roomUrl" `
+    "private void UnregisterSubscription("
+Assert-SourceContract `
+    "Same-appointment subscription reuse also requires the same room token" `
+    $addin `
+    'existingByEntry\.IsFor\(appointment\)\s*&&\s*existingByEntry\.MatchesToken\(normalizedRoomToken\)[\s\S]{0,120}return;'
+Assert-LiteralOrder `
+    "Changed-token subscription is constructed before the old appointment binding is disposed" `
+    $registration `
+    @(
+        "var subscription = new AppointmentSubscription(",
+        "staleByEntry.Dispose();"
+    )
+Assert-SourceContract `
+    "Partial Talk appointment event registration is rolled back" `
+    $appointmentSubscription `
+    'AttachEventHandlers[\s\S]{0,900}catch[\s\S]{0,180}DetachEventHandlers\([\s\S]{0,180}throw;'
+Assert-SourceContract `
+    "Talk appointment disposal uses the complete event-detach path" `
+    $appointmentSubscription `
+    'public\s+void\s+Dispose\(\)[\s\S]{0,320}DetachEventHandlers\(true,\s*true,\s*true\)'
+
+$appointmentSources = (Get-Content -LiteralPath $appointmentController -Raw) `
+    + (Get-Content -LiteralPath $appointmentUserProperties -Raw)
+if ([regex]::Matches($appointmentSources, 'appointment\.UserProperties').Count -ne 1) {
+    throw "Source check failed: Talk appointment user properties have more than one COM ownership path."
+}
+Write-Host "[OK] Talk appointment user properties have one COM ownership path"
+
+$userPropertyMethods = @(
+    @{ Start = "internal static bool SetUserProperty("; End = "internal static string GetUserPropertyText(" },
+    @{ Start = "internal static string GetUserPropertyText("; End = "internal static bool HasUserProperty(" },
+    @{ Start = "internal static bool HasUserProperty("; End = "internal static bool GetUserPropertyBool(" },
+    @{ Start = "internal static bool GetUserPropertyBool("; End = "internal static bool RemoveUserProperty(" },
+    @{ Start = "internal static bool RemoveUserProperty("; End = "private static TResult UseUserProperty<TResult>(" }
+)
+foreach ($method in $userPropertyMethods) {
+    $methodSource = Get-SourceSlice `
+        $appointmentUserProperties `
+        $method.Start `
+        $method.End
+    if (-not $methodSource.Contains("UseUserProperty(")) {
+        throw "Source check failed: $($method.Start) bypasses the shared COM ownership helper."
+    }
+    if ($methodSource.Contains("appointment.UserProperties")) {
+        throw "Source check failed: $($method.Start) owns Outlook user properties directly."
+    }
+}
+Write-Host "[OK] All Talk appointment user-property operations use the shared COM ownership helper"
+
+$userPropertyOwnership = Get-SourceSlice `
+    $appointmentUserProperties `
+    "private static TResult UseUserProperty<TResult>(" `
+    "private static bool UserPropertyValueEquals("
+Assert-LiteralOrder `
+    "Talk user-property COM objects are released child before collection" `
+    $userPropertyOwnership `
+    @(
+        "finally",
+        "ComInteropScope.TryRelease(property,",
+        "ComInteropScope.TryRelease(properties,"
+    )
+if ($userPropertyOwnership.Contains("TryRelease(appointment")) {
+    throw "Source check failed: Borrowed AppointmentItem is released by the user-property helper."
+}
+Write-Host "[OK] User-property helper does not release the borrowed AppointmentItem"
+
+foreach ($propertyName in @(
+    "IcalToken",
+    "IcalUrl",
+    "IcalLobby",
+    "IcalStart",
+    "IcalEvent",
+    "IcalObjectId",
+    "IcalAddUsers",
+    "IcalAddGuests",
+    "IcalDelegate",
+    "IcalDelegateName",
+    "IcalDelegated",
+    "IcalDelegateReady"
+)) {
+    Assert-SourceContract `
+        "Talk replacement snapshot includes $propertyName" `
+        $appointmentController `
+        ("TalkPropertyNames[\s\S]{0,900}NextcloudTalkAddIn\." + $propertyName)
+}
+Assert-SourceContract `
+    "Talk replacement snapshot preserves subject, location, and cloned RTF body" `
+    $appointmentController `
+    'TryCaptureAppointmentState[\s\S]*Subject\s*=\s*appointment\.Subject[\s\S]*Location\s*=\s*appointment\.Location[\s\S]*RtfBody\s*=\s*\(byte\[\]\)rtfBody\.Clone\(\)'
 Assert-SourceAbsent `
     "Remote promotion does not leave the room before Outlook persistence" `
     $appointmentSyncController `

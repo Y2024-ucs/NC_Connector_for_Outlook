@@ -745,6 +745,7 @@ namespace NcTalkOutlookAddIn.Utilities
         internal static string ErrorMissingCredentials { get { return Get("error_credentials_missing", "Please configure server URL, username, and app password in the settings first."); } }
         internal static string ErrorNoAppointment { get { return Get("outlook_error_no_appointment", "Could not determine the current appointment item."); } }
         internal static string ConfirmReplaceRoom { get { return Get("outlook_confirm_replace_room", "A Talk room already exists for this appointment. Replace it?"); } }
+        internal static string ErrorAttachRoomToAppointment { get { return Get("outlook_error_attach_room_to_appointment", "The Talk room could not be added to the appointment. The previous appointment content was kept."); } }
         internal static string ErrorCreateRoom { get { return Get("ui_create_failed", "Could not create Nextcloud Talk:\n{0}\nPlease check the options."); } }
         internal static string ErrorCreateRoomUnexpected { get { return Get("outlook_error_create_room_unexpected_format", "Unexpected error while creating the Talk room: {0}"); } }
         internal static string InfoRoomCreated { get { return Get("ui_alert_room_created", "Talk room \"{0}\" has been created."); } }

@@ -596,6 +596,9 @@
   "outlook_confirm_replace_room": {
     "message": "この予定には既に Talk ルームがあります。置き換えますか？"
   },
+  "outlook_error_attach_room_to_appointment": {
+    "message": "Talk ルームを予定に追加できませんでした。予定の以前の内容は保持されました。"
+  },
   "outlook_error_create_room_unexpected_format": {
     "message": "Talk ルーム作成中に予期しないエラーが発生しました: $1"
   },

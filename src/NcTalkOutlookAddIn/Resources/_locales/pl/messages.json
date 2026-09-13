@@ -596,6 +596,9 @@
   "outlook_confirm_replace_room": {
     "message": "Dla tego spotkania istnieje już pokój Talk. Zastąpić go?"
   },
+  "outlook_error_attach_room_to_appointment": {
+    "message": "Nie udało się dodać pokoju Talk do spotkania. Poprzednia zawartość spotkania została zachowana."
+  },
   "outlook_error_create_room_unexpected_format": {
     "message": "Nieoczekiwany błąd podczas tworzenia pokoju Talk: $1"
   },

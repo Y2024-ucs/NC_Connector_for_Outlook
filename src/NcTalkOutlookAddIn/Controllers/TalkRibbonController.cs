@@ -196,8 +196,10 @@ namespace NcTalkOutlookAddIn.Controllers
                 NextcloudTalkAddIn.LogTalkMessage("Room request prepared (title='" + request.Title + "', type=" + request.RoomType + ", lobby=" + request.LobbyEnabled + ", search=" + request.SearchVisible + ", passwordSet=" + (!string.IsNullOrEmpty(request.Password)) + ").");
 
                 string existingToken = TalkAppointmentController.GetUserPropertyText(appointment, NextcloudTalkAddIn.IcalToken);
+                bool existingIsEvent = false;
                 if (!string.IsNullOrWhiteSpace(existingToken))
                 {
+                    existingToken = existingToken.Trim();
                     NextcloudTalkAddIn.LogTalkMessage("Existing room found (token=" + existingToken + "), replacement requested.");
                     var overwrite = MessageBox.Show(
                         Strings.ConfirmReplaceRoom,
@@ -211,14 +213,15 @@ namespace NcTalkOutlookAddIn.Controllers
                         return false;
                     }
                     var existingType = TalkAppointmentController.GetRoomType(appointment);
-                    bool existingIsEvent = existingType.HasValue && existingType.Value == TalkRoomType.EventConversation;
-                    NextcloudTalkAddIn.LogTalkMessage("Attempting to delete existing room (event=" + existingIsEvent + ").");
+                    existingIsEvent = existingType.HasValue && existingType.Value == TalkRoomType.EventConversation;
+                }
 
-                    if (!_owner.TryDeleteRoom(existingToken, existingIsEvent))
-                    {
-                        NextcloudTalkAddIn.LogTalkMessage("Deleting existing room failed.");
-                        return false;
-                    }
+                TalkAppointmentController.AppointmentStateSnapshot appointmentState;
+                if (!TalkAppointmentController.TryCaptureAppointmentState(appointment, out appointmentState))
+                {
+                    NextcloudTalkAddIn.LogTalkMessage("Talk room creation cancelled because the appointment state could not be captured.");
+                    ShowAppointmentAttachError();
+                    return false;
                 }
 
                 TalkRoomCreationResult result;
@@ -253,8 +256,39 @@ namespace NcTalkOutlookAddIn.Controllers
                     return false;
                 }
 
-                _owner.ApplyRoomToAppointment(appointment, request, result);
-                NextcloudTalkAddIn.LogTalkMessage("Room data stored in appointment (EntryID=" + (appointment.EntryID ?? "n/a") + ").");
+                bool roomAttached = false;
+                try
+                {
+                    roomAttached = _owner.ApplyRoomToAppointment(appointment, request, result);
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticsLogger.LogException(LogCategories.Talk, "Failed to attach the created Talk room to the appointment.", ex);
+                }
+
+                if (!roomAttached)
+                {
+                    bool restored = TalkAppointmentController.RestoreAppointmentState(appointment, appointmentState);
+                    NextcloudTalkAddIn.LogTalkMessage("Created Talk room was not attached; prior appointment state restored=" + restored + ".");
+                    CleanupCreatedRoom(result);
+                    ShowAppointmentAttachError();
+                    return false;
+                }
+
+                NextcloudTalkAddIn.LogTalkMessage("Room data stored in appointment.");
+
+                if (!string.IsNullOrWhiteSpace(existingToken))
+                {
+                    NextcloudTalkAddIn.LogTalkMessage("Attempting to retire the replaced room (event=" + existingIsEvent + ").");
+                    if (!_owner.TryDeleteRoom(existingToken, existingIsEvent))
+                    {
+                        bool queued = _owner.QueueUnsavedTalkRoomDeletion(existingToken, existingIsEvent);
+                        NextcloudTalkAddIn.LogTalkMessage(
+                            queued
+                                ? "Replaced room deletion queued for retry (token=" + existingToken + ")."
+                                : "Replaced room deletion could not be queued (token=" + existingToken + ").");
+                    }
+                }
 
                 MessageBox.Show(
                     string.Format(Strings.InfoRoomCreated, request.Title),
@@ -263,6 +297,37 @@ namespace NcTalkOutlookAddIn.Controllers
                     MessageBoxIcon.Information);
                 return true;
             }
+        }
+
+        private void CleanupCreatedRoom(TalkRoomCreationResult result)
+        {
+            if (result == null || string.IsNullOrWhiteSpace(result.RoomToken))
+            {
+                return;
+            }
+
+            string roomToken = result.RoomToken.Trim();
+            if (_owner.TryDeleteRoom(roomToken, result.CreatedAsEventConversation, false))
+            {
+                return;
+            }
+
+            bool queued = _owner.QueueUnsavedTalkRoomDeletion(
+                roomToken,
+                result.CreatedAsEventConversation);
+            NextcloudTalkAddIn.LogTalkMessage(
+                queued
+                    ? "Created room cleanup queued for retry (token=" + roomToken + ")."
+                    : "Created room cleanup could not be queued (token=" + roomToken + ").");
+        }
+
+        private static void ShowAppointmentAttachError()
+        {
+            MessageBox.Show(
+                Strings.ErrorAttachRoomToAppointment,
+                Strings.DialogTitle,
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
         }
 
         private bool EnsureAuthenticationValid(IRibbonControl control)

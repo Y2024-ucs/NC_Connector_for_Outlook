@@ -596,6 +596,9 @@
   "outlook_confirm_replace_room": {
     "message": "Une salle Talk existe déjà pour ce rendez-vous. La remplacer ?"
   },
+  "outlook_error_attach_room_to_appointment": {
+    "message": "La salle Talk n’a pas pu être ajoutée au rendez-vous. Le contenu précédent du rendez-vous a été conservé."
+  },
   "outlook_error_create_room_unexpected_format": {
     "message": "Erreur inattendue lors de la création de la salle Talk : $1"
   },

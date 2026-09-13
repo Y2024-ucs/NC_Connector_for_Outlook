@@ -596,6 +596,9 @@
   "outlook_confirm_replace_room": {
     "message": "Já existe uma sala do Talk para este compromisso. Substituí-la?"
   },
+  "outlook_error_attach_room_to_appointment": {
+    "message": "Não foi possível adicionar a sala do Talk ao compromisso. O conteúdo anterior do compromisso foi mantido."
+  },
   "outlook_error_create_room_unexpected_format": {
     "message": "Erro inesperado ao criar a sala do Talk: $1"
   },

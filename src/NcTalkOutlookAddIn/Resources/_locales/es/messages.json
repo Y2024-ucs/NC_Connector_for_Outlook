@@ -596,6 +596,9 @@
   "outlook_confirm_replace_room": {
     "message": "Ya existe una sala de Talk para esta cita. ¿Reemplazarla?"
   },
+  "outlook_error_attach_room_to_appointment": {
+    "message": "No se pudo añadir la sala de Talk a la cita. Se ha conservado el contenido anterior de la cita."
+  },
   "outlook_error_create_room_unexpected_format": {
     "message": "Error inesperado al crear la sala de Talk: $1"
   },

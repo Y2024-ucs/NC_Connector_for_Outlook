@@ -596,6 +596,9 @@
   "outlook_confirm_replace_room": {
     "message": "Pro tuto schůzku již existuje místnost Talk. Nahradit ji?"
   },
+  "outlook_error_attach_room_to_appointment": {
+    "message": "Místnost Talk se nepodařilo přidat ke schůzce. Původní obsah schůzky zůstal zachován."
+  },
   "outlook_error_create_room_unexpected_format": {
     "message": "Neočekávaná chyba při vytváření místnosti Talk: $1"
   },

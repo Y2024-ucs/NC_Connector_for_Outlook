@@ -596,6 +596,9 @@
   "outlook_confirm_replace_room": {
     "message": "此約會已存在 Talk 房間。要取代嗎？"
   },
+  "outlook_error_attach_room_to_appointment": {
+    "message": "無法將 Talk 聊天室新增至約會。已保留約會原有內容。"
+  },
   "outlook_error_create_room_unexpected_format": {
     "message": "建立 Talk 房間時發生未預期的錯誤：$1"
   },

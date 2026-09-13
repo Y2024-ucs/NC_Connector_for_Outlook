@@ -596,6 +596,9 @@
   "outlook_confirm_replace_room": {
     "message": "Esiste già una stanza Talk per questo appuntamento. Sostituirla?"
   },
+  "outlook_error_attach_room_to_appointment": {
+    "message": "Non è stato possibile aggiungere la stanza Talk all'appuntamento. Il contenuto precedente dell'appuntamento è stato mantenuto."
+  },
   "outlook_error_create_room_unexpected_format": {
     "message": "Errore imprevisto durante la creazione della stanza Talk: $1"
   },

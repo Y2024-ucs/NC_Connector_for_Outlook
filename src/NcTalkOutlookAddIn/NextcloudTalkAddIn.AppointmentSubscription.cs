@@ -55,14 +55,83 @@ namespace NcTalkOutlookAddIn
                 _lastLobbyTimer = GetIcalStartEpochOrNull(appointment);
                 _entryId = entryId;
                 _events = appointment as Outlook.ItemEvents_10_Event;
-                if (_events != null)
-                {
-                    _events.BeforeDelete += OnBeforeDelete;
-                    _events.Write += OnWrite;
-                    _events.Close += OnClose;
-                }
+                AttachEventHandlers();
 
                 LogTalk("Subscription registered (token=" + _roomToken + ", lobby=" + _lobbyEnabled + ", event=" + _isEventConversation + ", EntryId=" + (_entryId ?? "n/a") + ").");
+            }
+
+            private void AttachEventHandlers()
+            {
+                if (_events == null)
+                {
+                    return;
+                }
+
+                bool beforeDeleteAttached = false;
+                bool writeAttached = false;
+                bool closeAttached = false;
+                try
+                {
+                    _events.BeforeDelete += OnBeforeDelete;
+                    beforeDeleteAttached = true;
+                    _events.Write += OnWrite;
+                    writeAttached = true;
+                    _events.Close += OnClose;
+                    closeAttached = true;
+                }
+                catch
+                {
+                    DetachEventHandlers(
+                        beforeDeleteAttached,
+                        writeAttached,
+                        closeAttached);
+                    throw;
+                }
+            }
+
+            private void DetachEventHandlers(
+                bool beforeDeleteAttached,
+                bool writeAttached,
+                bool closeAttached)
+            {
+                if (_events == null)
+                {
+                    return;
+                }
+
+                if (closeAttached)
+                {
+                    try
+                    {
+                        _events.Close -= OnClose;
+                    }
+                    catch (Exception ex)
+                    {
+                        DiagnosticsLogger.LogException(LogCategories.Talk, "Failed to detach the Talk appointment Close event.", ex);
+                    }
+                }
+                if (writeAttached)
+                {
+                    try
+                    {
+                        _events.Write -= OnWrite;
+                    }
+                    catch (Exception ex)
+                    {
+                        DiagnosticsLogger.LogException(LogCategories.Talk, "Failed to detach the Talk appointment Write event.", ex);
+                    }
+                }
+                if (beforeDeleteAttached)
+                {
+                    try
+                    {
+                        _events.BeforeDelete -= OnBeforeDelete;
+                    }
+                    catch (Exception ex)
+                    {
+                        DiagnosticsLogger.LogException(LogCategories.Talk, "Failed to detach the Talk appointment BeforeDelete event.", ex);
+                    }
+                }
             }
 
             private void OnWrite(ref bool cancel)
@@ -608,18 +677,34 @@ namespace NcTalkOutlookAddIn
                     LogTalk("Subscription.Dispose called again (token=" + _roomToken + ").");
                     return;
                 }
-                if (_events != null)
+                _disposed = true;
+                DetachEventHandlers(true, true, true);
+
+                try
                 {
-                    _events.BeforeDelete -= OnBeforeDelete;
-                    _events.Write -= OnWrite;
-                    _events.Close -= OnClose;
+                    StopUnsavedCloseCleanupTimer();
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticsLogger.LogException(LogCategories.Talk, "Failed to stop the unsaved Talk appointment cleanup timer.", ex);
+                }
+                try
+                {
+                    StopDeferredWriteLobbyTimer();
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticsLogger.LogException(LogCategories.Talk, "Failed to stop the deferred Talk appointment write timer.", ex);
                 }
 
-                StopUnsavedCloseCleanupTimer();
-                StopDeferredWriteLobbyTimer();
-
-                _owner.UnregisterSubscription(_key, _roomToken, _entryId);
-                _disposed = true;
+                try
+                {
+                    _owner.UnregisterSubscription(_key, _roomToken, _entryId);
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticsLogger.LogException(LogCategories.Talk, "Failed to unregister the Talk appointment subscription.", ex);
+                }
                 LogTalk("Subscription.Dispose completed (token=" + _roomToken + ").");
             }
 

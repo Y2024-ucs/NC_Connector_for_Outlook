@@ -617,6 +617,9 @@
   "outlook_confirm_replace_room": {
     "message": "A Talk room already exists for this appointment. Replace it?"
   },
+  "outlook_error_attach_room_to_appointment": {
+    "message": "The Talk room could not be added to the appointment. The previous appointment content was kept."
+  },
   "outlook_error_create_room_unexpected_format": {
     "message": "Unexpected error while creating the Talk room: $1"
   },

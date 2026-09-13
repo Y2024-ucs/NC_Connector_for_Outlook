@@ -596,6 +596,9 @@
   "outlook_confirm_replace_room": {
     "message": "Er bestaat al een Talk-ruimte voor deze afspraak. Vervangen?"
   },
+  "outlook_error_attach_room_to_appointment": {
+    "message": "De Talk-ruimte kon niet aan de afspraak worden toegevoegd. De eerdere inhoud van de afspraak is behouden."
+  },
   "outlook_error_create_room_unexpected_format": {
     "message": "Onverwachte fout bij het maken van de Talk-ruimte: $1"
   },

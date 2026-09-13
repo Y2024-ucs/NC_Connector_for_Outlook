@@ -596,6 +596,9 @@
   "outlook_confirm_replace_room": {
     "message": "Ehhez a találkozóhoz már létezik Talk szoba. Lecseréli?"
   },
+  "outlook_error_attach_room_to_appointment": {
+    "message": "A Talk-szobát nem sikerült hozzáadni a találkozóhoz. A találkozó korábbi tartalma megmaradt."
+  },
   "outlook_error_create_room_unexpected_format": {
     "message": "Váratlan hiba a Talk szoba létrehozásakor: $1"
   },
