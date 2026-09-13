@@ -20,7 +20,7 @@ namespace NcTalkOutlookAddIn.Controllers
             "__NCC_SECRET_DELIVERY_VALUE__";
 
         private readonly NextcloudTalkAddIn _owner;
-        private readonly MailInteropController _passwordMailInteropController;
+        private readonly ManagedEmailSignatureController _passwordManagedEmailSignatureController;
 
         private sealed class SeparatePasswordSignatureSnapshot
         {
@@ -38,8 +38,8 @@ namespace NcTalkOutlookAddIn.Controllers
         internal SeparatePasswordDeliveryController(NextcloudTalkAddIn owner)
         {
             _owner = owner;
-            _passwordMailInteropController =
-                new MailInteropController(owner);
+            _passwordManagedEmailSignatureController =
+                new ManagedEmailSignatureController(owner);
         }
 
         internal void CaptureSeparatePasswordSignatureSnapshot(
@@ -1173,8 +1173,8 @@ namespace NcTalkOutlookAddIn.Controllers
 
             try
             {
-                MailInteropController.EmailSignatureReconcileResult result =
-                    _passwordMailInteropController
+                ManagedEmailSignatureController.EmailSignatureReconcileResult result =
+                    _passwordManagedEmailSignatureController
                         .ApplyManagedEmailSignature(
                             mail,
                             false,

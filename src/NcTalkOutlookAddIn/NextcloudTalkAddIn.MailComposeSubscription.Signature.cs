@@ -433,8 +433,8 @@ namespace NcTalkOutlookAddIn
                     return EmailSignatureFailure("signature_content_empty");
                 }
 
-                MailInteropController.EmailSignatureReconcileResult reconcile =
-                    _owner._mailInteropController.ApplyManagedEmailSignature(
+                ManagedEmailSignatureController.EmailSignatureReconcileResult reconcile =
+                    _owner._managedEmailSignatureController.ApplyManagedEmailSignature(
                         _mail,
                         _composeSurfaceState
                             == ComposeSurfaceState.InlineResponse,
@@ -449,13 +449,13 @@ namespace NcTalkOutlookAddIn
 
             private EmailSignatureApplicationResult ClearManagedEmailSignature(string reason)
             {
-                if (_owner == null || _owner._mailInteropController == null || _mail == null)
+                if (_owner == null || _owner._managedEmailSignatureController == null || _mail == null)
                 {
                     return EmailSignatureFailure("interop_unavailable");
                 }
 
-                MailInteropController.EmailSignatureReconcileResult reconcile =
-                    _owner._mailInteropController.ClearManagedEmailSignature(
+                ManagedEmailSignatureController.EmailSignatureReconcileResult reconcile =
+                    _owner._managedEmailSignatureController.ClearManagedEmailSignature(
                         _mail,
                         _composeSurfaceState
                             == ComposeSurfaceState.InlineResponse,
@@ -467,13 +467,13 @@ namespace NcTalkOutlookAddIn
 
             private EmailSignatureApplicationResult ClearInitialEmailSignatureSlot(string reason)
             {
-                if (_owner == null || _owner._mailInteropController == null || _mail == null)
+                if (_owner == null || _owner._managedEmailSignatureController == null || _mail == null)
                 {
                     return EmailSignatureFailure("interop_unavailable");
                 }
 
-                MailInteropController.EmailSignatureReconcileResult reconcile =
-                    _owner._mailInteropController.ClearInitialEmailSignatureSlot(
+                ManagedEmailSignatureController.EmailSignatureReconcileResult reconcile =
+                    _owner._managedEmailSignatureController.ClearInitialEmailSignatureSlot(
                         _mail,
                         _composeSurfaceState
                             == ComposeSurfaceState.InlineResponse,
@@ -484,7 +484,7 @@ namespace NcTalkOutlookAddIn
             }
 
             private EmailSignatureApplicationResult ApplyEmailSignatureReconcileResult(
-                MailInteropController.EmailSignatureReconcileResult reconcile)
+                ManagedEmailSignatureController.EmailSignatureReconcileResult reconcile)
             {
                 if (reconcile == null || !reconcile.Success)
                 {

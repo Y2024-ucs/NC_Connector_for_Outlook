@@ -202,7 +202,7 @@ namespace NcTalkOutlookAddIn.Controllers
                 if (wizard.ShowDialog() == DialogResult.OK && wizard.Result != null)
                 {
                     string languageOverride = settings != null ? settings.ShareBlockLang : "default";
-                    bool plainTextCompose = MailInteropController.IsPlainTextMail(mail);
+                    bool plainTextCompose = MailBodyInsertionController.IsPlainTextMail(mail);
                     NextcloudTalkAddIn.LogFileLinkMessage("Share created (folder=\"" + wizard.Result.FolderName + "\").");
                     ComposeLifecycleOrigin origin =
                         ComposeLifecycleOrigin.Create(configuration);

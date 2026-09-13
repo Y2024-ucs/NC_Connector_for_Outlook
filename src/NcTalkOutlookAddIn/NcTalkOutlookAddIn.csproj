@@ -152,6 +152,10 @@
     <Compile Include="Utilities\RecipientAddressList.cs" />
     <Compile Include="Controllers\ComposeShareCleanupTracker.cs" />
     <Compile Include="Controllers\MailInteropController.cs" />
+    <Compile Include="Controllers\MailBodyInsertionController.cs" />
+    <Compile Include="Controllers\ManagedEmailSignatureController.cs" />
+    <Compile Include="Controllers\AppointmentHtmlBodyWriter.cs" />
+    <Compile Include="Utilities\WordHtmlInsertionFile.cs" />
     <Compile Include="Controllers\OutlookWordEditorContext.cs" />
     <Compile Include="Services\FreeBusyManager.cs" />
     <Compile Include="Services\FreeBusyServer.cs" />

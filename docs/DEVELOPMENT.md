@@ -116,7 +116,11 @@ Key code locations:
 - `src/NcTalkOutlookAddIn/Controllers/TalkDescriptionTemplateController.cs` — Talk template/body block rendering
 - `src/NcTalkOutlookAddIn/Controllers/OutlookRecipientResolverController.cs` — SMTP and attendee recipient resolution
 - `src/NcTalkOutlookAddIn/Controllers/MailComposeSubscriptionRegistryController.cs` — compose-subscription registry lifecycle
-- `src/NcTalkOutlookAddIn/Controllers/MailInteropController.cs` — shared mail/Inspector interop and the unified WordEditor signature-slot reconciler
+- `src/NcTalkOutlookAddIn/Controllers/MailInteropController.cs` — active mail, inline compose, Inspector identity, and dialog ownership
+- `src/NcTalkOutlookAddIn/Controllers/MailBodyInsertionController.cs` — share-block insertion through the existing WordEditor and HTMLBody paths
+- `src/NcTalkOutlookAddIn/Controllers/ManagedEmailSignatureController.cs` — the shared WordEditor signature-slot reconciler
+- `src/NcTalkOutlookAddIn/Controllers/AppointmentHtmlBodyWriter.cs` — the appointment HTML-to-RTF bridge
+- `src/NcTalkOutlookAddIn/Utilities/WordHtmlInsertionFile.cs` — shared HTML-document wrapping and temporary-file cleanup for Word insertion
 - `src/NcTalkOutlookAddIn/Models/SeparatePasswordDispatchEntry.cs` — shared model for separate password follow-up dispatch queue entries
 - `src/NcTalkOutlookAddIn/Services/` — Nextcloud HTTP integrations (Talk, sharing, IFB, login flow)
   - `Services/FileLinkQueueSnapshotBuilder.cs` builds the source-grouped queue tree used by the sharing wizard.
@@ -285,7 +289,7 @@ For stable rendering in Outlook appointment bodies (Word/RTF pipeline), backend 
    - current backends expose `policy.share.share_html_block_effective_language` for custom templates. Outlook uses it for generated link wording, field labels, permission names, and password hints; older backends without the field keep the previous UI-language fallback.
    - Custom-template placeholder values remain context-neutral because the same variable may occur in visible text or an attribute. No-break markup belongs in known visible template positions, not in generic substitution values.
    - plain-text compose keeps `MailItem.BodyFormat=olFormatPlain`; the share block is rendered as a framed text block with `#` separators and inserted through Outlook WordEditor. Inline replies/forwards keep two empty paragraphs above the block for the sender's own text. `MailItem.Body` is not rewritten.
-6. `NextcloudTalkAddIn.TryInsertHtmlIntoMail(...)` / `TryInsertPlainTextIntoMail(...)` return the insertion result from `Controllers/MailInteropController.cs`. HTML compose uses WordEditor first so existing managed bookmarks stay intact; a direct `HTMLBody` write remains the compatibility fallback when the Inspector editor cannot be opened. If every insertion path fails, `FileLinkLaunchController` queues the newly created server artifacts for cleanup and reports the wizard as failed.
+6. `NextcloudTalkAddIn.TryInsertHtmlIntoMail(...)` / `TryInsertPlainTextIntoMail(...)` return the insertion result from `Controllers/MailBodyInsertionController.cs`. HTML compose uses WordEditor first so existing managed bookmarks stay intact; a direct `HTMLBody` write remains the compatibility fallback when the Inspector editor cannot be opened. If every insertion path fails, `FileLinkLaunchController` queues the newly created server artifacts for cleanup and reports the wizard as failed.
 
 Compose runtime in `NextcloudTalkAddIn.cs` (`MailComposeSubscription`) delegates remote cleanup to `Services/ComposeShareCleanupService` and password delivery to `Controllers/SeparatePasswordDeliveryController`. Cleanup runs in the existing background task; password delivery stays on the Outlook STA in the primary mail's Send event:
 

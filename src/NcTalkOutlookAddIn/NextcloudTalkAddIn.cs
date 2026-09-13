@@ -55,6 +55,8 @@ namespace NcTalkOutlookAddIn
         private readonly FileLinkLaunchController _fileLinkLaunchController;
         private readonly TalkRibbonController _talkRibbonController;
         private readonly MailInteropController _mailInteropController;
+        private readonly MailBodyInsertionController _mailBodyInsertionController;
+        private readonly ManagedEmailSignatureController _managedEmailSignatureController;
         private readonly UpdateCheckService _updateCheckService = new UpdateCheckService();
         private readonly DeferredAppointmentEnsureState _deferredAppointmentEnsureState = new DeferredAppointmentEnsureState();
         private OutlookUiSynchronizationContext _uiSynchronizationContext;
@@ -81,6 +83,8 @@ namespace NcTalkOutlookAddIn
             _fileLinkLaunchController = new FileLinkLaunchController(this);
             _talkRibbonController = new TalkRibbonController(this);
             _mailInteropController = new MailInteropController(this);
+            _mailBodyInsertionController = new MailBodyInsertionController(this, _mailInteropController);
+            _managedEmailSignatureController = new ManagedEmailSignatureController(this);
         }
 
         internal AddinSettings CurrentSettings
@@ -565,7 +569,7 @@ namespace NcTalkOutlookAddIn
 
         internal static bool TryWriteAppointmentHtmlBody(Outlook.AppointmentItem appointment, string html)
         {
-            return MailInteropController.TryWriteAppointmentHtmlBody(appointment, html);
+            return AppointmentHtmlBodyWriter.TryWriteAppointmentHtmlBody(appointment, html);
         }
 
         internal Outlook.AppointmentItem GetActiveAppointment()

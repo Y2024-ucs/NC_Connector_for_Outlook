@@ -125,14 +125,14 @@ namespace NcTalkOutlookAddIn
             Outlook.MailItem mail,
             string html)
         {
-            return _mailInteropController.InsertHtmlIntoMail(mail, html);
+            return _mailBodyInsertionController.InsertHtmlIntoMail(mail, html);
         }
 
         internal bool TryInsertPlainTextIntoMail(
             Outlook.MailItem mail,
             string plainText)
         {
-            return _mailInteropController.InsertPlainTextIntoMail(
+            return _mailBodyInsertionController.InsertPlainTextIntoMail(
                 mail,
                 plainText);
         }

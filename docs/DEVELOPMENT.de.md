@@ -149,7 +149,10 @@ Controller:
 - `src/NcTalkOutlookAddIn/Controllers/TalkDescriptionTemplateController.cs` (Talk-Template-/Block-Rendering)
 - `src/NcTalkOutlookAddIn/Controllers/OutlookRecipientResolverController.cs` (SMTP- und Attendee-Aufloesung)
 - `src/NcTalkOutlookAddIn/Controllers/MailComposeSubscriptionRegistryController.cs` (Compose-Subscription-Registry)
-- `src/NcTalkOutlookAddIn/Controllers/MailInteropController.cs` (gemeinsame Mail-/Inspector-Interop-Helper und einheitlicher WordEditor-Signatur-Slot-Reconciler)
+- `src/NcTalkOutlookAddIn/Controllers/MailInteropController.cs` (aktive Mail, Inline-Compose, Inspector-Identität und Dialogbesitzer)
+- `src/NcTalkOutlookAddIn/Controllers/MailBodyInsertionController.cs` (Freigabeblöcke über die bestehenden WordEditor- und HTMLBody-Pfade)
+- `src/NcTalkOutlookAddIn/Controllers/ManagedEmailSignatureController.cs` (gemeinsamer WordEditor-Signatur-Slot-Reconciler)
+- `src/NcTalkOutlookAddIn/Controllers/AppointmentHtmlBodyWriter.cs` (HTML-zu-RTF-Brücke für Termine)
 - `src/NcTalkOutlookAddIn/Models/SeparatePasswordDispatchEntry.cs` (gemeinsames Queue-Modell fuer separaten Passwort-Follow-up)
 - `src/NcTalkOutlookAddIn/Settings/ManagedSetupPolicy.cs` (verwaltete Nextcloud-URL aus Registry/GPO)
 - `src/NcTalkOutlookAddIn/Settings/SettingsFileTransaction.cs` (serialisiert Profil-Schreibvorgänge über einen benannten Mutex, ersetzt nur validierte Dateien und behält die letzte gültige Sicherung)
@@ -199,6 +202,7 @@ UI:
 Utilities:
 
 - `src/NcTalkOutlookAddIn/Utilities/RecipientAddressList.cs` (gemeinsame Normalisierung, Deduplizierung und Semikolonlisten für Empfänger)
+- `src/NcTalkOutlookAddIn/Utilities/WordHtmlInsertionFile.cs` (gemeinsame HTML-Dokumenthülle und Bereinigung temporärer Dateien für Word-Einfügungen)
 - `src/NcTalkOutlookAddIn/Utilities/BrowserLauncher.cs` (zentraler Shell-Start für Dateien und Ordner; `OpenUrl` lehnt Nicht-HTTPS-Ziele ab)
 - `src/NcTalkOutlookAddIn/Utilities/SizeFormatting.cs` (zentrale MB-Formatierung fuer UI-Texte)
 - `src/NcTalkOutlookAddIn/Utilities/ComInteropScope.cs` (zentrale COM-Release-/FinalRelease-Helfer)
@@ -281,7 +285,7 @@ Backend-Talk-Templates verwenden für die Outlook-Word-/RTF-Pipeline bevorzugt T
 - `MailComposeSubscription` debounct Anhangsänderungen und verarbeitet Always-via-NC sowie den Schwellwertmodus. `BeforeAttachmentAdd` versucht die Dateidaten früh zu erfassen; bei einer erzwingenden Policy wird ein nicht materialisierbarer oder nicht prüfbarer Host-Anhang abgebrochen. Bereits hinzugefügte Outlook-Anhänge werden erst entfernt, nachdem die vollständige Startauswahl in der Queue liegt. Ein späterer Abbruch des Wizards stellt übernommene Anhänge nicht wieder her. Harte Outlook-/Exchange-Grenzen können weiterhin vor einem Add-in-Ereignis greifen.
 - Bei einer Mehrfachauswahl zeigt der Schwellwertdialog den Namen und die Größe derselben zuletzt hinzugefügten Datei. Die Entfernen-Aktion umfasst weiterhin den vollständigen zuletzt hinzugefügten Batch.
 - Outlook-Body-Ressourcen mit `PR_ATTACHMENT_HIDDEN=true`, beispielsweise Signaturbilder, werden weder in Anhangs-Batches und Schwellwertsummen noch in FileLink-Auswahl, Host-Entfernung oder Send-Gate einbezogen.
-- `NextcloudTalkAddIn.TryInsertHtmlIntoMail(...)` und `TryInsertPlainTextIntoMail(...)` geben den Einfügestatus von `MailInteropController` zurück. Scheitern alle Einfügepfade, stellt `FileLinkLaunchController` die neu erzeugten Serverartefakte zur Bereinigung ein und meldet den Wizard als fehlgeschlagen.
+- `NextcloudTalkAddIn.TryInsertHtmlIntoMail(...)` und `TryInsertPlainTextIntoMail(...)` geben den Einfügestatus von `MailBodyInsertionController` zurück. Scheitern alle Einfügepfade, stellt `FileLinkLaunchController` die neu erzeugten Serverartefakte zur Bereinigung ein und meldet den Wizard als fehlgeschlagen.
 - `ComposeLifecycleOrigin` hält den exakten Server-/Kontokontext für das Löschen der erstellten Freigabe oder eine spätere Secrets-Anfrage. Die Bereinigung fällt nie auf das aktuell ausgewählte Konto zurück.
 - Kann eine neu erstellte Freigabe nicht in die Mail eingefügt werden, versucht der Controller, ihren Serverordner mit diesem erfassten Kontext zu löschen.
 - Nach erfolgreicher Einfügung verfolgt `MailComposeSubscription` den `ComposeShareCleanupRecord`, bis Outlook `AfterWrite` auslöst. Ein abgeschlossener Schreibvorgang umfasst Speichern, automatisches Speichern und den Schreibvorgang für Versand/Postausgang; diese Pfade geben den Bereinigungseintrag frei, ohne die Freigabe zu löschen.
