@@ -42,7 +42,7 @@ The add-in connects Outlook classic to a Nextcloud server and provides:
 ### Build MSI (recommended)
 
 ```powershell
-cd "C:\\path\\to\r\nc4ol"
+cd "C:\path\to\nc4ol"
 
 # Optional: reference assemblies (only if needed)
 nuget install Microsoft.NETFramework.ReferenceAssemblies.net472 -OutputDirectory packages -ExcludeVersion
@@ -59,12 +59,12 @@ If WiX ICE validation is not available on the build host (for example `WIX0217` 
 
 Output:
 
-- `dist\r\nCConnectorForOutlook-<version>.msi`
+- `dist\NCConnectorForOutlook-<version>.msi`
 
 ### Install & run locally
 
 1. Install the MSI (administrator rights required):
-   - `msiexec /i dist\r\nCConnectorForOutlook-<version>.msi`
+   - `msiexec /i dist\NCConnectorForOutlook-<version>.msi`
 2. Start Outlook
 3. Ribbon:
    - Calendar/appointment: **NC Connector → Insert Talk link**
@@ -421,7 +421,7 @@ Debug logging is optional and is intended to make support cases reproducible.
 
 - Enable: Settings → **Debug** → “Write debug log file”
 - Optional safety control (default on): “Anonymize logs”
-- Daily log file format: `%LOCALAPPDATA%\r\nC4OL\\addin-runtime.log_YYYYMMDD`
+- Daily log file format: `%LOCALAPPDATA%\NC4OL\addin-runtime.log_YYYYMMDD`
 - Runtime exceptions are always written via `DiagnosticsLogger.LogException(...)`, even when debug logging is disabled.
 - Retention: keep latest 7 daily log files and delete files older than 30 days (best effort cleanup).
 - Authorization values, URL credentials, structured token/password fields, Talk/share path tokens, and Secret fragments are redacted before every log write, even when optional anonymization is off.
@@ -460,8 +460,8 @@ Outlook can be installed as a 32-bit application on 64-bit Windows. In that case
 
 The MSI registers add-in keys for **both** registry views:
 
-- 64-bit: `HKLM\\Software\\Microsoft\\Office\\Outlook\\Addins\r\ncTalkOutlook.AddIn`
-- 32-bit: `HKLM\\Software\\Wow6432Node\\Microsoft\\Office\\Outlook\\Addins\r\ncTalkOutlook.AddIn`
+- 64-bit: `HKLM\Software\Microsoft\Office\Outlook\Addins\NcTalkOutlook.AddIn`
+- 32-bit: `HKLM\Software\Wow6432Node\Microsoft\Office\Outlook\Addins\NcTalkOutlook.AddIn`
 
 Installer definition:
 
