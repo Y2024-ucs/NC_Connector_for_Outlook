@@ -140,6 +140,7 @@
     <Compile Include="Models\TalkRoomLifecycleRecord.cs" />
     <Compile Include="Controllers\TalkDescriptionTemplateController.cs" />
     <Compile Include="Controllers\TalkAppointmentController.cs" />
+    <Compile Include="Controllers\TalkAppointmentController.UserProperties.cs" />
     <Compile Include="Controllers\TalkAppointmentController.Sync.cs" />
     <Compile Include="Controllers\SettingsWorkflowController.cs" />
     <Compile Include="Controllers\FileLinkLaunchController.cs" />
