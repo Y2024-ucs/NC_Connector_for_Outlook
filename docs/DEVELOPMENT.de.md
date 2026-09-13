@@ -201,6 +201,8 @@ UI:
 - `src/NcTalkOutlookAddIn/UI/TalkLinkForm.cs`
 - `src/NcTalkOutlookAddIn/UI/FileLinkWizardForm.cs`
 - `src/NcTalkOutlookAddIn/UI/NextcloudFilePickerForm.cs` (Datei- und Ordnerauswahl für **Meine Nextcloud**)
+- `src/NcTalkOutlookAddIn/UI/NextcloudPickerNavigation.cs` hält den Verlauf. Die Form übernimmt eine neue Verlaufsposition erst nach erfolgreichem Laden des Ordners.
+- `src/NcTalkOutlookAddIn/UI/NextcloudPickerPreview.cs` lädt und dekodiert eine Dateivorschau. Auswahl, Abbruchgeneration und Besitz des angezeigten Bildes bleiben bei der Form; Anfragen laufen weiterhin über `FileLinkService`.
 - `src/NcTalkOutlookAddIn/UI/ComposeAttachmentPromptForm.cs` (2-Aktions-Prompt fuer Schwellwertmodus)
 - `src/NcTalkOutlookAddIn/UI/BrandedHeader.cs` (Header-Banner inkl. `AttachToParent(...)` fuer konsistente Header-Initialisierung in Forms)
 - `src/NcTalkOutlookAddIn/UI/ScaledForm.cs` (zentrale DPI-Skalierung via `ScaleLogical(...)`, damit Form-Wrapper nicht dupliziert werden)

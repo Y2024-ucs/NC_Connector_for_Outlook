@@ -82,6 +82,7 @@ internal static class OutlookUtilityTests
         TestComposeShareCleanupTracker();
         TestFileLinkUploadPolicy();
         TestFileLinkPath();
+        TestPickerNavigation();
         TestFileLinkQueueSnapshotBuilder();
         TestFileLinkSelectionScanner();
         TestFileLinkUploadPlanner();
@@ -101,6 +102,34 @@ internal static class OutlookUtilityTests
         }
         Console.WriteLine("All Outlook utility unit tests passed.");
         return 0;
+    }
+
+    private static void TestPickerNavigation()
+    {
+        var navigation = new NcTalkOutlookAddIn.UI.NextcloudPickerNavigation();
+        int targetIndex;
+        string targetPath;
+        Check("Empty picker history cannot go back", !navigation.CanGoBack);
+        Check("Empty picker history cannot go forward", !navigation.CanGoForward);
+        Check("Empty picker history has no target", !navigation.TryGetTarget(-1, out targetIndex, out targetPath));
+        navigation.Record("");
+        navigation.Record("/folder");
+        navigation.Record("folder");
+        Check("Picker history accepts a back target", navigation.TryGetTarget(-1, out targetIndex, out targetPath));
+        Equal("Duplicate folder navigation creates no extra step", "", targetPath);
+        Check("Failed navigation leaves history position unchanged", navigation.CanGoBack && !navigation.CanGoForward);
+        navigation.CompleteHistoryNavigation(targetIndex, targetPath);
+        Check("Returning to root enables forward navigation", !navigation.CanGoBack && navigation.CanGoForward);
+        Check("Forward navigation retains the folder", navigation.TryGetTarget(1, out targetIndex, out targetPath));
+        Equal("Forward target is normalized", "folder", targetPath);
+        navigation.CompleteHistoryNavigation(targetIndex, "server-folder");
+        navigation.TryGetTarget(-1, out targetIndex, out targetPath);
+        navigation.CompleteHistoryNavigation(targetIndex, targetPath);
+        navigation.TryGetTarget(1, out targetIndex, out targetPath);
+        Equal("History records the server-returned path", "server-folder", targetPath);
+        navigation.Record("replacement");
+        Check("New navigation discards the old forward branch", !navigation.CanGoForward);
+        Check("History refuses an out-of-range target", !navigation.TryGetTarget(2, out targetIndex, out targetPath));
     }
 
     private static void TestPasswordGenerator()
@@ -1354,6 +1383,7 @@ internal static class OutlookUtilityTests
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\SizeFormatting.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\NextcloudVersionHelper.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\NextcloudPath.cs"),
+        (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\UI\NextcloudPickerNavigation.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\NextcloudUriValidator.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\FileLinkPath.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\FileLinkUploadPolicy.cs"),

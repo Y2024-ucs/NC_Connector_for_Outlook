@@ -138,6 +138,8 @@ Key code locations:
   - `Services/ProtectedJsonStateStore.cs` provides the shared DPAPI-protected JSON and backup-recovery path used by the Talk deletion queue and IFB registry ownership state. Writes prefer atomic replacement and retain the established copy fallback; the typed stores retain feature-specific file names, entropy, validation, and diagnostics.
 - `src/NcTalkOutlookAddIn/UI/` — WinForms dialogs and wizards
   - `UI/NextcloudFilePickerForm.cs` provides the **My Nextcloud** file and folder picker.
+  - `UI/NextcloudPickerNavigation.cs` owns the picker history. The form advances it only after a successful folder load.
+  - `UI/NextcloudPickerPreview.cs` loads and decodes one file preview. Selection, cancellation generation, and displayed-image ownership remain with the form; requests still run through `FileLinkService`.
   - `UI/ScaledForm.cs` is the shared DPI-scaling base for forms that use logical pixel layout helpers.
 - `src/NcTalkOutlookAddIn/Settings/` — persisted settings model, storage, and managed setup policy
   - `Settings/ManagedSetupPolicy.cs` reads the managed Nextcloud URL from Windows policy registry keys.

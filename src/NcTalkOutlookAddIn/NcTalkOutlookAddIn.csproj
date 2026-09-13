@@ -221,6 +221,8 @@
     <Compile Include="UI\FileLinkWizardForm.Upload.cs" />
     <Compile Include="UI\FileLinkWizardForm.UploadProgress.cs" />
     <Compile Include="UI\NextcloudFilePickerForm.cs" />
+    <Compile Include="UI\NextcloudPickerNavigation.cs" />
+    <Compile Include="UI\NextcloudPickerPreview.cs" />
     <Compile Include="UI\SharePasswordDeliveryModeComboHelper.cs" />
     <Compile Include="Utilities\DiagnosticsLogger.cs" />
     <Compile Include="Utilities\FooterButtonLayoutHelper.cs" />

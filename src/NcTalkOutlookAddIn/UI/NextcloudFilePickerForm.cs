@@ -7,7 +7,6 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.Drawing.Imaging;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -36,22 +35,6 @@ namespace NcTalkOutlookAddIn.UI
             Refresh
         }
 
-        private const long MaximumPreviewBytes = 5L * 1024L * 1024L;
-        private const long MaximumDecodedPreviewPixels = 80000000L;
-        private const int MaximumPreviewDimension = 2048;
-        private const int RequestedGeneratedPreviewDimension = 1024;
-
-        private static readonly ISet<string> PreviewImageExtensions =
-            new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                ".bmp",
-                ".gif",
-                ".ico",
-                ".jpeg",
-                ".jpg",
-                ".png"
-            };
-
         private readonly FileLinkService _service;
         private readonly NextcloudFilePickerMode _mode;
         private readonly UiThemePalette _palette =
@@ -76,8 +59,7 @@ namespace NcTalkOutlookAddIn.UI
         private readonly Button _selectButton = new Button();
         private readonly ToolTip _navigationToolTip = new ToolTip();
         private readonly ImageList _icons;
-        private readonly List<string> _navigationHistory =
-            new List<string>();
+        private readonly NextcloudPickerNavigation _navigation = new NextcloudPickerNavigation();
         private CancellationTokenSource _loadCancellation;
         private CancellationTokenSource _previewCancellation;
         private int _previewVersion;
@@ -85,7 +67,6 @@ namespace NcTalkOutlookAddIn.UI
         private NextcloudStorageListing _currentListing;
         private long? _usedBytes;
         private long? _availableBytes;
-        private int _navigationHistoryIndex = -1;
         private bool _loading;
 
         internal NextcloudFilePickerForm(
@@ -643,7 +624,8 @@ namespace NcTalkOutlookAddIn.UI
             }
             if (await LoadFolderAsync(targetPath))
             {
-                RecordNavigation(_currentPath);
+                _navigation.Record(_currentPath);
+                UpdateNavigationButtons();
             }
         }
 
@@ -653,16 +635,15 @@ namespace NcTalkOutlookAddIn.UI
             {
                 return;
             }
-            int targetIndex = _navigationHistoryIndex + offset;
-            if (targetIndex < 0
-                || targetIndex >= _navigationHistory.Count)
+            int targetIndex;
+            string targetPath;
+            if (!_navigation.TryGetTarget(offset, out targetIndex, out targetPath))
             {
                 return;
             }
-            if (await LoadFolderAsync(_navigationHistory[targetIndex]))
+            if (await LoadFolderAsync(targetPath))
             {
-                _navigationHistoryIndex = targetIndex;
-                _navigationHistory[targetIndex] = _currentPath;
+                _navigation.CompleteHistoryNavigation(targetIndex, _currentPath);
                 UpdateNavigationButtons();
             }
         }
@@ -677,41 +658,13 @@ namespace NcTalkOutlookAddIn.UI
             UpdateNavigationButtons();
         }
 
-        private void RecordNavigation(string relativePath)
-        {
-            string normalizedPath = NextcloudPath.Normalize(relativePath);
-            if (_navigationHistoryIndex >= 0
-                && _navigationHistoryIndex < _navigationHistory.Count
-                && string.Equals(
-                    _navigationHistory[_navigationHistoryIndex],
-                    normalizedPath,
-                    StringComparison.Ordinal))
-            {
-                UpdateNavigationButtons();
-                return;
-            }
-            int firstForwardIndex = _navigationHistoryIndex + 1;
-            if (firstForwardIndex < _navigationHistory.Count)
-            {
-                _navigationHistory.RemoveRange(
-                    firstForwardIndex,
-                    _navigationHistory.Count - firstForwardIndex);
-            }
-            _navigationHistory.Add(normalizedPath);
-            _navigationHistoryIndex = _navigationHistory.Count - 1;
-            UpdateNavigationButtons();
-        }
-
         private void UpdateNavigationButtons()
         {
             bool enabled = !_loading;
             _backButton.Enabled =
-                enabled && _navigationHistoryIndex > 0;
+                enabled && _navigation.CanGoBack;
             _forwardButton.Enabled =
-                enabled
-                && _navigationHistoryIndex >= 0
-                && _navigationHistoryIndex
-                    < _navigationHistory.Count - 1;
+                enabled && _navigation.CanGoForward;
             _upButton.Enabled =
                 enabled && _currentPath.Length > 0;
             _refreshButton.Enabled =
@@ -1095,12 +1048,7 @@ namespace NcTalkOutlookAddIn.UI
                 ShowPreviewText(entry.DisplayName);
                 return;
             }
-            bool supportsOriginalImagePreview =
-                PreviewImageExtensions.Contains(
-                    Path.GetExtension(entry.DisplayName) ?? string.Empty);
-            bool originalImageExceedsLimit =
-                supportsOriginalImagePreview
-                && entry.Length > MaximumPreviewBytes;
+            var previewRequest = new NextcloudPickerPreview(_service, entry);
 
             var cancellation = new CancellationTokenSource();
             _previewCancellation = cancellation;
@@ -1110,33 +1058,7 @@ namespace NcTalkOutlookAddIn.UI
             try
             {
                 Bitmap preview = await Task.Run(
-                    () =>
-                    {
-                        byte[] bytes =
-                            _service.TryReadNextcloudGeneratedPreview(
-                                entry,
-                                RequestedGeneratedPreviewDimension,
-                                RequestedGeneratedPreviewDimension,
-                                MaximumPreviewBytes,
-                                token);
-                        if (bytes == null
-                            && supportsOriginalImagePreview
-                            && !originalImageExceedsLimit)
-                        {
-                            bytes = _service.ReadNextcloudFilePreview(
-                                entry,
-                                MaximumPreviewBytes,
-                                token);
-                        }
-                        if (bytes == null)
-                        {
-                            return null;
-                        }
-                        token.ThrowIfCancellationRequested();
-                        Bitmap bitmap = DecodePreviewImage(bytes);
-                        token.ThrowIfCancellationRequested();
-                        return bitmap;
-                    },
+                    () => previewRequest.Load(token),
                     token);
                 if (!IsCurrentPreview(
                     cancellation,
@@ -1150,7 +1072,7 @@ namespace NcTalkOutlookAddIn.UI
                 }
                 if (preview == null)
                 {
-                    ShowPreviewText(originalImageExceedsLimit
+                    ShowPreviewText(previewRequest.OriginalImageExceedsLimit
                         ? Strings.NextcloudPickerPreviewSkipped
                         : Strings.NextcloudPickerNoPreview);
                     return;
@@ -1198,70 +1120,6 @@ namespace NcTalkOutlookAddIn.UI
                        cancellation)
                    && previewVersion == _previewVersion
                    && !cancellation.IsCancellationRequested;
-        }
-
-        private static Bitmap DecodePreviewImage(byte[] bytes)
-        {
-            if (bytes == null || bytes.Length == 0)
-            {
-                throw new InvalidDataException(
-                    "The preview response did not contain image data.");
-            }
-
-            using (var stream = new MemoryStream(bytes, false))
-            using (Image source = Image.FromStream(
-                stream,
-                true,
-                true))
-            {
-                long pixelCount = checked(
-                    (long)source.Width * source.Height);
-                if (source.Width <= 0
-                    || source.Height <= 0
-                    || pixelCount > MaximumDecodedPreviewPixels)
-                {
-                    throw new InvalidDataException(
-                        "The image dimensions exceed the preview limit.");
-                }
-
-                double scale = Math.Min(
-                    1d,
-                    Math.Min(
-                        (double)MaximumPreviewDimension / source.Width,
-                        (double)MaximumPreviewDimension / source.Height));
-                int width = Math.Max(
-                    1,
-                    (int)Math.Round(source.Width * scale));
-                int height = Math.Max(
-                    1,
-                    (int)Math.Round(source.Height * scale));
-                var bitmap = new Bitmap(
-                    width,
-                    height,
-                    PixelFormat.Format32bppPArgb);
-                try
-                {
-                    using (Graphics graphics = Graphics.FromImage(bitmap))
-                    {
-                        graphics.Clear(Color.Transparent);
-                        graphics.CompositingQuality =
-                            CompositingQuality.HighQuality;
-                        graphics.InterpolationMode =
-                            InterpolationMode.HighQualityBicubic;
-                        graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
-                        graphics.SmoothingMode = SmoothingMode.HighQuality;
-                        graphics.DrawImage(
-                            source,
-                            new Rectangle(0, 0, width, height));
-                    }
-                    return bitmap;
-                }
-                catch
-                {
-                    bitmap.Dispose();
-                    throw;
-                }
-            }
         }
 
         private void ShowPreviewText(string text)
