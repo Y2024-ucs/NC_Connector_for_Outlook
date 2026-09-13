@@ -51,18 +51,20 @@ function Assert-Precedes(
 
 function Get-MethodSlice(
     [string]$Source,
-    [string]$Signature,
-    [string]$NextSignature
+    [string]$Signature
 ) {
     $start = $Source.IndexOf($Signature, [StringComparison]::Ordinal)
-    $end = $Source.IndexOf(
-        $NextSignature,
-        $start + $Signature.Length,
-        [StringComparison]::Ordinal)
-    if ($start -lt 0 -or $end -le $start) {
+    if ($start -lt 0) {
+        throw "Could not locate method '$Signature'."
+    }
+    $lineStart = $Source.LastIndexOf([char]10, $start) + 1
+    $indent = $Source.Substring($lineStart, $start - $lineStart)
+    $closingLine = [string][char]10 + $indent + "}"
+    $end = $Source.IndexOf($closingLine, $start, [StringComparison]::Ordinal)
+    if ($end -lt 0) {
         throw "Could not isolate method '$Signature'."
     }
-    return $Source.Substring($start, $end - $start)
+    return $Source.Substring($start, $end + $closingLine.Length - $start)
 }
 
 $composePath = "src\NcTalkOutlookAddIn\Controllers\SeparatePasswordDeliveryController.cs"
@@ -88,6 +90,9 @@ $shareCleanup = Read-Source $shareCleanupPath
 $addin = Read-Source $addinPath
 $subscription = Read-Source $subscriptionPath
 $attachmentFlow = Read-Source $attachmentFlowPath
+$attachmentPolicy = Read-Source "src\NcTalkOutlookAddIn\NextcloudTalkAddIn.MailComposeSubscription.AttachmentPolicy.cs"
+$attachmentMaterialization = Read-Source "src\NcTalkOutlookAddIn\NextcloudTalkAddIn.MailComposeSubscription.AttachmentMaterialization.cs"
+$attachmentQueue = Read-Source "src\NcTalkOutlookAddIn\NextcloudTalkAddIn.MailComposeSubscription.AttachmentQueue.cs"
 $subscriptionRegistry = Read-Source $subscriptionRegistryPath
 $hooks = Read-Source $hooksPath
 $fileLink = Read-Source $fileLinkPath
@@ -98,73 +103,56 @@ $fileLinkWizardDragDrop = Read-Source $fileLinkWizardDragDropPath
 $project = Read-Source $projectPath
 $directPasswordDispatch = Get-MethodSlice `
     $compose `
-    "internal void DispatchSeparatePasswordMailQueue(" `
-    "private List<string> PopulatePasswordMail("
+    "internal void DispatchSeparatePasswordMailQueue("
 $passwordMailPopulation = Get-MethodSlice `
     $compose `
-    "private List<string> PopulatePasswordMail(" `
-    "private bool TryOpenSeparatePasswordFallback("
+    "private List<string> PopulatePasswordMail("
 $manualPasswordFallback = Get-MethodSlice `
     $compose `
-    "private bool TryOpenSeparatePasswordFallback(" `
-    "private static bool ReadSubmittedOrAmbiguous("
+    "private bool TryOpenSeparatePasswordFallback("
 $fileLinkWizardUi = Get-MethodSlice `
     $fileLink `
-    "private bool RunFileLinkWizardOnUiThread(" `
-    "private static FileLinkResult BuildSecretPlaceholderResult("
+    "private bool RunFileLinkWizardOnUiThread("
 
 $attachmentAdd = Get-MethodSlice `
     $attachmentFlow `
-    "private void OnAttachmentAdd(" `
-    "private void OnBeforeAttachmentAdd("
+    "private void OnAttachmentAdd("
 $beforeAttachmentAdd = Get-MethodSlice `
     $attachmentFlow `
-    "private void OnBeforeAttachmentAdd(" `
-    "private void OnPropertyChange("
+    "private void OnBeforeAttachmentAdd("
 $snapshotAttachments = Get-MethodSlice `
-    $attachmentFlow `
-    "private List<AttachmentSnapshot> SnapshotAttachments()" `
-    "private static long SumAttachmentBytes("
+    $attachmentMaterialization `
+    "private List<AttachmentSnapshot> SnapshotAttachments()"
 $hiddenAttachment = Get-MethodSlice `
-    $attachmentFlow `
-    "private static bool IsHiddenAttachment(" `
-    "private static void ShowForcedAttachmentProcessingError("
+    $attachmentMaterialization `
+    "private static bool IsHiddenAttachment("
 $collectAttachments = Get-MethodSlice `
-    $attachmentFlow `
-    "private void CollectAttachmentSelectionsForShare(" `
-    "private bool TryResolveAttachmentLocalPath("
+    $attachmentMaterialization `
+    "private void CollectAttachmentSelectionsForShare("
 $startAttachmentShareFlow = Get-MethodSlice `
-    $attachmentFlow `
-    "private async Task StartComposeAttachmentShareFlowAsync(" `
-    "private bool TryBuildBeforeAddAttachmentCandidate("
-$lastAddedBatch = Get-MethodSlice `
-    $attachmentFlow `
-    "private AttachmentBatchInfo BuildLastAddedBatchInfo(" `
+    $attachmentQueue `
     "private async Task StartComposeAttachmentShareFlowAsync("
+$lastAddedBatch = Get-MethodSlice `
+    $attachmentMaterialization `
+    "private AttachmentBatchInfo BuildLastAddedBatchInfo("
 $readAttachmentSettings = Get-MethodSlice `
-    $attachmentFlow `
-    "private AttachmentAutomationSettings ReadAttachmentAutomationSettings()" `
-    "private async Task<AttachmentAutomationSettings> ReadAttachmentAutomationSettingsAsync()"
+    $attachmentPolicy `
+    "private AttachmentAutomationSettings ReadAttachmentAutomationSettings()"
 $attachmentSendGate = Get-MethodSlice `
-    $attachmentFlow `
-    "private bool TryValidateAttachmentPolicyBeforeSend(" `
-    "private int CountPolicyRelevantAttachments()"
+    $attachmentPolicy `
+    "private bool TryValidateAttachmentPolicyBeforeSend("
 $removeSuppressedAttachment = Get-MethodSlice `
-    $attachmentFlow `
-    "private void RemoveSuppressedBeforeAddAttachmentByName(" `
-    "private void RemoveAttachmentsByIndices("
+    $attachmentMaterialization `
+    "private void RemoveSuppressedBeforeAddAttachmentByName("
 $removeLastAttachmentBatch = Get-MethodSlice `
-    $attachmentFlow `
-    "private void RemoveLastAddedAttachmentBatch(" `
-    "private void EndAttachmentSuppression("
+    $attachmentMaterialization `
+    "private void RemoveLastAddedAttachmentBatch("
 $queueSelectionScan = Get-MethodSlice `
     $fileLinkWizardFiles `
-    "private async Task AddSelectionsAsync(" `
-    "private void AddInitialSelections("
+    "private async Task AddSelectionsAsync("
 $initialFileSelection = Get-MethodSlice `
     $fileLinkWizardDragDrop `
-    "private bool TryAddInitialFileSelection(" `
-    "private bool TryReserveSelection("
+    "private bool TryAddInitialFileSelection("
 
 Assert-Precedes `
     "Hidden attachments are ignored before post-add batching" `
@@ -240,7 +228,7 @@ Assert-Contains `
     "current[i].RefreshAttachmentAutomationSettings();"
 Assert-Contains `
     "Superseded attachment-policy requests cannot replace current settings" `
-    $attachmentFlow `
+    $attachmentPolicy `
     "== _attachmentAutomationSettingsRefreshGeneration"
 Assert-Contains `
     "The threshold prompt uses the last attachment size" `

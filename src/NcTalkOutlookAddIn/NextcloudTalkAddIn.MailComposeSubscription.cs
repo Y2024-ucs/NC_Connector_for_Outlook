@@ -19,57 +19,6 @@ namespace NcTalkOutlookAddIn
     {
         internal sealed partial class MailComposeSubscription : IDisposable
         {
-            private sealed class AttachmentBatchEntry
-            {
-                internal string Name { get; set; }
-
-                internal long SizeBytes { get; set; }
-            }
-
-            private sealed class AttachmentBatchInfo
-            {
-                internal int Count { get; set; }
-
-                internal string Name { get; set; }
-
-                internal long SizeBytes { get; set; }
-            }
-
-            private sealed class AttachmentSnapshot
-            {
-                internal int Index { get; set; }
-
-                internal string Name { get; set; }
-
-                internal long SizeBytes { get; set; }
-            }
-
-            private sealed class AttachmentAutomationSettings
-            {
-                internal bool AlwaysConnector { get; set; }
-
-                internal bool OfferAboveEnabled { get; set; }
-
-                internal int ThresholdMb { get; set; }
-
-                internal long ThresholdBytes { get; set; }
-            }
-
-            private sealed class BeforeAddShareEntry
-            {
-                internal AttachmentBatchEntry Candidate { get; set; }
-
-                internal string LocalPath { get; set; }
-
-                internal int ThresholdMb { get; set; }
-
-                internal bool CleanupLocalPathAfterFlow { get; set; }
-
-                internal string Trigger { get; set; }
-
-                internal int BaselineAttachmentCount { get; set; }
-            }
-
             private enum ComposeSurfaceState
             {
                 Detached,
@@ -94,10 +43,6 @@ namespace NcTalkOutlookAddIn
             // Final recipients and sender are captured at Send time. A reopened draft can
             // change both, so password follow-ups stay with the live compose subscription.
             private readonly List<SeparatePasswordDispatchEntry> _passwordDispatchQueue = new List<SeparatePasswordDispatchEntry>();
-            private AttachmentAutomationSettings _attachmentAutomationSettingsSnapshot;
-            private DateTime _attachmentAutomationSettingsSnapshotUtc;
-            private Task<AttachmentAutomationSettings> _attachmentAutomationSettingsRefreshTask;
-            private int _attachmentAutomationSettingsRefreshGeneration;
             private bool _attachmentSuppressed;
             private bool _attachmentPromptOpen;
             private bool _beforeAddShareFlowRunning;
@@ -111,8 +56,6 @@ namespace NcTalkOutlookAddIn
             private const int BeforeAddShareBatchDebounceMs = 3000;
             private const int EmailSignatureApplyDebounceMs = 900;
             private const int EmailSignatureInlineApplyDebounceMs = 250;
-            private static readonly TimeSpan AttachmentAutomationSettingsCacheLifetime =
-                TimeSpan.FromMinutes(5);
 
             internal MailComposeSubscription(
                 NextcloudTalkAddIn owner,

@@ -95,6 +95,9 @@
     <Compile Include="NextcloudTalkAddIn.PolicyTemplates.cs" />
     <Compile Include="NextcloudTalkAddIn.MailComposeSubscription.cs" />
     <Compile Include="NextcloudTalkAddIn.MailComposeSubscription.AttachmentFlow.cs" />
+    <Compile Include="NextcloudTalkAddIn.MailComposeSubscription.AttachmentPolicy.cs" />
+    <Compile Include="NextcloudTalkAddIn.MailComposeSubscription.AttachmentMaterialization.cs" />
+    <Compile Include="NextcloudTalkAddIn.MailComposeSubscription.AttachmentQueue.cs" />
     <Compile Include="NextcloudTalkAddIn.MailComposeSubscription.Signature.cs" />
     <Compile Include="NextcloudTalkAddIn.MailComposeSubscription.Send.cs" />
     <Compile Include="NextcloudTalkAddIn.MailComposeSubscription.ShareCleanup.cs" />

@@ -97,7 +97,10 @@ Key code locations:
 - `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.PolicyTemplates.cs` — backend policy + Talk template/language resolver helpers
 - `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.SubscriptionEnsure.cs` — deferred appointment-subscription ensure and Outlook event-restriction handling
 - `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.MailComposeSubscription.cs` — compose subscription core state + lifecycle entry points (`Dispose`, identity, shared helpers)
-- `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.MailComposeSubscription.AttachmentFlow.cs` — compose attachment interception/evaluation/share-launch flow
+- `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.MailComposeSubscription.AttachmentFlow.cs` — compose attachment events, timers, and prompt orchestration
+- `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.MailComposeSubscription.AttachmentPolicy.cs` — attachment policy snapshots, refresh, and send validation
+- `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.MailComposeSubscription.AttachmentMaterialization.cs` — attachment snapshots, local files, and removal from Outlook
+- `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.MailComposeSubscription.AttachmentQueue.cs` — queue handoff, before-add batches, and suppression completion
 - `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.MailComposeSubscription.Signature.cs` — backend email-signature policy application for the matching Outlook sender account
 - `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.MailComposeSubscription.Send.cs` — send gate, final recipient/account capture, and direct separate-password dispatch
 - `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.MailComposeSubscription.ShareCleanup.cs` — `AfterWrite`, `Inspector.Close`, and inline `Unload` handling for newly inserted shares
@@ -296,6 +299,7 @@ Compose runtime in `NextcloudTalkAddIn.cs` (`MailComposeSubscription`) delegates
 - The FileLink ribbon entry is exposed in mail inspectors and in the Explorer inline reply/forward `Message` tab. Both entries call the same `FileLinkLaunchController` path.
 - Inline replies/forwards insert the rendered share HTML through `Explorer.ActiveInlineResponseWordEditor`; the inline path does not rewrite `MailItem.HTMLBody` and keeps two empty paragraphs above the share block for the sender's own text.
 - Debounced attachment evaluation (`ComposeAttachmentEvalDebounceMs`) after compose attachment changes.
+- Attachment partials share one compose subscription and its existing event registrations and lifetime. Policy, materialization, and queue work do not introduce independent event handlers or task dispatch paths.
 - Open compose windows invalidate their attachment-rule snapshot immediately after local settings are saved. Backend policy snapshots expire after five minutes; synchronous attachment events start a refresh when they encounter an expired snapshot, and Send waits for a current snapshot before enforcing mandatory routing.
 - Attachment automation modes:
   - always route attachments into NC sharing flow, or

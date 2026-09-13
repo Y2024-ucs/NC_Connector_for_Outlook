@@ -117,7 +117,13 @@ Root:
 - `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.MailComposeSubscription.cs`
   Runtime-Subscription-Core fuer Compose-Lifecycle-Zustand (`Dispose`, Identity, gemeinsame Helper).
 - `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.MailComposeSubscription.AttachmentFlow.cs`
-  Compose-Attachment-Interception/Evaluation/Share-Launch-Flow.
+  Anhangsereignisse, Timer und Prompt-Orchestrierung.
+- `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.MailComposeSubscription.AttachmentPolicy.cs`
+  Policy-Snapshots, Aktualisierung und Versandprüfung für Anhänge.
+- `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.MailComposeSubscription.AttachmentMaterialization.cs`
+  Anhangs-Snapshots, lokale Dateien und Entfernung aus Outlook.
+- `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.MailComposeSubscription.AttachmentQueue.cs`
+  Queue-Übergabe, Before-add-Batches und Abschluss der Ereignisunterdrückung.
 - `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.MailComposeSubscription.Signature.cs`
   Backend-E-Mail-Signatur-Policy fuer das passende Outlook-Absenderkonto.
 - `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.MailComposeSubscription.Send.cs`
@@ -282,6 +288,7 @@ Backend-Talk-Templates verwenden für die Outlook-Word-/RTF-Pipeline bevorzugt T
 - Inline-Antworten/-Weiterleitungen fuegen das gerenderte Freigabe-HTML ueber `Explorer.ActiveInlineResponseWordEditor` ein; der Inline-Pfad schreibt nicht direkt in `MailItem.HTMLBody` und behaelt zwei leere Absaetze ueber dem Freigabeblock fuer eigenen Text.
 - Normale HTML-Compose-Fenster verwenden zuerst den Inspector-WordEditor, damit verwaltete Bookmarks erhalten bleiben. Nur wenn dieser Editor nicht geoeffnet werden kann, bleibt die direkte `MailItem.HTMLBody`-Route als Kompatibilitaetsfallback aktiv.
 - Offene Verfassenfenster verwerfen ihren Snapshot der Anhangsregeln unmittelbar nach dem Speichern lokaler Einstellungen. Backend-Policy-Snapshots laufen nach fünf Minuten ab; synchrone Anhangsereignisse starten dann eine Aktualisierung, und der Versand wartet bei vorhandenen Anhängen auf einen aktuellen Stand.
+- Die Anhangs-Partials teilen sich eine Compose-Subscription mit ihren bestehenden Ereignisregistrierungen und ihrer Lebensdauer. Policy, Dateierfassung und Queue-Übergabe führen keine unabhängigen Ereignishandler oder Task-Aufrufpfade ein.
 - `MailComposeSubscription` debounct Anhangsänderungen und verarbeitet Always-via-NC sowie den Schwellwertmodus. `BeforeAttachmentAdd` versucht die Dateidaten früh zu erfassen; bei einer erzwingenden Policy wird ein nicht materialisierbarer oder nicht prüfbarer Host-Anhang abgebrochen. Bereits hinzugefügte Outlook-Anhänge werden erst entfernt, nachdem die vollständige Startauswahl in der Queue liegt. Ein späterer Abbruch des Wizards stellt übernommene Anhänge nicht wieder her. Harte Outlook-/Exchange-Grenzen können weiterhin vor einem Add-in-Ereignis greifen.
 - Bei einer Mehrfachauswahl zeigt der Schwellwertdialog den Namen und die Größe derselben zuletzt hinzugefügten Datei. Die Entfernen-Aktion umfasst weiterhin den vollständigen zuletzt hinzugefügten Batch.
 - Outlook-Body-Ressourcen mit `PR_ATTACHMENT_HIDDEN=true`, beispielsweise Signaturbilder, werden weder in Anhangs-Batches und Schwellwertsummen noch in FileLink-Auswahl, Host-Entfernung oder Send-Gate einbezogen.
