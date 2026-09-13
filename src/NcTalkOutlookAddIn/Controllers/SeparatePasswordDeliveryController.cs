@@ -5,7 +5,6 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Threading;
 using System.Windows.Forms;
 using NcTalkOutlookAddIn.Models;
 using NcTalkOutlookAddIn.Services;
@@ -15,8 +14,7 @@ using Outlook = Microsoft.Office.Interop.Outlook;
 
 namespace NcTalkOutlookAddIn.Controllers
 {
-    // Encapsulates compose share cleanup and separate password mail dispatch.
-    internal sealed class ComposeShareLifecycleController
+    internal sealed class SeparatePasswordDeliveryController
     {
         internal const string SecretDeliveryPlaceholder =
             "__NCC_SECRET_DELIVERY_VALUE__";
@@ -37,69 +35,11 @@ namespace NcTalkOutlookAddIn.Controllers
             internal string PlainText { get; set; }
         }
 
-        internal ComposeShareLifecycleController(NextcloudTalkAddIn owner)
+        internal SeparatePasswordDeliveryController(NextcloudTalkAddIn owner)
         {
             _owner = owner;
             _passwordMailInteropController =
                 new MailInteropController(owner);
-        }
-
-        internal bool TryDeleteComposeShareFolder(
-            ComposeShareCleanupRecord entry,
-            string reason)
-        {
-            if (entry == null)
-            {
-                return true;
-            }
-            string relativeFolder = entry.RelativeFolder;
-            if (string.IsNullOrWhiteSpace(relativeFolder))
-            {
-                return true;
-            }
-            if (entry.Origin == null || !entry.Origin.IsComplete())
-            {
-                NextcloudTalkAddIn.LogFileLinkMessage(
-                    "Compose share cleanup skipped (origin incomplete): relativeFolder="
-                    + relativeFolder
-                    + ", reason="
-                    + (reason ?? string.Empty));
-                return false;
-            }
-            TalkServiceConfiguration configuration =
-                entry.Origin.ToConfiguration();
-            var service = new FileLinkService(configuration);
-            try
-            {
-                service.DeleteShareFolder(relativeFolder, CancellationToken.None);
-                NextcloudTalkAddIn.LogFileLinkMessage(
-                    "Compose share cleanup delete success (relativeFolder="
-                    + relativeFolder
-                    + ", reason="
-                    + (reason ?? string.Empty)
-                    + ", shareId="
-                    + (entry.ShareId ?? string.Empty)
-                    + ", shareLabel="
-                    + (entry.ShareLabel ?? string.Empty)
-                    + ").");
-                return true;
-            }
-            catch (Exception ex)
-            {
-                DiagnosticsLogger.LogException(
-                    LogCategories.FileLink,
-                    "Compose share cleanup delete failure (relativeFolder="
-                    + relativeFolder
-                    + ", reason="
-                    + (reason ?? string.Empty)
-                    + ", shareId="
-                    + (entry.ShareId ?? string.Empty)
-                    + ", shareLabel="
-                    + (entry.ShareLabel ?? string.Empty)
-                    + ").",
-                    ex);
-                return false;
-            }
         }
 
         internal void CaptureSeparatePasswordSignatureSnapshot(
@@ -335,14 +275,14 @@ namespace NcTalkOutlookAddIn.Controllers
                     return false;
                 }
                 string toRecipients =
-                    BuildNormalizedRecipientCsv(dispatch.To);
+                    RecipientAddressList.BuildNormalizedRecipientCsv(dispatch.To);
                 string ccRecipients =
-                    BuildNormalizedRecipientCsv(dispatch.Cc);
+                    RecipientAddressList.BuildNormalizedRecipientCsv(dispatch.Cc);
                 string bccRecipients =
-                    BuildNormalizedRecipientCsv(dispatch.Bcc);
-                if (CountRecipientsInCsv(toRecipients)
-                    + CountRecipientsInCsv(ccRecipients)
-                    + CountRecipientsInCsv(bccRecipients) <= 0)
+                    RecipientAddressList.BuildNormalizedRecipientCsv(dispatch.Bcc);
+                if (RecipientAddressList.CountRecipientsInCsv(toRecipients)
+                    + RecipientAddressList.CountRecipientsInCsv(ccRecipients)
+                    + RecipientAddressList.CountRecipientsInCsv(bccRecipients) <= 0)
                 {
                     throw new InvalidOperationException(
                         "Separate password fallback mail has no valid recipients.");
@@ -480,9 +420,9 @@ namespace NcTalkOutlookAddIn.Controllers
                 int added = 0;
                 var seen =
                     new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                added += AddPerRecipientEntries(expanded, entry, ExtractRecipientAddresses(entry.To), "to", seen);
-                added += AddPerRecipientEntries(expanded, entry, ExtractRecipientAddresses(entry.Cc), "cc", seen);
-                added += AddPerRecipientEntries(expanded, entry, ExtractRecipientAddresses(entry.Bcc), "bcc", seen);
+                added += AddPerRecipientEntries(expanded, entry, RecipientAddressList.ExtractRecipientAddresses(entry.To), "to", seen);
+                added += AddPerRecipientEntries(expanded, entry, RecipientAddressList.ExtractRecipientAddresses(entry.Cc), "cc", seen);
+                added += AddPerRecipientEntries(expanded, entry, RecipientAddressList.ExtractRecipientAddresses(entry.Bcc), "bcc", seen);
                 if (added == 0)
                 {
                     expanded.Add(entry);
@@ -507,7 +447,7 @@ namespace NcTalkOutlookAddIn.Controllers
             int added = 0;
             for (int i = 0; i < recipients.Count; i++)
             {
-                string address = NormalizeRecipientAddress(recipients[i]);
+                string address = RecipientAddressList.NormalizeRecipientAddress(recipients[i]);
                 if (string.IsNullOrWhiteSpace(address))
                 {
                     continue;
@@ -542,11 +482,11 @@ namespace NcTalkOutlookAddIn.Controllers
                     "Separate password Secrets link create start (composeKey="
                     + (composeKey ?? string.Empty)
                     + ", to="
-                    + CountRecipientsInCsv(dispatch.To).ToString(CultureInfo.InvariantCulture)
+                    + RecipientAddressList.CountRecipientsInCsv(dispatch.To).ToString(CultureInfo.InvariantCulture)
                     + ", cc="
-                    + CountRecipientsInCsv(dispatch.Cc).ToString(CultureInfo.InvariantCulture)
+                    + RecipientAddressList.CountRecipientsInCsv(dispatch.Cc).ToString(CultureInfo.InvariantCulture)
                     + ", bcc="
-                    + CountRecipientsInCsv(dispatch.Bcc).ToString(CultureInfo.InvariantCulture)
+                    + RecipientAddressList.CountRecipientsInCsv(dispatch.Bcc).ToString(CultureInfo.InvariantCulture)
                     + ", expireDays="
                     + dispatch.SecretsExpireDays.ToString(CultureInfo.InvariantCulture)
                     + ", mailPlainText="
@@ -732,76 +672,6 @@ namespace NcTalkOutlookAddIn.Controllers
             };
         }
 
-        internal static void AddUniqueRecipient(List<string> recipients, string address)
-        {
-            if (recipients == null)
-            {
-                return;
-            }
-            string normalized = NormalizeRecipientAddress(address);
-            if (string.IsNullOrWhiteSpace(normalized))
-            {
-                return;
-            }
-            for (int i = 0; i < recipients.Count; i++)
-            {
-                if (string.Equals(recipients[i], normalized, StringComparison.OrdinalIgnoreCase))
-                {
-                    return;
-                }
-            }
-
-            recipients.Add(normalized);
-        }
-
-        internal static List<string> ExtractRecipientAddresses(string csv)
-        {
-            var list = new List<string>();
-            if (string.IsNullOrWhiteSpace(csv))
-            {
-                return list;
-            }
-            string[] parts = csv.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
-            for (int i = 0; i < parts.Length; i++)
-            {
-                AddUniqueRecipient(list, parts[i]);
-            }
-            return list;
-        }
-
-        internal static string BuildNormalizedRecipientCsv(string csv)
-        {
-            List<string> recipients = ExtractRecipientAddresses(csv);
-            return recipients.Count == 0 ? string.Empty : string.Join("; ", recipients.ToArray());
-        }
-
-        internal static int CountRecipientsInCsv(string csv)
-        {
-            return ExtractRecipientAddresses(csv).Count;
-        }
-
-        internal static string NormalizeRecipientAddress(string raw)
-        {
-            if (string.IsNullOrWhiteSpace(raw))
-            {
-                return string.Empty;
-            }
-            string value = raw.Trim();
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                return string.Empty;
-            }
-            int lt = value.LastIndexOf('<');
-            int gt = value.LastIndexOf('>');
-            if (lt >= 0 && gt > lt)
-            {
-                value = value.Substring(lt + 1, gt - lt - 1).Trim();
-            }
-
-            value = value.Trim().Trim('\'', '"');
-            return value.Trim();
-        }
-
         private List<string> ApplySeparatePasswordRecipientsForSend(
             Outlook.MailItem mail,
             SeparatePasswordDispatchEntry dispatch,
@@ -812,9 +682,9 @@ namespace NcTalkOutlookAddIn.Controllers
                 throw new InvalidOperationException("Password mail is not available.");
             }
 
-            List<string> toRecipients = ExtractRecipientAddresses(dispatch != null ? dispatch.To : string.Empty);
-            List<string> ccRecipients = ExtractRecipientAddresses(dispatch != null ? dispatch.Cc : string.Empty);
-            List<string> bccRecipients = ExtractRecipientAddresses(dispatch != null ? dispatch.Bcc : string.Empty);
+            List<string> toRecipients = RecipientAddressList.ExtractRecipientAddresses(dispatch != null ? dispatch.To : string.Empty);
+            List<string> ccRecipients = RecipientAddressList.ExtractRecipientAddresses(dispatch != null ? dispatch.Cc : string.Empty);
+            List<string> bccRecipients = RecipientAddressList.ExtractRecipientAddresses(dispatch != null ? dispatch.Bcc : string.Empty);
             int totalRecipients = toRecipients.Count + ccRecipients.Count + bccRecipients.Count;
             if (totalRecipients <= 0)
             {
@@ -891,7 +761,7 @@ namespace NcTalkOutlookAddIn.Controllers
                             + ").");
                     }
 
-                    AddUniqueRecipient(resolvedRecipients, address);
+                    RecipientAddressList.AddUniqueRecipient(resolvedRecipients, address);
                 }
                 finally
                 {

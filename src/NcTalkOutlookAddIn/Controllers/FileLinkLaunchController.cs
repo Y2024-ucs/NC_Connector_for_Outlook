@@ -337,7 +337,7 @@ namespace NcTalkOutlookAddIn.Controllers
                 result.ShareUrl,
                 result.ShareId,
                 result.ShareToken,
-                ComposeShareLifecycleController.SecretDeliveryPlaceholder,
+                SeparatePasswordDeliveryController.SecretDeliveryPlaceholder,
                 result.ExpireDate,
                 result.Permissions,
                 result.FolderName,

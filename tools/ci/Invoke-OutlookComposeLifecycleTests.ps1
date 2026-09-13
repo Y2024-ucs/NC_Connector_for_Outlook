@@ -65,7 +65,7 @@ function Get-MethodSlice(
     return $Source.Substring($start, $end - $start)
 }
 
-$composePath = "src\NcTalkOutlookAddIn\Controllers\ComposeShareLifecycleController.cs"
+$composePath = "src\NcTalkOutlookAddIn\Controllers\SeparatePasswordDeliveryController.cs"
 $trackerPath = "src\NcTalkOutlookAddIn\Controllers\ComposeShareCleanupTracker.cs"
 $sendPath = "src\NcTalkOutlookAddIn\NextcloudTalkAddIn.MailComposeSubscription.Send.cs"
 $shareCleanupPath = "src\NcTalkOutlookAddIn\NextcloudTalkAddIn.MailComposeSubscription.ShareCleanup.cs"
@@ -555,20 +555,19 @@ Assert-Contains `
     $fileLink `
     "ComposeLifecycleOrigin.Create("
 
-$deleteMethodStart = $compose.IndexOf(
-    "internal bool TryDeleteComposeShareFolder(",
-    [StringComparison]::Ordinal)
-$deleteMethodEnd = $compose.IndexOf(
-    "internal void CaptureSeparatePasswordSignatureSnapshot(",
-    $deleteMethodStart,
-    [StringComparison]::Ordinal)
-Assert-True `
+$deleteMethod = Read-Source "src\NcTalkOutlookAddIn\Services\ComposeShareCleanupService.cs"
+Assert-Contains `
     "Compose cleanup method is present" `
-    ($deleteMethodStart -ge 0 `
-        -and $deleteMethodEnd -gt $deleteMethodStart)
-$deleteMethod = $compose.Substring(
-    $deleteMethodStart,
-    $deleteMethodEnd - $deleteMethodStart)
+    $deleteMethod `
+    "internal bool TryDeleteComposeShareFolder("
+Assert-NotContains `
+    "Password delivery does not own remote cleanup" `
+    $compose `
+    "TryDeleteComposeShareFolder"
+Assert-NotContains `
+    "Remote cleanup has no Outlook COM dependency" `
+    $deleteMethod `
+    "Microsoft.Office.Interop"
 Assert-Contains `
     "Compose cleanup requires its captured origin" `
     $deleteMethod `

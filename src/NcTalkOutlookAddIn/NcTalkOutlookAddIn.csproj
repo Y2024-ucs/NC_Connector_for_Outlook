@@ -147,7 +147,9 @@
     <Compile Include="Controllers\TalkRibbonController.cs" />
     <Compile Include="Controllers\OutlookRecipientResolverController.cs" />
     <Compile Include="Controllers\MailComposeSubscriptionRegistryController.cs" />
-    <Compile Include="Controllers\ComposeShareLifecycleController.cs" />
+    <Compile Include="Controllers\SeparatePasswordDeliveryController.cs" />
+    <Compile Include="Services\ComposeShareCleanupService.cs" />
+    <Compile Include="Utilities\RecipientAddressList.cs" />
     <Compile Include="Controllers\ComposeShareCleanupTracker.cs" />
     <Compile Include="Controllers\MailInteropController.cs" />
     <Compile Include="Controllers\OutlookWordEditorContext.cs" />

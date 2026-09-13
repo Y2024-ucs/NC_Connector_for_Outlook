@@ -16,7 +16,7 @@ namespace NcTalkOutlookAddIn
             string composeKey,
             List<SeparatePasswordDispatchEntry> queue)
         {
-            _composeShareLifecycleController
+            _separatePasswordDeliveryController
                 .DispatchSeparatePasswordMailQueue(
                     composeKey,
                     queue);
@@ -99,7 +99,7 @@ namespace NcTalkOutlookAddIn
                 {
                     for (int i = 0; i < pending.Count; i++)
                     {
-                        _composeShareLifecycleController
+                        _composeShareCleanupService
                             .TryDeleteComposeShareFolder(
                                 pending[i],
                                 reason);
@@ -113,7 +113,7 @@ namespace NcTalkOutlookAddIn
             AddinSettings settings,
             string composeKey)
         {
-            _composeShareLifecycleController
+            _separatePasswordDeliveryController
                 .CaptureSeparatePasswordSignatureSnapshot(
                     queue,
                     policyStatus,

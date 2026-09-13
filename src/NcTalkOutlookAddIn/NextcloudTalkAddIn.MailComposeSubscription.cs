@@ -496,9 +496,9 @@ namespace NcTalkOutlookAddIn
                     SecretsExpireDays = deliveryPolicy.SecretsExpireDays,
                     LanguageOverride = string.IsNullOrWhiteSpace(languageOverride) ? "default" : languageOverride,
                     BackendPolicyStatus = policyStatus,
-                    To = ComposeShareLifecycleController.BuildNormalizedRecipientCsv(ReadMailRecipientList("To")),
-                    Cc = ComposeShareLifecycleController.BuildNormalizedRecipientCsv(ReadMailRecipientList("CC")),
-                    Bcc = ComposeShareLifecycleController.BuildNormalizedRecipientCsv(ReadMailRecipientList("BCC")),
+                    To = RecipientAddressList.BuildNormalizedRecipientCsv(ReadMailRecipientList("To")),
+                    Cc = RecipientAddressList.BuildNormalizedRecipientCsv(ReadMailRecipientList("CC")),
+                    Bcc = RecipientAddressList.BuildNormalizedRecipientCsv(ReadMailRecipientList("BCC")),
                     Origin = origin != null ? origin.Clone() : null
                 };
 

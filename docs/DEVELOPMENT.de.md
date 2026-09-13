@@ -145,7 +145,7 @@ Controller:
 
 - `src/NcTalkOutlookAddIn/Controllers/TalkAppointmentController.cs` mit `Sync`-Partial (Terminmetadaten, lokaler Snapshot und entfernte Raumaktualisierung)
 - `src/NcTalkOutlookAddIn/Controllers/ComposeShareCleanupTracker.cs` (In-Memory-Status neu eingefügter, noch nicht geschriebener Compose-Freigaben)
-- `src/NcTalkOutlookAddIn/Controllers/ComposeShareLifecycleController.cs` (Löschung nicht persistierter oder nicht eingefügter Serverartefakte über den exakten Ursprung sowie Body-, Empfänger-, Absender-, Secrets- und Signaturaufbereitung der Passwortmail)
+- `src/NcTalkOutlookAddIn/Controllers/SeparatePasswordDeliveryController.cs` (Body-, Empfänger-, Absender-, Secrets- und Signaturaufbereitung sowie direkte Outlook-Übergabe der Passwortmail)
 - `src/NcTalkOutlookAddIn/Controllers/TalkDescriptionTemplateController.cs` (Talk-Template-/Block-Rendering)
 - `src/NcTalkOutlookAddIn/Controllers/OutlookRecipientResolverController.cs` (SMTP- und Attendee-Aufloesung)
 - `src/NcTalkOutlookAddIn/Controllers/MailComposeSubscriptionRegistryController.cs` (Compose-Subscription-Registry)
@@ -156,6 +156,7 @@ Controller:
 
 Services:
 
+- `src/NcTalkOutlookAddIn/Services/ComposeShareCleanupService.cs` (Löschung nicht persistierter oder nicht eingefügter Serverartefakte über den exakten Ursprung)
 - `src/NcTalkOutlookAddIn/Services/TalkService.cs` (Talk API Calls)
 - `src/NcTalkOutlookAddIn/Services/FileLinkService.cs` (Orchestrierung von Uploadplan, Freigabe-Stammordner, Transfer und Share-Erstellung)
 - `src/NcTalkOutlookAddIn/Services/FileLinkQueueSnapshotBuilder.cs` (quellengruppierter Ordnerbaum für die Freigabe-Warteschlange)
@@ -197,6 +198,7 @@ UI:
 
 Utilities:
 
+- `src/NcTalkOutlookAddIn/Utilities/RecipientAddressList.cs` (gemeinsame Normalisierung, Deduplizierung und Semikolonlisten für Empfänger)
 - `src/NcTalkOutlookAddIn/Utilities/BrowserLauncher.cs` (zentraler Shell-Start für Dateien und Ordner; `OpenUrl` lehnt Nicht-HTTPS-Ziele ab)
 - `src/NcTalkOutlookAddIn/Utilities/SizeFormatting.cs` (zentrale MB-Formatierung fuer UI-Texte)
 - `src/NcTalkOutlookAddIn/Utilities/ComInteropScope.cs` (zentrale COM-Release-/FinalRelease-Helfer)
@@ -291,7 +293,7 @@ Backend-Talk-Templates verwenden für die Outlook-Word-/RTF-Pipeline bevorzugt T
 - `OnSend` ist die direkte Übergabegrenze. Die Queue wird einmal verbraucht, der endgültige Secrets-/Klartextinhalt erzeugt, Empfänger und wirksames `SendUsingAccount`/`SentOnBehalfOfName` der Hauptmail übernommen, Body und passende Backend-Signatur fertiggestellt, Empfänger aufgelöst und der Follow-up ohne zwischengespeicherten Outlook-Entwurf übergeben.
 - Für die Passwortzustellung werden weder Entwürfe, Postausgang, Gesendet-Ordner, MIME-Marker noch eine Neustart-Wiederherstellung verwendet. Auch Outlooks verzögerte oder Offline-Übermittlung ruft `OnSend` auf; der Passwort-Follow-up wird deshalb sofort übergeben und wartet nicht auf die Hauptmail im Postausgang. Unerwartete Follow-up-Fehler setzen das `cancel`-Flag der Hauptmail nie.
 - Das Send-Gate bricht den Versand bei einer erzwingenden Anhangs-Policy ab, solange noch ein gewöhnlicher regelwidriger Anhang vorhanden ist.
-- `ComposeShareLifecycleController` übernimmt Aufbereitung und direkte Übergabe der Passwortmail. SMTP-Adressen werden gemeinsam über An, Cc und Bcc dedupliziert. Im Secrets-Modus entsteht ein Einmal-Link pro eindeutiger Adresse. Bei eindeutigem Auto-Send-Fehler wird genau ein vollständig vorbereiteter manueller Fallback geöffnet; bei mehrdeutigem Outlook-Status wird kein Duplikat erzeugt. Scheitert die strikte Absender- oder Empfängeraufbereitung vor der Übergabe, verwendet der Controller denselben Fallback mit normalisierten An-/Cc-/Bcc-Feldern und gleicht die verwaltete Signatur nach Initialisierung des Inspectors ab.
+- `ComposeShareCleanupService` führt die Serverbereinigung im bestehenden Hintergrundtask aus. `SeparatePasswordDeliveryController` übernimmt Aufbereitung und direkte Übergabe der Passwortmail auf dem Outlook-STA im Send-Ereignis der Hauptmail. SMTP-Adressen werden gemeinsam über An, Cc und Bcc dedupliziert. Im Secrets-Modus entsteht ein Einmal-Link pro eindeutiger Adresse. Bei eindeutigem Auto-Send-Fehler wird genau ein vollständig vorbereiteter manueller Fallback geöffnet; bei mehrdeutigem Outlook-Status wird kein Duplikat erzeugt. Scheitert die strikte Absender- oder Empfängeraufbereitung vor der Übergabe, verwendet der Controller denselben Fallback mit normalisierten An-/Cc-/Bcc-Feldern und gleicht die verwaltete Signatur nach Initialisierung des Inspectors ab.
 - Secrets-Links werden lokal per AES-GCM über Windows CNG verschlüsselt. Schlägt die Secrets-Erstellung fehl, wird die Klartext-Passwortmail verwendet und ein Hinweis angezeigt.
 - `OutlookAttachmentAutomationGuardService` erzwingt den Host-Konflikt-Guard live:
   - vor Auswertung

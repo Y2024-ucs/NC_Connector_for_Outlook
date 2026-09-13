@@ -94,11 +94,11 @@ namespace NcTalkOutlookAddIn
                         out bcc);
                 if (!capturedFromRecipients)
                 {
-                    to = ComposeShareLifecycleController.BuildNormalizedRecipientCsv(
+                    to = RecipientAddressList.BuildNormalizedRecipientCsv(
                         ReadMailRecipientList("To"));
-                    cc = ComposeShareLifecycleController.BuildNormalizedRecipientCsv(
+                    cc = RecipientAddressList.BuildNormalizedRecipientCsv(
                         ReadMailRecipientList("CC"));
-                    bcc = ComposeShareLifecycleController.BuildNormalizedRecipientCsv(
+                    bcc = RecipientAddressList.BuildNormalizedRecipientCsv(
                         ReadMailRecipientList("BCC"));
                 }
                 for (int i = 0; i < _passwordDispatchQueue.Count; i++)
@@ -114,11 +114,11 @@ namespace NcTalkOutlookAddIn
                     + ", queued="
                     + _passwordDispatchQueue.Count.ToString(CultureInfo.InvariantCulture)
                     + ", to="
-                    + CountRecipients(to).ToString(CultureInfo.InvariantCulture)
+                    + RecipientAddressList.CountRecipientsInCsv(to).ToString(CultureInfo.InvariantCulture)
                     + ", cc="
-                    + CountRecipients(cc).ToString(CultureInfo.InvariantCulture)
+                    + RecipientAddressList.CountRecipientsInCsv(cc).ToString(CultureInfo.InvariantCulture)
                     + ", bcc="
-                    + CountRecipients(bcc).ToString(CultureInfo.InvariantCulture)
+                    + RecipientAddressList.CountRecipientsInCsv(bcc).ToString(CultureInfo.InvariantCulture)
                     + ", source="
                     + (capturedFromRecipients
                         ? "recipients_collection"
@@ -247,7 +247,7 @@ namespace NcTalkOutlookAddIn
                                 try
                                 {
                                     address =
-                                        ComposeShareLifecycleController
+                                        RecipientAddressList
                                             .NormalizeRecipientAddress(
                                                 recipient.Address);
                                 }
@@ -283,7 +283,7 @@ namespace NcTalkOutlookAddIn
                             if (recipientType
                                 == (int)Outlook.OlMailRecipientType.olCC)
                             {
-                                ComposeShareLifecycleController
+                                RecipientAddressList
                                     .AddUniqueRecipient(
                                         ccRecipients,
                                         address);
@@ -292,14 +292,14 @@ namespace NcTalkOutlookAddIn
                                      == (int)Outlook.OlMailRecipientType
                                          .olBCC)
                             {
-                                ComposeShareLifecycleController
+                                RecipientAddressList
                                     .AddUniqueRecipient(
                                         bccRecipients,
                                         address);
                             }
                             else
                             {
-                                ComposeShareLifecycleController
+                                RecipientAddressList
                                     .AddUniqueRecipient(
                                         toRecipients,
                                         address);
@@ -377,11 +377,6 @@ namespace NcTalkOutlookAddIn
                 }
             }
 
-            private static int CountRecipients(string csv)
-            {
-                return ComposeShareLifecycleController
-                    .CountRecipientsInCsv(csv);
-            }
         }
     }
 }

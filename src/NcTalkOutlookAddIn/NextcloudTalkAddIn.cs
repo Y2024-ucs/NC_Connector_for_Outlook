@@ -50,7 +50,8 @@ namespace NcTalkOutlookAddIn
         private readonly MailComposeSubscriptionRegistryController _mailComposeSubscriptionRegistry = new MailComposeSubscriptionRegistryController();
         private readonly OutlookAttachmentAutomationGuardService _attachmentGuardService = new OutlookAttachmentAutomationGuardService();
         private readonly TalkAppointmentController _talkAppointmentController;
-        private readonly ComposeShareLifecycleController _composeShareLifecycleController;
+        private readonly ComposeShareCleanupService _composeShareCleanupService = new ComposeShareCleanupService();
+        private readonly SeparatePasswordDeliveryController _separatePasswordDeliveryController;
         private readonly FileLinkLaunchController _fileLinkLaunchController;
         private readonly TalkRibbonController _talkRibbonController;
         private readonly MailInteropController _mailInteropController;
@@ -75,8 +76,8 @@ namespace NcTalkOutlookAddIn
         public NextcloudTalkAddIn()
         {
             _talkAppointmentController = new TalkAppointmentController(this);
-            _composeShareLifecycleController =
-                new ComposeShareLifecycleController(this);
+            _separatePasswordDeliveryController =
+                new SeparatePasswordDeliveryController(this);
             _fileLinkLaunchController = new FileLinkLaunchController(this);
             _talkRibbonController = new TalkRibbonController(this);
             _mailInteropController = new MailInteropController(this);

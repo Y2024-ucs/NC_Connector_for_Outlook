@@ -110,7 +110,9 @@ Key code locations:
 - `src/NcTalkOutlookAddIn/Controllers/TalkRibbonController.cs` — Talk ribbon flow orchestration (auth gate, wizard, room create/replace)
 - `src/NcTalkOutlookAddIn/Controllers/TalkAppointmentController.cs` with its `Sync` partial — appointment metadata, local snapshot capture, and remote room updates
 - `src/NcTalkOutlookAddIn/Controllers/ComposeShareCleanupTracker.cs` — in-memory pending-write state for newly inserted compose shares
-- `src/NcTalkOutlookAddIn/Controllers/ComposeShareLifecycleController.cs` — exact-origin deletion of unpersisted or insertion-failed server artifacts, plus password-mail body, recipient, sender, Secrets, and signature preparation
+- `src/NcTalkOutlookAddIn/Services/ComposeShareCleanupService.cs` — exact-origin deletion of unpersisted or insertion-failed server artifacts
+- `src/NcTalkOutlookAddIn/Controllers/SeparatePasswordDeliveryController.cs` — password-mail body, recipient, sender, Secrets, and signature preparation and direct Outlook submission
+- `src/NcTalkOutlookAddIn/Utilities/RecipientAddressList.cs` — shared recipient normalization, deduplication, and semicolon-separated lists
 - `src/NcTalkOutlookAddIn/Controllers/TalkDescriptionTemplateController.cs` — Talk template/body block rendering
 - `src/NcTalkOutlookAddIn/Controllers/OutlookRecipientResolverController.cs` — SMTP and attendee recipient resolution
 - `src/NcTalkOutlookAddIn/Controllers/MailComposeSubscriptionRegistryController.cs` — compose-subscription registry lifecycle
@@ -285,7 +287,7 @@ For stable rendering in Outlook appointment bodies (Word/RTF pipeline), backend 
    - plain-text compose keeps `MailItem.BodyFormat=olFormatPlain`; the share block is rendered as a framed text block with `#` separators and inserted through Outlook WordEditor. Inline replies/forwards keep two empty paragraphs above the block for the sender's own text. `MailItem.Body` is not rewritten.
 6. `NextcloudTalkAddIn.TryInsertHtmlIntoMail(...)` / `TryInsertPlainTextIntoMail(...)` return the insertion result from `Controllers/MailInteropController.cs`. HTML compose uses WordEditor first so existing managed bookmarks stay intact; a direct `HTMLBody` write remains the compatibility fallback when the Inspector editor cannot be opened. If every insertion path fails, `FileLinkLaunchController` queues the newly created server artifacts for cleanup and reports the wizard as failed.
 
-Compose runtime parity additions in `NextcloudTalkAddIn.cs` (`MailComposeSubscription`) with lifecycle logic delegated to `Controllers/ComposeShareLifecycleController`:
+Compose runtime in `NextcloudTalkAddIn.cs` (`MailComposeSubscription`) delegates remote cleanup to `Services/ComposeShareCleanupService` and password delivery to `Controllers/SeparatePasswordDeliveryController`. Cleanup runs in the existing background task; password delivery stays on the Outlook STA in the primary mail's Send event:
 
 - The FileLink ribbon entry is exposed in mail inspectors and in the Explorer inline reply/forward `Message` tab. Both entries call the same `FileLinkLaunchController` path.
 - Inline replies/forwards insert the rendered share HTML through `Explorer.ActiveInlineResponseWordEditor`; the inline path does not rewrite `MailItem.HTMLBody` and keeps two empty paragraphs above the share block for the sender's own text.
