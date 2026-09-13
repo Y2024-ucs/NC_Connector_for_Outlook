@@ -204,6 +204,14 @@
     <Compile Include="Services\OutlookAttachmentAutomationGuardService.cs" />
     <Compile Include="Services\PasswordPolicyService.cs" />
     <Compile Include="UI\SettingsForm.cs" />
+    <Compile Include="UI\SettingsForm.General.cs" />
+    <Compile Include="UI\SettingsForm.Sharing.cs" />
+    <Compile Include="UI\SettingsForm.Talk.cs" />
+    <Compile Include="UI\SettingsForm.Signature.cs" />
+    <Compile Include="UI\SettingsForm.Ifb.cs" />
+    <Compile Include="UI\SettingsForm.Advanced.cs" />
+    <Compile Include="UI\SettingsForm.Debug.cs" />
+    <Compile Include="UI\SettingsForm.About.cs" />
     <Compile Include="UI\SettingsForm.Language.cs" />
     <Compile Include="UI\SettingsTabControl.cs" />
     <Compile Include="UI\ScaledForm.cs" />

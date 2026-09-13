@@ -356,13 +356,14 @@ internal static class OutlookSecurityRegressionTests
 
     $settingsFormPath = Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\UI\SettingsForm.cs"
     $settingsFormSource = Get-Content -LiteralPath $settingsFormPath -Raw
+    $settingsGeneralSource = Get-Content -LiteralPath (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\UI\SettingsForm.General.cs") -Raw
     if ($settingsFormSource -notmatch [regex]::Escape("_saveButton.DialogResult = DialogResult.None;")) {
         throw "Settings save button can close the form before URL validation completes."
     }
     if ($settingsFormSource -notmatch "TryNormalizeBaseUrl\(requestedServerUrl,\s*out normalizedServerUrl\)") {
         throw "Settings save path does not validate and normalize the configured Nextcloud URL."
     }
-    if ($settingsFormSource -notmatch "TryNormalizeBaseUrl\(baseUrl,\s*out normalizedUrl\)") {
+    if ($settingsGeneralSource -notmatch "TryNormalizeBaseUrl\(baseUrl,\s*out normalizedUrl\)") {
         throw "Settings connection test does not validate and normalize the configured Nextcloud URL."
     }
     Write-Host "[OK] Settings UI rejects invalid Nextcloud URLs before save or connection test"

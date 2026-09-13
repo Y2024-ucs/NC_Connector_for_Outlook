@@ -203,6 +203,7 @@ Runtime rules:
   - `Services/UpdateCheckService.cs` performs the homepage update check without blocking Outlook startup.
 - **UI**
   - `UI/SettingsForm.cs` configures base URL, authentication, sharing defaults, IFB, and debug logging.
+    The `General`, `Sharing`, `Talk`, `Signature`, `Ifb`, `Advanced`, `Debug`, and `About` partials own their tab layout and actions. Control construction, shared save validation, backend policy state, and cross-tab control updates remain in the main form; the existing `Language` partial keeps localization.
   - `UI/TalkLinkForm.cs` is the Talk wizard.
   - `UI/FileLinkWizardForm.cs` is the sharing wizard.
   - `UI/BrandedHeader.cs` is the shared header banner control and provides `AttachToParent(...)` for consistent form header setup.
