@@ -152,6 +152,13 @@ namespace NcTalkOutlookAddIn.Controllers
             BackendPolicyStatus policyStatus,
             PasswordPolicyInfo passwordPolicy)
         {
+            if (launchOptions != null
+                && launchOptions.PrepareInitialSelections != null
+                && !launchOptions.PrepareInitialSelections())
+            {
+                return false;
+            }
+
             string basePath = string.IsNullOrWhiteSpace(settings.FileLinkBasePath)
                 ? AddinSettings.DefaultFileLinkBasePath
                 : settings.FileLinkBasePath;

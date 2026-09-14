@@ -28,6 +28,8 @@ namespace NcTalkOutlookAddIn.Models
 
         internal long AttachmentLastSizeBytes { get; set; }
 
+        internal Func<bool> PrepareInitialSelections { get; set; }
+
         internal Action OnInitialQueueAdopted { get; set; }
 
         internal IList<FileLinkSelection> InitialSelections { get; private set; }

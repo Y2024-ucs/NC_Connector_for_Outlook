@@ -43,17 +43,8 @@ namespace NcTalkOutlookAddIn
                 {
                     return;
                 }
-                var selections = new List<FileLinkSelection>();
                 var removeIndices = new List<int>();
                 var tempFiles = new List<string>();
-
-                CollectAttachmentSelectionsForShare(selections, removeIndices, tempFiles);
-                if (selections.Count == 0)
-                {
-                    CleanupTemporaryFiles(tempFiles);
-                    LogFileLink("Compose attachment flow skipped (composeKey=" + _composeKey + ", reason=no_collectible_files).");
-                    return;
-                }
 
                 var launchOptions = new FileLinkWizardLaunchOptions
                 {
@@ -68,10 +59,11 @@ namespace NcTalkOutlookAddIn
                             removeIndices,
                             "share_flow")
                 };
-                for (int i = 0; i < selections.Count; i++)
-                {
-                    launchOptions.InitialSelections.Add(new FileLinkSelection(selections[i].SelectionType, selections[i].LocalPath));
-                }
+                launchOptions.PrepareInitialSelections = () =>
+                    PrepareComposeAttachmentSelections(
+                        launchOptions,
+                        removeIndices,
+                        tempFiles);
                 try
                 {
                     bool wizardAccepted = await _owner.RunFileLinkWizardForMailAsync(_mail, launchOptions);
@@ -81,7 +73,7 @@ namespace NcTalkOutlookAddIn
                         + ", trigger="
                         + launchOptions.AttachmentTrigger
                         + ", queued="
-                        + selections.Count.ToString(CultureInfo.InvariantCulture)
+                        + launchOptions.InitialSelections.Count.ToString(CultureInfo.InvariantCulture)
                         + ", wizardAccepted="
                         + wizardAccepted.ToString(CultureInfo.InvariantCulture)
                         + ").");
@@ -90,6 +82,33 @@ namespace NcTalkOutlookAddIn
                 {
                     CleanupTemporaryFiles(tempFiles);
                 }
+            }
+
+            private bool PrepareComposeAttachmentSelections(
+                FileLinkWizardLaunchOptions launchOptions,
+                List<int> removeIndices,
+                List<string> tempFiles)
+            {
+                if (_disposed || _mail == null)
+                {
+                    return false;
+                }
+
+                // Capture positions after prefetch, in the same STA call that accepts
+                // the queue and removes its originals before entering the modal loop.
+                var selections = new List<FileLinkSelection>();
+                CollectAttachmentSelectionsForShare(selections, removeIndices, tempFiles);
+                if (selections.Count == 0)
+                {
+                    LogFileLink("Compose attachment flow skipped (composeKey=" + _composeKey + ", reason=no_collectible_files).");
+                    return false;
+                }
+
+                foreach (FileLinkSelection selection in selections)
+                {
+                    launchOptions.InitialSelections.Add(selection);
+                }
+                return true;
             }
 
             private void StartBeforeAddAttachmentShareFlow(

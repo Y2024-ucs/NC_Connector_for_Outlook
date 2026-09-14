@@ -318,7 +318,7 @@ Compose runtime in `NextcloudTalkAddIn.cs` (`MailComposeSubscription`) delegates
   - pre-prompt-action handling
   - wizard finalize (enforced in `UI/FileLinkWizardForm.cs` via `Services/OutlookAttachmentAutomationGuardService.cs`).
 - Attachment-mode wizard launch:
-  - materializes selected compose attachments and queues them as initial wizard selections
+  - after server prefetch, materializes the current compose attachments on the Outlook STA and queues them as initial wizard selections; capture, queue acceptance and host removal stay in one synchronous UI call, so attachment positions cannot become stale across the network wait
   - removes the Outlook attachments only after the complete initial queue has accepted them
   - does not restore adopted attachments when the user later cancels the wizard
   - opens directly in file-step-equivalent mode.
