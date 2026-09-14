@@ -4,6 +4,14 @@ All notable changes to **NC Connector for Outlook** will be documented in this f
 
 This project follows the principles of **Keep a Changelog** and **Semantic Versioning**.
 
+## [3.4.0] - 2026-09-14
+
+### Added
+
+- **My Nextcloud** lets you select existing files and folders from your configured Nextcloud account directly in the sharing wizard.
+- The picker includes clickable path segments, back/forward/up navigation, name filtering, file icons, and image and document previews when available from Nextcloud.
+- Local files and **My Nextcloud** selections can be combined in one sharing queue with a folder tree, file icons, a clear target folder, and size and storage information. Nextcloud files are copied on the server; the originals remain unchanged.
+
 ## [3.3.1] - 2026-07-27
 
 ### Added
