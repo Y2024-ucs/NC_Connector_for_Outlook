@@ -27,6 +27,9 @@ namespace NcTalkOutlookAddIn.Models
     // Describes one item selected for a share, regardless of its source.
     internal sealed class FileLinkSelection
     {
+        internal static readonly IEqualityComparer<FileLinkSelection>
+            IdentityComparer = new SelectionIdentityComparer();
+
         internal FileLinkSelection(FileLinkSelectionType type, string localPath)
         {
             SelectionType = type;
@@ -137,6 +140,46 @@ namespace NcTalkOutlookAddIn.Models
                        + (Source == FileLinkSelectionSource.Local
                            ? LocalPath ?? string.Empty
                            : NextcloudPath ?? string.Empty);
+            }
+        }
+
+        // Queue admission compares Windows paths without case, but DAV paths exactly.
+        // Keep object equality unchanged for per-selection snapshots and upload state.
+        private sealed class SelectionIdentityComparer
+            : IEqualityComparer<FileLinkSelection>
+        {
+            public bool Equals(
+                FileLinkSelection first,
+                FileLinkSelection second)
+            {
+                if (ReferenceEquals(first, second))
+                {
+                    return true;
+                }
+                if (first == null || second == null
+                    || first.Source != second.Source)
+                {
+                    return false;
+                }
+                return GetPathComparer(first).Equals(
+                    first.IdentityPath,
+                    second.IdentityPath);
+            }
+
+            public int GetHashCode(FileLinkSelection selection)
+            {
+                return selection == null
+                    ? 0
+                    : GetPathComparer(selection).GetHashCode(
+                        selection.IdentityPath);
+            }
+
+            private static StringComparer GetPathComparer(
+                FileLinkSelection selection)
+            {
+                return selection.Source == FileLinkSelectionSource.Local
+                    ? StringComparer.OrdinalIgnoreCase
+                    : StringComparer.Ordinal;
             }
         }
 

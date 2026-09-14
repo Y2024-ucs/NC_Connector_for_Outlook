@@ -107,7 +107,7 @@ namespace NcTalkOutlookAddIn.UI
 
         private bool TryAddInitialFileSelection(
             FileLinkSelection selection,
-            HashSet<string> existingPaths)
+            HashSet<FileLinkSelection> existingSelections)
         {
             if (selection == null
                 || selection.SelectionType
@@ -115,7 +115,7 @@ namespace NcTalkOutlookAddIn.UI
             {
                 return false;
             }
-            if (!TryReserveSelection(selection, existingPaths))
+            if (!TryReserveSelection(selection, existingSelections))
             {
                 return false;
             }
@@ -130,7 +130,7 @@ namespace NcTalkOutlookAddIn.UI
 
         private bool TryReserveSelection(
             FileLinkSelection selection,
-            HashSet<string> existingPaths)
+            HashSet<FileLinkSelection> existingSelections)
         {
             if (selection == null
                 || (selection.Source == FileLinkSelectionSource.Local
@@ -138,14 +138,9 @@ namespace NcTalkOutlookAddIn.UI
             {
                 return false;
             }
-            if (!_attachmentMode && existingPaths != null)
+            if (!_attachmentMode && existingSelections != null)
             {
-                if (existingPaths.Contains(selection.IdentityPath))
-                {
-                    return false;
-                }
-
-                existingPaths.Add(selection.IdentityPath);
+                return existingSelections.Add(selection);
             }
             return true;
         }

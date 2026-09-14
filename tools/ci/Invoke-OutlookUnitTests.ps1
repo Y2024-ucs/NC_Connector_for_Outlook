@@ -83,6 +83,7 @@ internal static class OutlookUtilityTests
         TestFileLinkUploadPolicy();
         TestFileLinkPath();
         TestPickerNavigation();
+        TestFileLinkSelectionIdentity();
         TestFileLinkQueueSnapshotBuilder();
         TestFileLinkSelectionScanner();
         TestFileLinkUploadPlanner();
@@ -989,6 +990,80 @@ internal static class OutlookUtilityTests
                 Directory.Delete(fixtureRoot, true);
             }
         }
+    }
+
+    private static void TestFileLinkSelectionIdentity()
+    {
+        var localFile = new FileLinkSelection(
+            FileLinkSelectionType.File,
+            @"C:\Reports\report.pdf");
+        var localFileCaseVariant = new FileLinkSelection(
+            FileLinkSelectionType.File,
+            @"c:\reports\Report.pdf");
+        var localSelections = new HashSet<FileLinkSelection>(
+            new[] { localFile },
+            FileLinkSelection.IdentityComparer);
+        Check("Queue identity deduplicates Windows file path case variants", !localSelections.Add(localFileCaseVariant));
+        Equal("Per-selection state retains reference identity", 2, new HashSet<FileLinkSelection>(new[] { localFile, localFileCaseVariant }).Count);
+
+        var localFolder = new FileLinkSelection(
+            FileLinkSelectionType.Directory,
+            @"C:\Reports");
+        var localFolderCaseVariant = new FileLinkSelection(
+            FileLinkSelectionType.Directory,
+            @"c:\reports");
+        Check("Queue identity accepts a different Windows selection", localSelections.Add(localFolder));
+        Check("Queue identity deduplicates Windows folder path case variants", !localSelections.Add(localFolderCaseVariant));
+
+        var lowerFile = FileLinkSelection.FromNextcloudFile(
+            new NextcloudStorageEntry("Reports/report.pdf", "report.pdf", false, 1, null));
+        var upperFile = FileLinkSelection.FromNextcloudFile(
+            new NextcloudStorageEntry("Reports/Report.pdf", "Report.pdf", false, 2, null));
+        var sameFile = FileLinkSelection.FromNextcloudFile(
+            new NextcloudStorageEntry("/Reports/report.pdf", "report.pdf", false, 1, null));
+        var remoteSelections = new HashSet<FileLinkSelection>(
+            new[] { lowerFile },
+            FileLinkSelection.IdentityComparer);
+        Check("Queue identity retains distinct Nextcloud file path case variants", remoteSelections.Add(upperFile));
+        Check("Queue identity deduplicates the exact normalized Nextcloud path", !remoteSelections.Add(sameFile));
+        var laterBatch = new HashSet<FileLinkSelection>(
+            remoteSelections,
+            FileLinkSelection.IdentityComparer);
+        Check("Queue identity deduplicates a Nextcloud file from an earlier batch", !laterBatch.Add(upperFile));
+        Check("Queue identity separates local paths from identical Nextcloud paths", laterBatch.Add(new FileLinkSelection(FileLinkSelectionType.File, lowerFile.NextcloudPath)));
+
+        var lowerFolder = FileLinkSelection.FromNextcloudFolder(
+            new NextcloudStorageEntry("reports", "reports", true, 0, null),
+            null);
+        var upperFolder = FileLinkSelection.FromNextcloudFolder(
+            new NextcloudStorageEntry("Reports", "Reports", true, 0, null),
+            null);
+        Check("Queue identity accepts a Nextcloud folder", remoteSelections.Add(lowerFolder));
+        Check("Queue identity retains distinct Nextcloud folder path case variants", remoteSelections.Add(upperFolder));
+        Check("Queue identity deduplicates an exact Nextcloud folder", !remoteSelections.Add(FileLinkSelection.FromNextcloudFolder(new NextcloudStorageEntry("reports", "reports", true, 0, null), null)));
+
+        var selections = new List<FileLinkSelection> { lowerFile, upperFile };
+        var snapshots = selections.ToDictionary(
+            selection => selection,
+            selection => FileLinkQueueSnapshotBuilder.Build(selection, CancellationToken.None));
+        int resolverCalls = 0;
+        FileLinkSelectionScanResult scan = FileLinkSelectionScanner.Scan(
+            selections,
+            snapshots,
+            info =>
+            {
+                resolverCalls++;
+                return "report-copy.pdf";
+            },
+            CancellationToken.None);
+        Equal("Nextcloud case variants both reach the upload plan", 2, scan.Files.Count);
+        Equal("Destination case collisions still invoke the existing rename resolver", 1, resolverCalls);
+        Equal("The first Nextcloud source keeps its exact path", lowerFile.NextcloudPath, scan.Files[0].NextcloudSourcePath);
+        Equal("The second Nextcloud source keeps its exact path", upperFile.NextcloudPath, scan.Files[1].NextcloudSourcePath);
+        Equal("The destination rename remains separate from source identity", "report-copy.pdf", scan.Files[1].RemotePath);
+        Equal("Nextcloud case variants retain their combined size", 3L, scan.TotalBytes);
+        Equal("The first Nextcloud selection retains its own count", 1, scan.SelectionFileCounts[lowerFile]);
+        Equal("The second Nextcloud selection retains its own count", 1, scan.SelectionFileCounts[upperFile]);
     }
 
     private static void TestFileLinkSelectionScanner()

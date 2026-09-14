@@ -698,11 +698,11 @@ namespace NcTalkOutlookAddIn.UI
             {
                 return;
             }
-            var existingPaths = _attachmentMode
+            var existingSelections = _attachmentMode
                 ? null
-                : new HashSet<string>(
-                    _items.Select(item => item.IdentityPath),
-                    StringComparer.OrdinalIgnoreCase);
+                : new HashSet<FileLinkSelection>(
+                    _items,
+                    FileLinkSelection.IdentityComparer);
 
             int requestedCount = pendingSelections.Count;
             int addedCount = 0;
@@ -723,7 +723,7 @@ namespace NcTalkOutlookAddIn.UI
                     token.ThrowIfCancellationRequested();
                     if (!TryReserveSelection(
                         selection,
-                        existingPaths))
+                        existingSelections))
                     {
                         continue;
                     }
@@ -805,11 +805,11 @@ namespace NcTalkOutlookAddIn.UI
             {
                 return;
             }
-            var existingPaths = _attachmentMode
+            var existingSelections = _attachmentMode
                 ? null
-                : new HashSet<string>(
-                    _items.Select(item => item.IdentityPath),
-                    StringComparer.OrdinalIgnoreCase);
+                : new HashSet<FileLinkSelection>(
+                    _items,
+                    FileLinkSelection.IdentityComparer);
 
             int requestedCount = pendingSelections.Count;
             int addedCount = 0;
@@ -820,7 +820,7 @@ namespace NcTalkOutlookAddIn.UI
                 {
                     if (TryAddInitialFileSelection(
                         selection,
-                        existingPaths))
+                        existingSelections))
                     {
                         addedCount++;
                     }

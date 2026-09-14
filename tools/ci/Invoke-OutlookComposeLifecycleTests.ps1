@@ -159,6 +159,12 @@ $queueSelectionScan = Get-MethodSlice `
 $initialFileSelection = Get-MethodSlice `
     $fileLinkWizardDragDrop `
     "private bool TryAddInitialFileSelection("
+$initialQueueSelections = Get-MethodSlice `
+    $fileLinkWizardFiles `
+    "private void AddInitialSelections("
+$reserveQueueSelection = Get-MethodSlice `
+    $fileLinkWizardDragDrop `
+    "private bool TryReserveSelection("
 
 Assert-Precedes `
     "Hidden attachments are ignored before post-add batching" `
@@ -298,6 +304,24 @@ Assert-Contains `
     "Drag and drop awaits the background queue scan" `
     $fileLinkWizardDragDrop `
     "await AddSelectionsAsync(selections);"
+foreach ($selectionAdmission in @($queueSelectionScan, $initialQueueSelections)) {
+    Assert-Contains `
+        "Queue admission uses the model's source-aware identity comparer" `
+        $selectionAdmission `
+        "FileLinkSelection.IdentityComparer"
+    Assert-Contains `
+        "Queue admission reserves typed selections" `
+        $selectionAdmission `
+        "new HashSet<FileLinkSelection>("
+}
+Assert-Contains `
+    "Queue reservation uses the source-aware selection set" `
+    $reserveQueueSelection `
+    "return existingSelections.Add(selection);"
+Assert-Contains `
+    "Attachment mode still bypasses source deduplication" `
+    $reserveQueueSelection `
+    "if (!_attachmentMode && existingSelections != null)"
 Assert-Precedes `
     "Only individual attachment files use synchronous initial capture" `
     $initialFileSelection `
