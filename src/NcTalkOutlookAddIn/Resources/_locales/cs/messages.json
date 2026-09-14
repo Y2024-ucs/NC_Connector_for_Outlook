@@ -438,7 +438,7 @@
     "message": "Po tomto datu už odkaz nebude dostupný."
   },
   "sharing_step_files_title": {
-    "message": "Vybrat soubory nebo složky"
+    "message": "Sestavit sdílení"
   },
   "sharing_files_table_path": {
     "message": "Cesta"
@@ -595,6 +595,9 @@
   },
   "outlook_confirm_replace_room": {
     "message": "Pro tuto schůzku již existuje místnost Talk. Nahradit ji?"
+  },
+  "outlook_error_attach_room_to_appointment": {
+    "message": "Místnost Talk se nepodařilo přidat ke schůzce. Původní obsah schůzky zůstal zachován."
   },
   "outlook_error_create_room_unexpected_format": {
     "message": "Neočekávaná chyba při vytváření místnosti Talk: $1"
@@ -1015,5 +1018,149 @@
   },
   "options_update_changelog_fixed": {
     "message": "Opraveno"
+  },
+  "sharing_base_path_info": {
+    "message": "Cílová složka:"
+  },
+  "sharing_button_add_local": {
+    "message": "+ Místní"
+  },
+  "sharing_button_add_nextcloud": {
+    "message": "+ Můj Nextcloud"
+  },
+  "sharing_button_add_nextcloud_files": {
+    "message": "Vybrat soubory"
+  },
+  "sharing_button_add_nextcloud_folder": {
+    "message": "Vybrat složku"
+  },
+  "sharing_source_local": {
+    "message": "Místní"
+  },
+  "sharing_source_nextcloud": {
+    "message": "Můj Nextcloud"
+  },
+  "sharing_queue_entries_summary": {
+    "message": "Položky: $1"
+  },
+  "sharing_queue_sources_summary": {
+    "message": "Zdroje: $1"
+  },
+  "sharing_queue_total_summary": {
+    "message": "Celkem: $1"
+  },
+  "sharing_queue_storage_loading": {
+    "message": "Načítání informací o úložišti…"
+  },
+  "sharing_queue_storage_available": {
+    "message": "Volné místo: $1 z $2"
+  },
+  "sharing_queue_storage_unlimited": {
+    "message": "Bez limitu úložiště · využito $1"
+  },
+  "sharing_queue_storage_unknown": {
+    "message": "Informace o úložišti nejsou k dispozici"
+  },
+  "sharing_queue_storage_insufficient": {
+    "message": "Požadováno: $1 · Dostupné: $2"
+  },
+  "sharing_queue_expand_folder": {
+    "message": "Rozbalit složku „$1“"
+  },
+  "sharing_queue_collapse_folder": {
+    "message": "Sbalit složku „$1“"
+  },
+  "sharing_queue_remove_item": {
+    "message": "Odebrat „$1“"
+  },
+  "sharing_status_waiting": {
+    "message": "Čeká"
+  },
+  "sharing_files_empty": {
+    "message": "Nejsou vybrány žádné soubory."
+  },
+  "outlook_sharing_queue_read_failed": {
+    "message": "Vybranou položku se nepodařilo přečíst: $1"
+  },
+  "outlook_nextcloud_picker_load_failed": {
+    "message": "Složku Nextcloud se nepodařilo načíst."
+  },
+  "outlook_sharing_source_my_nextcloud": {
+    "message": "Můj Nextcloud"
+  },
+  "outlook_nextcloud_picker_files_title": {
+    "message": "Vybrat soubory"
+  },
+  "outlook_nextcloud_picker_folder_title": {
+    "message": "Vybrat složku"
+  },
+  "outlook_nextcloud_picker_filter_placeholder": {
+    "message": "Filtrovat podle názvu..."
+  },
+  "outlook_nextcloud_picker_navigate_back": {
+    "message": "Zpět"
+  },
+  "outlook_nextcloud_picker_navigate_forward": {
+    "message": "Vpřed"
+  },
+  "outlook_nextcloud_picker_navigate_up": {
+    "message": "O úroveň výše"
+  },
+  "outlook_nextcloud_picker_refresh": {
+    "message": "Obnovit"
+  },
+  "outlook_nextcloud_picker_column_name": {
+    "message": "Název"
+  },
+  "outlook_nextcloud_picker_column_size": {
+    "message": "Velikost"
+  },
+  "outlook_nextcloud_picker_column_modified": {
+    "message": "Změněno"
+  },
+  "outlook_nextcloud_picker_no_selection": {
+    "message": "Není vybrán žádný soubor"
+  },
+  "outlook_nextcloud_picker_no_preview": {
+    "message": "Náhled není k dispozici"
+  },
+  "outlook_nextcloud_picker_multiple_selection": {
+    "message": "Vybrané položky: {0}"
+  },
+  "outlook_nextcloud_picker_preview_loading": {
+    "message": "Načítání náhledu..."
+  },
+  "outlook_nextcloud_picker_preview_load_failed": {
+    "message": "Náhled nelze načíst"
+  },
+  "outlook_nextcloud_picker_preview_skipped": {
+    "message": "Náhled byl u velkého souboru přeskočen"
+  },
+  "outlook_nextcloud_picker_close_button": {
+    "message": "Zavřít"
+  },
+  "outlook_nextcloud_picker_select_files_button": {
+    "message": "Vybrat soubory"
+  },
+  "outlook_nextcloud_picker_select_folder_button": {
+    "message": "Vybrat tuto složku"
+  },
+  "outlook_nextcloud_picker_loading": {
+    "message": "Načítání složky..."
+  },
+  "outlook_nextcloud_picker_reading_folder": {
+    "message": "Načítání obsahu složky..."
+  },
+  "outlook_nextcloud_picker_storage_used": {
+    "message": "Úložiště: využito $1"
+  },
+  "outlook_nextcloud_picker_storage_of": {
+    "message": "Úložiště: využito $1 z $2"
+  },
+  "outlook_sharing_add_nextcloud_files": {
+    "message": "Soubory z Mého Nextcloudu..."
+  },
+  "outlook_sharing_add_nextcloud_folder": {
+    "message": "Složka z Mého Nextcloudu..."
   }
 }

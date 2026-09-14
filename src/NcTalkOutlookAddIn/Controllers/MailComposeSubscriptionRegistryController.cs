@@ -61,6 +61,22 @@ namespace NcTalkOutlookAddIn.Controllers
             }
         }
 
+        internal void RefreshAttachmentAutomationSettings()
+        {
+            NextcloudTalkAddIn.MailComposeSubscription[] current;
+            lock (_syncRoot)
+            {
+                current = _subscriptions.ToArray();
+            }
+            for (int i = 0; i < current.Length; i++)
+            {
+                if (current[i] != null)
+                {
+                    current[i].RefreshAttachmentAutomationSettings();
+                }
+            }
+        }
+
         internal void DisposeAll()
         {
             NextcloudTalkAddIn.MailComposeSubscription[] current;

@@ -2,10 +2,13 @@
 // Licensed under the GNU Affero General Public License v3.0.
 // See LICENSE.txt for details.
 
+using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Windows.Forms;
 using NcTalkOutlookAddIn.Models;
+using NcTalkOutlookAddIn.Services;
 using NcTalkOutlookAddIn.Utilities;
 
 namespace NcTalkOutlookAddIn.UI
@@ -33,22 +36,38 @@ namespace NcTalkOutlookAddIn.UI
                 return;
             }
 
-            e.Effect = ResolveFileDropEffect(e);
+            e.Effect = IsWizardBusy
+                ? DragDropEffects.None
+                : ResolveFileDropEffect(e);
         }
 
-        private void HandleFileListViewDragDrop(object sender, DragEventArgs e)
+        // WinForms drag-and-drop handlers must stay async void; keep the awaited flow inside this method-level try/catch.
+        private async void HandleFileListViewDragDrop(
+            object sender,
+            DragEventArgs e)
         {
-            if (e == null)
+            try
             {
-                return;
-            }
-            var selections = BuildSelectionsFromFileDropData(e.Data);
-            if (selections.Count == 0)
-            {
-                return;
-            }
+                if (e == null || IsWizardBusy)
+                {
+                    return;
+                }
+                var selections = BuildSelectionsFromFileDropData(
+                    e.Data);
+                if (selections.Count == 0)
+                {
+                    return;
+                }
 
-            AddSelections(selections);
+                await AddSelectionsAsync(selections);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsLogger.LogException(
+                    LogCategories.FileLink,
+                    "Queue drag-and-drop handler failed.",
+                    ex);
+            }
         }
 
         private static DragDropEffects ResolveFileDropEffect(DragEventArgs e)
@@ -86,41 +105,79 @@ namespace NcTalkOutlookAddIn.UI
             return selections;
         }
 
-        private bool TryAddSelection(FileLinkSelection selection, HashSet<string> existingPaths)
+        private bool TryAddInitialFileSelection(
+            FileLinkSelection selection,
+            HashSet<FileLinkSelection> existingSelections)
         {
-            if (selection == null || string.IsNullOrWhiteSpace(selection.LocalPath))
+            if (selection == null
+                || selection.SelectionType
+                   != FileLinkSelectionType.File)
             {
                 return false;
             }
-            if (!_attachmentMode && existingPaths != null)
+            if (!TryReserveSelection(selection, existingSelections))
             {
-                if (existingPaths.Contains(selection.LocalPath))
-                {
-                    return false;
-                }
-
-                existingPaths.Add(selection.LocalPath);
+                return false;
             }
 
-            _items.Add(selection);
-
-            var listViewItem = new ListViewItem(selection.LocalPath)
-            {
-                Tag = selection
-            };
-            listViewItem.UseItemStyleForSubItems = false;
-            listViewItem.SubItems.Add(selection.SelectionType == FileLinkSelectionType.File ? Strings.FileLinkWizardTypeFile : Strings.FileLinkWizardTypeFolder);
-            listViewItem.SubItems.Add(string.Empty);
-            _fileListView.Items.Add(listViewItem);
-
-            var state = new SelectionUploadState(listViewItem);
-            _selectionStates[selection] = state;
+            FileLinkQueueNode snapshot =
+                FileLinkQueueSnapshotBuilder.Build(
+                    selection,
+                    CancellationToken.None);
+            AddPreparedSelection(selection, snapshot);
             return true;
+        }
+
+        private bool TryReserveSelection(
+            FileLinkSelection selection,
+            HashSet<FileLinkSelection> existingSelections)
+        {
+            if (selection == null
+                || (selection.Source == FileLinkSelectionSource.Local
+                    && string.IsNullOrWhiteSpace(selection.LocalPath)))
+            {
+                return false;
+            }
+            if (!_attachmentMode && existingSelections != null)
+            {
+                return existingSelections.Add(selection);
+            }
+            return true;
+        }
+
+        private void AddPreparedSelection(
+            FileLinkSelection selection,
+            FileLinkQueueNode snapshot)
+        {
+            if (selection == null || snapshot == null)
+            {
+                throw new IOException(
+                    Strings.FileLinkUploadSourceChanged);
+            }
+            _items.Add(selection);
+            _queueSnapshots.Add(selection, snapshot);
+            if (snapshot.IsDirectory && snapshot.Children.Count > 0)
+            {
+                _expandedQueueFolders.Add(
+                    BuildQueueNodeKey(selection, snapshot));
+            }
+
+            var state = new SelectionUploadState(selection);
+            _selectionStates[selection] = state;
         }
 
         private static bool SelectionPathExists(FileLinkSelection selection)
         {
-            if (selection == null || string.IsNullOrWhiteSpace(selection.LocalPath))
+            if (selection == null)
+            {
+                return false;
+            }
+            if (selection.Source == FileLinkSelectionSource.Nextcloud)
+            {
+                return selection.NextcloudEntries != null
+                       && selection.NextcloudEntries.Count > 0;
+            }
+            if (string.IsNullOrWhiteSpace(selection.LocalPath))
             {
                 return false;
             }

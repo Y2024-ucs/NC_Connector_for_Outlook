@@ -152,6 +152,13 @@ namespace NcTalkOutlookAddIn.Controllers
             BackendPolicyStatus policyStatus,
             PasswordPolicyInfo passwordPolicy)
         {
+            if (launchOptions != null
+                && launchOptions.PrepareInitialSelections != null
+                && !launchOptions.PrepareInitialSelections())
+            {
+                return false;
+            }
+
             string basePath = string.IsNullOrWhiteSpace(settings.FileLinkBasePath)
                 ? AddinSettings.DefaultFileLinkBasePath
                 : settings.FileLinkBasePath;
@@ -172,10 +179,37 @@ namespace NcTalkOutlookAddIn.Controllers
                 basePath,
                 launchOptions))
             {
+                if (launchOptions != null && launchOptions.AttachmentMode)
+                {
+                    int expectedSelectionCount =
+                        launchOptions.InitialSelections != null
+                            ? launchOptions.InitialSelections.Count
+                            : 0;
+                    if (expectedSelectionCount <= 0
+                        || wizard.QueuedSelectionCount
+                        != expectedSelectionCount)
+                    {
+                        NextcloudTalkAddIn.LogFileLinkMessage(
+                            "Attachment queue handoff rejected (expected="
+                            + expectedSelectionCount.ToString(
+                                CultureInfo.InvariantCulture)
+                            + ", queued="
+                            + wizard.QueuedSelectionCount.ToString(
+                                CultureInfo.InvariantCulture)
+                            + ").");
+                        return false;
+                    }
+
+                    if (launchOptions.OnInitialQueueAdopted != null)
+                    {
+                        launchOptions.OnInitialQueueAdopted();
+                    }
+                }
+
                 if (wizard.ShowDialog() == DialogResult.OK && wizard.Result != null)
                 {
                     string languageOverride = settings != null ? settings.ShareBlockLang : "default";
-                    bool plainTextCompose = MailInteropController.IsPlainTextMail(mail);
+                    bool plainTextCompose = MailBodyInsertionController.IsPlainTextMail(mail);
                     NextcloudTalkAddIn.LogFileLinkMessage("Share created (folder=\"" + wizard.Result.FolderName + "\").");
                     ComposeLifecycleOrigin origin =
                         ComposeLifecycleOrigin.Create(configuration);
@@ -310,7 +344,7 @@ namespace NcTalkOutlookAddIn.Controllers
                 result.ShareUrl,
                 result.ShareId,
                 result.ShareToken,
-                ComposeShareLifecycleController.SecretDeliveryPlaceholder,
+                SeparatePasswordDeliveryController.SecretDeliveryPlaceholder,
                 result.ExpireDate,
                 result.Permissions,
                 result.FolderName,

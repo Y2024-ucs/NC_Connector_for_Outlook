@@ -42,6 +42,23 @@ $requiredFiles = @(
     "VENDOR.md"
 )
 
+[xml]$productXml = $text
+$namespaceManager = New-Object Xml.XmlNamespaceManager($productXml.NameTable)
+$namespaceManager.AddNamespace("w", "http://wixtoolset.org/schemas/v4/wxs")
+$descriptions = $productXml.SelectNodes("//w:RegistryValue[@Name='Description']", $namespaceManager)
+$summary = $productXml.SelectSingleNode("//w:SummaryInformation", $namespaceManager)
+if ($descriptions.Count -ne 2) {
+    $failures.Add("Both Outlook registry views must provide an add-in description.")
+}
+foreach ($description in $descriptions) {
+    if ($description.Value -ne "Nextcloud integration for Outlook") {
+        $failures.Add("Outlook registry descriptions must use the same neutral English wording.")
+    }
+}
+if ($null -eq $summary -or $summary.Description -ne "Nextcloud integration for Outlook") {
+    $failures.Add("The MSI summary must use the same neutral English description.")
+}
+
 foreach ($fileName in $requiredFiles) {
     if ($text -notmatch [regex]::Escape('Source="$(var.BuildOutputDir)' + $fileName + '"')) {
         $failures.Add("MSI does not package $fileName.")

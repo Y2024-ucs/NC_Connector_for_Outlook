@@ -459,7 +459,7 @@
     "message": "Nach Ablauf ist der Link nicht mehr abrufbar."
   },
   "sharing_step_files_title": {
-    "message": "Dateien oder Ordner auswählen"
+    "message": "Freigabe zusammenstellen"
   },
   "sharing_files_table_path": {
     "message": "Pfad"
@@ -616,6 +616,9 @@
   },
   "outlook_confirm_replace_room": {
     "message": "Für diesen Termin existiert bereits ein Talk-Raum. Ersetzen?"
+  },
+  "outlook_error_attach_room_to_appointment": {
+    "message": "Der Talk-Raum konnte dem Termin nicht hinzugefügt werden. Der bisherige Termininhalt wurde beibehalten."
   },
   "outlook_error_create_room_unexpected_format": {
     "message": "Unerwarteter Fehler beim Erstellen des Talk-Raums: $1"
@@ -1015,5 +1018,149 @@
   },
   "options_update_changelog_fixed": {
     "message": "Behoben"
+  },
+  "sharing_base_path_info": {
+    "message": "Zielordner:"
+  },
+  "sharing_button_add_local": {
+    "message": "+ Lokal"
+  },
+  "sharing_button_add_nextcloud": {
+    "message": "+ Meine Nextcloud"
+  },
+  "sharing_button_add_nextcloud_files": {
+    "message": "Dateien auswählen"
+  },
+  "sharing_button_add_nextcloud_folder": {
+    "message": "Ordner auswählen"
+  },
+  "sharing_source_local": {
+    "message": "Lokal"
+  },
+  "sharing_source_nextcloud": {
+    "message": "Meine Nextcloud"
+  },
+  "sharing_queue_entries_summary": {
+    "message": "Einträge: $1"
+  },
+  "sharing_queue_sources_summary": {
+    "message": "Quellen: $1"
+  },
+  "sharing_queue_total_summary": {
+    "message": "Gesamt: $1"
+  },
+  "sharing_queue_storage_loading": {
+    "message": "Speicherinformation wird geladen ..."
+  },
+  "sharing_queue_storage_available": {
+    "message": "Freier Speicher: $1 von $2"
+  },
+  "sharing_queue_storage_unlimited": {
+    "message": "Kein Speicherlimit · $1 belegt"
+  },
+  "sharing_queue_storage_unknown": {
+    "message": "Speicherinformation nicht verfügbar"
+  },
+  "sharing_queue_storage_insufficient": {
+    "message": "Benötigt: $1 · Verfügbar: $2"
+  },
+  "sharing_queue_expand_folder": {
+    "message": "Ordner „$1“ aufklappen"
+  },
+  "sharing_queue_collapse_folder": {
+    "message": "Ordner „$1“ zuklappen"
+  },
+  "sharing_queue_remove_item": {
+    "message": "„$1“ entfernen"
+  },
+  "sharing_status_waiting": {
+    "message": "Wartet"
+  },
+  "sharing_files_empty": {
+    "message": "Keine Dateien ausgewählt."
+  },
+  "outlook_sharing_queue_read_failed": {
+    "message": "Das ausgewählte Element konnte nicht gelesen werden: $1"
+  },
+  "outlook_nextcloud_picker_load_failed": {
+    "message": "Der Nextcloud-Ordner konnte nicht geladen werden."
+  },
+  "outlook_sharing_source_my_nextcloud": {
+    "message": "Meine Nextcloud"
+  },
+  "outlook_nextcloud_picker_files_title": {
+    "message": "Dateien auswählen"
+  },
+  "outlook_nextcloud_picker_folder_title": {
+    "message": "Ordner auswählen"
+  },
+  "outlook_nextcloud_picker_filter_placeholder": {
+    "message": "Nach Name filtern..."
+  },
+  "outlook_nextcloud_picker_navigate_back": {
+    "message": "Zurück"
+  },
+  "outlook_nextcloud_picker_navigate_forward": {
+    "message": "Vorwärts"
+  },
+  "outlook_nextcloud_picker_navigate_up": {
+    "message": "Eine Ebene nach oben"
+  },
+  "outlook_nextcloud_picker_refresh": {
+    "message": "Aktualisieren"
+  },
+  "outlook_nextcloud_picker_column_name": {
+    "message": "Name"
+  },
+  "outlook_nextcloud_picker_column_size": {
+    "message": "Größe"
+  },
+  "outlook_nextcloud_picker_column_modified": {
+    "message": "Geändert"
+  },
+  "outlook_nextcloud_picker_no_selection": {
+    "message": "Keine Datei ausgewählt"
+  },
+  "outlook_nextcloud_picker_no_preview": {
+    "message": "Keine Vorschau verfügbar"
+  },
+  "outlook_nextcloud_picker_multiple_selection": {
+    "message": "Ausgewählte Elemente: {0}"
+  },
+  "outlook_nextcloud_picker_preview_loading": {
+    "message": "Vorschau wird geladen..."
+  },
+  "outlook_nextcloud_picker_preview_load_failed": {
+    "message": "Vorschau konnte nicht geladen werden"
+  },
+  "outlook_nextcloud_picker_preview_skipped": {
+    "message": "Vorschau für große Dateien übersprungen"
+  },
+  "outlook_nextcloud_picker_close_button": {
+    "message": "Schließen"
+  },
+  "outlook_nextcloud_picker_select_files_button": {
+    "message": "Dateien auswählen"
+  },
+  "outlook_nextcloud_picker_select_folder_button": {
+    "message": "Diesen Ordner auswählen"
+  },
+  "outlook_nextcloud_picker_loading": {
+    "message": "Ordner wird geladen..."
+  },
+  "outlook_nextcloud_picker_reading_folder": {
+    "message": "Ordnerinhalt wird eingelesen..."
+  },
+  "outlook_nextcloud_picker_storage_used": {
+    "message": "Speicher: $1 belegt"
+  },
+  "outlook_nextcloud_picker_storage_of": {
+    "message": "Speicher: $1 von $2 belegt"
+  },
+  "outlook_sharing_add_nextcloud_files": {
+    "message": "Dateien aus Meine Nextcloud..."
+  },
+  "outlook_sharing_add_nextcloud_folder": {
+    "message": "Ordner aus Meine Nextcloud..."
   }
 }

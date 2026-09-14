@@ -10,7 +10,7 @@
     Scope="perMachine">
 
     <SummaryInformation
-      Description="NC Connector for Outlook Integration fuer Outlook"
+      Description="Nextcloud integration for Outlook"
       Manufacturer="Bastian Kleinschmidt" />
 
     <MajorUpgrade AllowDowngrades="yes" />
@@ -42,7 +42,7 @@
         <Component Id="cmpOutlookAddinReg" Guid="{8ED9BE3B-8138-4F3D-92FD-A5DA0CECA9F6}">
           <RegistryValue Root="HKLM" Key="Software\Microsoft\Office\Outlook\Addins\NcTalkOutlook.AddIn" Name="LoadBehavior" Type="integer" Value="3" KeyPath="yes" />
           <RegistryValue Root="HKLM" Key="Software\Microsoft\Office\Outlook\Addins\NcTalkOutlook.AddIn" Name="FriendlyName" Type="string" Value="NC Connector for Outlook" />
-          <RegistryValue Root="HKLM" Key="Software\Microsoft\Office\Outlook\Addins\NcTalkOutlook.AddIn" Name="Description" Type="string" Value="Nextcloud Talk &amp; Files nahtlos in Outlook integriert" />
+          <RegistryValue Root="HKLM" Key="Software\Microsoft\Office\Outlook\Addins\NcTalkOutlook.AddIn" Name="Description" Type="string" Value="Nextcloud integration for Outlook" />
           <RegistryValue Root="HKLM" Key="Software\Microsoft\Office\Outlook\Addins\NcTalkOutlook.AddIn" Name="CommandLineSafe" Type="integer" Value="0" />
 
           <RegistryValue Root="HKLM" Key="Software\Classes\NcTalkOutlook.AddIn" Type="string" Value="NcTalkOutlookAddIn.NextcloudTalkAddIn" />
@@ -84,7 +84,7 @@
       <Component Id="cmpOutlookAddinReg32" Guid="{BC89C35C-3ACF-4F5B-B851-AFE8576EE014}" Bitness="always32">
         <RegistryValue Root="HKLM" Key="Software\Microsoft\Office\Outlook\Addins\NcTalkOutlook.AddIn" Name="LoadBehavior" Type="integer" Value="3" KeyPath="yes" />
         <RegistryValue Root="HKLM" Key="Software\Microsoft\Office\Outlook\Addins\NcTalkOutlook.AddIn" Name="FriendlyName" Type="string" Value="NC Connector for Outlook" />
-        <RegistryValue Root="HKLM" Key="Software\Microsoft\Office\Outlook\Addins\NcTalkOutlook.AddIn" Name="Description" Type="string" Value="Nextcloud Talk &amp; Files nahtlos in Outlook integriert" />
+        <RegistryValue Root="HKLM" Key="Software\Microsoft\Office\Outlook\Addins\NcTalkOutlook.AddIn" Name="Description" Type="string" Value="Nextcloud integration for Outlook" />
         <RegistryValue Root="HKLM" Key="Software\Microsoft\Office\Outlook\Addins\NcTalkOutlook.AddIn" Name="CommandLineSafe" Type="integer" Value="0" />
 
         <RegistryValue Root="HKLM" Key="Software\Classes\NcTalkOutlook.AddIn" Type="string" Value="NcTalkOutlookAddIn.NextcloudTalkAddIn" />

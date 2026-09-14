@@ -1,0 +1,370 @@
+// Copyright (c) 2025 Bastian Kleinschmidt
+// Licensed under the GNU Affero General Public License v3.0.
+// See LICENSE.txt for details.
+
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Globalization;
+using System.IO;
+using System.Net;
+using System.Reflection;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using NcTalkOutlookAddIn.Services;
+using NcTalkOutlookAddIn.Models;
+using NcTalkOutlookAddIn.Settings;
+using NcTalkOutlookAddIn.Utilities;
+using Outlook = Microsoft.Office.Interop.Outlook;
+
+namespace NcTalkOutlookAddIn.UI
+{
+    internal sealed partial class SettingsForm
+    {
+        private void InitializeGeneralTab()
+        {
+            _generalTab.AutoScroll = true;
+            _generalTab.Resize += (s, e) => ApplyGeneralTabFieldSizing();
+
+            _serverUrlTextBox.TextChanged += OnGeneralValueChanged;
+            _usernameTextBox.TextChanged += OnGeneralValueChanged;
+            _appPasswordTextBox.TextChanged += OnGeneralValueChanged;
+
+            var serverLabel = new Label
+            {
+                Text = Strings.LabelServerUrl,
+                Location = new Point(15, 20),
+                AutoSize = true
+            };
+            _generalTab.Controls.Add(serverLabel);
+
+            _serverUrlTextBox.Location = new Point(150, 16);
+            _serverUrlTextBox.Width = 280;
+            _serverUrlTextBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            _generalTab.Controls.Add(_serverUrlTextBox);
+
+            var authGroup = new GroupBox
+            {
+                Text = Strings.GroupAuthentication,
+                Location = new Point(18, 55),
+                Size = new Size(440, 120),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+            };
+            _generalTab.Controls.Add(authGroup);
+
+            _manualRadio.Text = Strings.RadioManual;
+            _manualRadio.Location = new Point(12, 25);
+            _manualRadio.AutoSize = true;
+            _manualRadio.CheckedChanged += OnGeneralValueChanged;
+            authGroup.Controls.Add(_manualRadio);
+
+            _loginFlowRadio.Text = Strings.RadioLoginFlow;
+            _loginFlowRadio.Location = new Point(12, 55);
+            _loginFlowRadio.AutoSize = true;
+            _loginFlowRadio.CheckedChanged += OnGeneralValueChanged;
+            authGroup.Controls.Add(_loginFlowRadio);
+
+            _loginFlowButton.Text = Strings.ButtonLoginFlow;
+            _loginFlowButton.Location = new Point(12, 85);
+            _loginFlowButton.Width = 200;
+            _loginFlowButton.Click += OnLoginFlowButtonClick;
+            authGroup.Controls.Add(_loginFlowButton);
+
+            _testButton.Text = Strings.ButtonTestConnection;
+            _testButton.Location = new Point(224, 85);
+            _testButton.Width = 200;
+            _testButton.Click += OnTestButtonClick;
+            authGroup.Controls.Add(_testButton);
+
+            var userLabel = new Label
+            {
+                Text = Strings.LabelUsername,
+                Location = new Point(15, 200),
+                AutoSize = true
+            };
+            _generalTab.Controls.Add(userLabel);
+
+            _usernameTextBox.Location = new Point(150, 196);
+            _usernameTextBox.Width = 280;
+            _usernameTextBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            _generalTab.Controls.Add(_usernameTextBox);
+
+            var passwordLabel = new Label
+            {
+                Text = Strings.LabelAppPassword,
+                Location = new Point(15, 235),
+                AutoSize = true
+            };
+            _generalTab.Controls.Add(passwordLabel);
+
+            _appPasswordTextBox.Location = new Point(150, 231);
+            _appPasswordTextBox.Width = 280;
+            _appPasswordTextBox.UseSystemPasswordChar = true;
+            _appPasswordTextBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            _generalTab.Controls.Add(_appPasswordTextBox);
+
+            ApplyGeneralTabFieldSizing();
+        }
+
+        private void ApplyGeneralTabFieldSizing()
+        {
+            const int fieldLeft = 150;
+            const int rightMargin = 24;
+            const int minWidth = 260;
+
+            int availableWidth = _generalTab.ClientSize.Width - fieldLeft - rightMargin;
+            int width = Math.Max(minWidth, availableWidth);
+
+            _serverUrlTextBox.Width = width;
+            _usernameTextBox.Width = width;
+            _appPasswordTextBox.Width = width;
+        }
+
+        private async void OnLoginFlowButtonClick(object sender, EventArgs e)
+        {
+            if (_isBusy)
+            {
+                return;
+            }
+            string baseUrl = _serverUrlTextBox.Text.Trim();
+            if (string.IsNullOrWhiteSpace(baseUrl))
+            {
+                SetStatus(Strings.StatusServerUrlRequired, true);
+                return;
+            }
+            var normalizedUrl = new TalkServiceConfiguration(baseUrl, string.Empty, string.Empty).GetNormalizedBaseUrl();
+            if (string.IsNullOrWhiteSpace(normalizedUrl))
+            {
+                SetStatus(Strings.StatusInvalidServerUrl, true);
+                return;
+            }
+
+            _serverUrlTextBox.Text = normalizedUrl;
+
+            SetBusy(true);
+            SetStatus(Strings.StatusLoginFlowStarting, false);
+            SecurityProtocolType previousSecurityProtocol = ServicePointManager.SecurityProtocol;
+            bool temporaryTlsApplied = false;
+
+            try
+            {
+                previousSecurityProtocol = ApplyTemporaryTlsForConnectivity("settings_login_flow");
+                temporaryTlsApplied = true;
+
+                var flowService = new TalkLoginFlowService(normalizedUrl);
+                var startInfo = flowService.StartLoginFlow();
+
+                BrowserLauncher.OpenUrl(
+                    startInfo.LoginUrl,
+                    LogCategories.Core,
+                    "Failed to open browser for login flow URL.");
+                SetStatus(Strings.StatusLoginFlowBrowser, false);
+
+                var credentials = await Task.Run(() => flowService.CompleteLoginFlow(startInfo, TimeSpan.FromMinutes(2), TimeSpan.FromSeconds(2)));
+                _usernameTextBox.Text = credentials.LoginName ?? string.Empty;
+                _appPasswordTextBox.Text = credentials.AppPassword ?? string.Empty;
+                _loginFlowRadio.Checked = true;
+                var verificationService = new TalkService(new TalkServiceConfiguration(
+                    normalizedUrl,
+                    _usernameTextBox.Text,
+                    _appPasswordTextBox.Text));
+                string versionResponse = string.Empty;
+                bool verified = await Task.Run(() => verificationService.VerifyConnection(out versionResponse));
+                if (!verified)
+                {
+                    string failureMessage = string.IsNullOrWhiteSpace(versionResponse)
+                        ? Strings.ErrorCredentialsNotVerified
+                        : versionResponse;
+                    DiagnosticsLogger.Log(
+                        LogCategories.Core,
+                        "Login flow credential verification failed: "
+                        + failureMessage);
+                    SetStatus(
+                        string.Format(
+                            CultureInfo.CurrentCulture,
+                            Strings.StatusLoginFlowFailure,
+                            failureMessage),
+                        true);
+                    return;
+                }
+
+                SetStatus(Strings.StatusLoginFlowSuccess, false);
+            }
+            catch (TalkServiceException ex)
+            {
+                DiagnosticsLogger.LogException(LogCategories.Core, "Login flow failed.", ex);
+                HandleServiceFailure(Strings.StatusLoginFlowFailure, ex);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsLogger.LogException(LogCategories.Core, "Login flow failed unexpectedly.", ex);
+                SetStatus(string.Format(Strings.StatusLoginFlowFailure, ex.Message), true);
+            }
+            finally
+            {
+                if (temporaryTlsApplied)
+                {
+                    RestoreTemporaryTls(previousSecurityProtocol, "settings_login_flow");
+                }
+                SetBusy(false);
+                UpdateControlState();
+            }
+        }
+
+        // WinForms event handlers must stay async void; keep awaited flow inside this method-level try/catch.
+        private async void OnTestButtonClick(object sender, EventArgs e)
+        {
+            if (_isBusy)
+            {
+                return;
+            }
+            string baseUrl = _serverUrlTextBox.Text.Trim();
+            string user = _usernameTextBox.Text.Trim();
+            string appPassword = _appPasswordTextBox.Text;
+
+            if (string.IsNullOrWhiteSpace(baseUrl) ||
+                string.IsNullOrWhiteSpace(user) ||
+                string.IsNullOrEmpty(appPassword))
+            {
+                SetStatus(Strings.StatusMissingFields, true);
+                return;
+            }
+            string normalizedUrl;
+            if (!NextcloudUriValidator.TryNormalizeBaseUrl(baseUrl, out normalizedUrl))
+            {
+                SetStatus(Strings.StatusInvalidServerUrl, true);
+                return;
+            }
+            _serverUrlTextBox.Text = normalizedUrl;
+
+            SetBusy(true);
+            SetStatus(Strings.StatusTestRunning, false);
+            DiagnosticsLogger.Log(LogCategories.Core, "Connection test started (Server=" + normalizedUrl + ", User=" + user + ").");
+            SecurityProtocolType previousSecurityProtocol = ServicePointManager.SecurityProtocol;
+            bool temporaryTlsApplied = false;
+
+            try
+            {
+                previousSecurityProtocol = ApplyTemporaryTlsForConnectivity("settings_connection_test");
+                temporaryTlsApplied = true;
+
+                var service = new TalkService(new TalkServiceConfiguration(normalizedUrl, user, appPassword));
+                string responseMessage = string.Empty;
+                bool success = await Task.Run(() => service.VerifyConnection(out responseMessage));
+                if (success)
+                {
+                    DiagnosticsLogger.Log(LogCategories.Core, "Connection test succeeded (Response=" + (string.IsNullOrEmpty(responseMessage) ? "OK" : responseMessage) + ").");
+                    string suffix = string.IsNullOrEmpty(responseMessage)
+                        ? string.Empty
+                        : " (" + string.Format(Strings.StatusTestSuccessVersionFormat, responseMessage) + ")";
+                    SetStatus(string.Format(Strings.StatusTestSuccessFormat, suffix), false);
+                }
+                else
+                {
+                    var failureMessage = string.IsNullOrEmpty(responseMessage)
+                        ? Strings.StatusTestFailureUnknown
+                        : responseMessage;
+                    DiagnosticsLogger.Log(LogCategories.Core, "Connection test failed: " + failureMessage);
+                    SetStatus(string.Format(Strings.StatusTestFailure, failureMessage), true);
+                }
+            }
+            catch (TalkServiceException ex)
+            {
+                DiagnosticsLogger.LogException(LogCategories.Core, "Connection test failed with service error.", ex);
+                HandleServiceFailure(Strings.StatusTestFailure, ex);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsLogger.LogException(LogCategories.Core, "Connection test failed unexpectedly.", ex);
+                SetStatus(string.Format(Strings.StatusTestFailure, ex.Message), true);
+            }
+            finally
+            {
+                if (temporaryTlsApplied)
+                {
+                    RestoreTemporaryTls(previousSecurityProtocol, "settings_connection_test");
+                }
+                SetBusy(false);
+                UpdateControlState();
+            }
+        }
+
+        private SecurityProtocolType ApplyTemporaryTlsForConnectivity(string source)
+        {
+            SecurityProtocolType previous = ServicePointManager.SecurityProtocol;
+            try
+            {
+                TransportSecurityConfigurator.Apply(
+                    _tlsUseSystemDefaultCheckBox.Checked,
+                    _tlsEnable12CheckBox.Checked,
+                    _tlsEnable13CheckBox.Checked,
+                    source);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsLogger.LogException(
+                    LogCategories.Core,
+                    "Failed to apply temporary TLS settings (source=" + (source ?? string.Empty) + ").",
+                    ex);
+                throw;
+            }
+            return previous;
+        }
+
+        private static void RestoreTemporaryTls(SecurityProtocolType previous, string source)
+        {
+            ServicePointManager.SecurityProtocol = previous;
+            DiagnosticsLogger.Log(
+                LogCategories.Core,
+                "Transport security restored after temporary settings operation (source="
+                + (source ?? string.Empty)
+                + ", securityProtocol="
+                + previous
+                + ").");
+        }
+
+        private void HandleServiceFailure(string statusFormat, TalkServiceException ex)
+        {
+            string message = ex != null && !string.IsNullOrWhiteSpace(ex.Message)
+                ? ex.Message.Trim()
+                : Strings.StatusTestFailureUnknown;
+
+            string summary = ExtractFirstLine(message);
+            SetStatus(string.Format(statusFormat, summary), true);
+            if (ex != null && ex.IsTransportError)
+            {
+                MessageBox.Show(
+                    this,
+                    message,
+                    Strings.ConnectionDiagnosticsDialogTitle,
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
+        }
+
+        private static string ExtractFirstLine(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                return Strings.StatusTestFailureUnknown;
+            }
+            string[] lines = message.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            if (lines.Length == 0)
+            {
+                return Strings.StatusTestFailureUnknown;
+            }
+            return lines[0].Trim();
+        }
+
+        private void OnGeneralValueChanged(object sender, EventArgs e)
+        {
+            if (_isBusy)
+            {
+                return;
+            }
+
+            UpdateControlState();
+        }
+
+    }
+}

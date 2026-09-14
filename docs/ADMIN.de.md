@@ -525,12 +525,15 @@ Kann eine erforderliche abschließende Signaturprüfung nicht abgeschlossen werd
 
 ### Freigaben und Uploads
 
-Der Freigabe-Assistent akzeptiert Dateien und Ordner. Er wählt automatisch eine vom Server und den ausgewählten Dateien unterstützte Uploadmethode und zeigt anschließend Scan, Ordnervorbereitung, Dateien, Bytes und Übertragungsrate. Implementierungsdetails stehen in [DEVELOPMENT.de.md](DEVELOPMENT.de.md#filelink-upload-architektur).
+Der Freigabe-Assistent akzeptiert lokale Dateien und Ordner sowie vorhandene Inhalte aus der eigenen Nextcloud des konfigurierten Benutzers. Die Warteschlange zeigt den vollständigen Zielpfad, gruppiert beide Quellen und nennt Einträge, Quellenanzahl, Gesamtgröße und Nextcloud-Speicherstatus. Der Picker **Meine Nextcloud** bietet Explorer-artige Schaltflächen für Zurück, Vorwärts, Hoch und Aktualisieren, klickbare Pfadsegmente, Filter, vertraute Dateisymbole, Dateidetails, einen eindeutigen Status bei Mehrfachauswahl, Speicherinformationen und bei Bedarf geladene Vorschauen für Bilder und vom Nextcloud-Server unterstützte Dokumente. Dokumentvorschauen, etwa für PDF- oder Office-Dateien, hängen von den auf dem Server aktivierten Vorschau-Anbietern ab. Diese Quelle funktioniert ohne NC Connector Backend.
+
+Ausgewählte Nextcloud-Inhalte werden innerhalb desselben Kontos in den neuen Freigabeordner kopiert. Das Original bleibt unverändert und wird für die Übertragung nicht nach Outlook heruntergeladen. Für eine Vorschau fordert Outlook zuerst ein größenbegrenztes, von Nextcloud erzeugtes Bild an. Hat der Server für eine unterstützte Bilddatei keine erzeugte Vorschau, kann Outlook vorübergehend das Originalbild bis 5 MiB laden. Andere Originaldateien werden für Vorschauen nicht heruntergeladen. Lokale Inhalte verwenden weiterhin die vom Server und den ausgewählten Dateien unterstützte Uploadmethode. Implementierungsdetails stehen in [DEVELOPMENT.de.md](DEVELOPMENT.de.md#filelink-upload-architektur).
 
 Betriebsgrenzen und Fehlerverhalten:
 
 - symbolische Links und Junctions werden abgelehnt
 - eine nach dem ersten Scan veränderte Quelldatei stoppt den Upload
+- das konfigurierte Konto benötigt Lesezugriff auf ausgewählte Nextcloud-Inhalte und Schreibzugriff auf den Zielordner
 - ein bereits vorhandener Stammordnername stoppt eine manuelle Freigabe; die Anhangsautomatisierung kann einen nummerierten Namen wählen
 - HTTP `507` bedeutet zu wenig freien Nextcloud-Speicher
 - Proxy-Timeouts und Request-Größenlimits können Uploads beeinträchtigen, obwohl Client und Nextcloud ansonsten funktionieren

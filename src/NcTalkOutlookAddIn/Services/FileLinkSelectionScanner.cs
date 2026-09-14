@@ -51,6 +51,8 @@ namespace NcTalkOutlookAddIn.Services
     {
         private readonly Func<FileLinkDuplicateInfo, string>
             _duplicateResolver;
+        private readonly IDictionary<FileLinkSelection, FileLinkQueueNode>
+            _queueSnapshots;
         private readonly CancellationToken _cancellationToken;
         private readonly List<FileLinkPlannedFile> _files =
             new List<FileLinkPlannedFile>();
@@ -69,15 +71,20 @@ namespace NcTalkOutlookAddIn.Services
         private long _totalBytes;
 
         private FileLinkSelectionScanner(
+            IDictionary<FileLinkSelection, FileLinkQueueNode>
+                queueSnapshots,
             Func<FileLinkDuplicateInfo, string> duplicateResolver,
             CancellationToken cancellationToken)
         {
+            _queueSnapshots = queueSnapshots;
             _duplicateResolver = duplicateResolver;
             _cancellationToken = cancellationToken;
         }
 
         internal static FileLinkSelectionScanResult Scan(
             IList<FileLinkSelection> selections,
+            IDictionary<FileLinkSelection, FileLinkQueueNode>
+                queueSnapshots,
             Func<FileLinkDuplicateInfo, string> duplicateResolver,
             CancellationToken cancellationToken)
         {
@@ -85,8 +92,13 @@ namespace NcTalkOutlookAddIn.Services
             {
                 throw new ArgumentNullException("selections");
             }
+            if (queueSnapshots == null)
+            {
+                throw new ArgumentNullException("queueSnapshots");
+            }
 
             return new FileLinkSelectionScanner(
+                queueSnapshots,
                 duplicateResolver,
                 cancellationToken)
                 .ScanSelections(selections);
@@ -105,16 +117,25 @@ namespace NcTalkOutlookAddIn.Services
 
                 _selectionBytes[selection] = 0;
                 _selectionFileCounts[selection] = 0;
+                FileLinkQueueNode queueSnapshot;
+                if (!_queueSnapshots.TryGetValue(
+                        selection,
+                        out queueSnapshot)
+                    || queueSnapshot == null)
+                {
+                    throw CreateSourceChangedException();
+                }
 
-                if (selection.SelectionType
-                    == FileLinkSelectionType.File)
+                if (selection.Source
+                    == FileLinkSelectionSource.Nextcloud)
                 {
-                    AddSingleFile(selection);
+                    AddNextcloudSelection(selection);
+                    continue;
                 }
-                else
-                {
-                    AddDirectory(selection);
-                }
+
+                AddLocalSnapshot(
+                    selection,
+                    queueSnapshot);
             }
 
             return new FileLinkSelectionScanResult(
@@ -125,140 +146,314 @@ namespace NcTalkOutlookAddIn.Services
                 _totalBytes);
         }
 
-        private void AddSingleFile(FileLinkSelection selection)
+        private void AddNextcloudSelection(
+            FileLinkSelection selection)
         {
-            var fileInfo = new FileInfo(selection.LocalPath);
-            if (!fileInfo.Exists)
+            if (selection.NextcloudEntries == null
+                || selection.NextcloudEntries.Count == 0)
             {
                 throw CreateSourceChangedException();
             }
-            RejectReparsePoint(fileInfo);
 
-            string fileName = FileLinkPath.SanitizeComponent(
-                fileInfo.Name);
-            if (string.IsNullOrWhiteSpace(fileName))
+            if (selection.SelectionType == FileLinkSelectionType.File)
             {
-                throw CreateSourceChangedException();
+                NextcloudStorageEntry entry = selection.NextcloudEntries
+                    .FirstOrDefault(
+                        item => item != null
+                                && !item.IsDirectory
+                                && string.Equals(
+                                    item.RelativePath,
+                                    selection.NextcloudPath,
+                                    StringComparison.Ordinal));
+                if (entry == null)
+                {
+                    throw CreateSourceChangedException();
+                }
+
+                string fileName = FileLinkPath.SanitizeComponent(
+                    entry.DisplayName);
+                if (string.IsNullOrWhiteSpace(fileName))
+                {
+                    throw CreateSourceChangedException();
+                }
+                AddPlannedNextcloudFile(
+                    selection,
+                    entry,
+                    ReserveUniqueName(
+                        string.Empty,
+                        fileName,
+                        selection,
+                        false));
+                return;
             }
-            string uniqueName = ReserveUniqueName(
-                string.Empty,
-                fileName,
-                selection,
-                false);
-            AddPlannedFile(
-                selection,
-                fileInfo,
-                uniqueName);
+
+            AddNextcloudDirectory(selection);
         }
 
-        private void AddDirectory(FileLinkSelection selection)
+        private void AddNextcloudDirectory(
+            FileLinkSelection selection)
         {
-            var rootInfo = new DirectoryInfo(selection.LocalPath);
-            if (!rootInfo.Exists)
+            NextcloudStorageEntry root = selection.NextcloudEntries
+                .FirstOrDefault(
+                    item => item != null
+                            && item.IsDirectory
+                            && string.Equals(
+                                item.RelativePath,
+                                selection.NextcloudPath,
+                                StringComparison.Ordinal));
+            if (root == null)
             {
                 throw CreateSourceChangedException();
             }
-            RejectReparsePoint(rootInfo);
 
             string rootName = FileLinkPath.SanitizeComponent(
-                rootInfo.Name);
+                selection.DisplayName);
             if (string.IsNullOrWhiteSpace(rootName))
             {
-                rootName = "Folder";
+                rootName = "Nextcloud";
             }
             string remoteRoot = ReserveUniqueName(
                 string.Empty,
                 rootName,
                 selection,
                 true);
+            _directories.Add(remoteRoot);
 
-            var pending = new Stack<DirectoryScanEntry>();
-            pending.Push(new DirectoryScanEntry(
-                rootInfo,
-                remoteRoot));
-
-            while (pending.Count > 0)
+            var directoryTargets = new Dictionary<string, string>(
+                StringComparer.Ordinal);
+            directoryTargets[root.RelativePath] = remoteRoot;
+            IEnumerable<NextcloudStorageEntry> descendants =
+                selection.NextcloudEntries
+                    .Where(
+                        item => item != null
+                                && !string.Equals(
+                                    item.RelativePath,
+                                    root.RelativePath,
+                                    StringComparison.Ordinal))
+                    .OrderBy(
+                        item => NextcloudPath.GetDepth(
+                            item.RelativePath))
+                    .ThenBy(item => item.IsDirectory ? 0 : 1)
+                    .ThenBy(
+                        item => item.RelativePath,
+                        StringComparer.Ordinal);
+            foreach (NextcloudStorageEntry entry in descendants)
             {
                 _cancellationToken.ThrowIfCancellationRequested();
-                DirectoryScanEntry current = pending.Pop();
-                _directories.Add(current.RemotePath);
-
-                FileSystemInfo[] children = current.LocalDirectory
-                    .GetFileSystemInfos()
-                    .OrderBy(
-                        item => item.Name,
-                        StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
-                var childDirectoryEntries =
-                    new List<DirectoryScanEntry>();
-                foreach (DirectoryInfo child
-                    in children.OfType<DirectoryInfo>())
+                if (!IsDescendantPath(
+                    root.RelativePath,
+                    entry.RelativePath))
                 {
-                    _cancellationToken.ThrowIfCancellationRequested();
-                    RejectReparsePoint(child);
-                    string childName = FileLinkPath.SanitizeComponent(
-                        child.Name);
-                    if (string.IsNullOrWhiteSpace(childName))
-                    {
-                        childName = "Folder";
-                    }
-                    string uniqueChildName = ReserveUniqueName(
-                        current.RemotePath,
-                        childName,
-                        selection,
-                        true);
-                    childDirectoryEntries.Add(
-                        new DirectoryScanEntry(
-                            child,
-                            FileLinkPath.Combine(
-                                current.RemotePath,
-                                uniqueChildName)));
-                }
-                for (int index = childDirectoryEntries.Count - 1;
-                    index >= 0;
-                    index--)
-                {
-                    pending.Push(childDirectoryEntries[index]);
+                    throw CreateSourceChangedException();
                 }
 
-                foreach (FileInfo childFile
-                    in children.OfType<FileInfo>())
+                string sourceParent = NextcloudPath.GetParent(
+                    entry.RelativePath);
+                string targetParent;
+                if (!directoryTargets.TryGetValue(
+                    sourceParent,
+                    out targetParent))
                 {
-                    _cancellationToken.ThrowIfCancellationRequested();
-                    RejectReparsePoint(childFile);
-                    string fileName = FileLinkPath.SanitizeComponent(
-                        childFile.Name);
-                    if (string.IsNullOrWhiteSpace(fileName))
-                    {
-                        fileName = "File";
-                    }
-                    string uniqueFileName = ReserveUniqueName(
-                        current.RemotePath,
-                        fileName,
+                    throw CreateSourceChangedException();
+                }
+                string name = FileLinkPath.SanitizeComponent(
+                    entry.DisplayName);
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    name = entry.IsDirectory ? "Folder" : "File";
+                }
+                string uniqueName = ReserveUniqueName(
+                    targetParent,
+                    name,
+                    selection,
+                    entry.IsDirectory);
+                string targetPath = FileLinkPath.Combine(
+                    targetParent,
+                    uniqueName);
+                if (entry.IsDirectory)
+                {
+                    directoryTargets[entry.RelativePath] = targetPath;
+                    _directories.Add(targetPath);
+                }
+                else
+                {
+                    AddPlannedNextcloudFile(
                         selection,
-                        false);
-                    AddPlannedFile(
-                        selection,
-                        childFile,
-                        FileLinkPath.Combine(
-                            current.RemotePath,
-                            uniqueFileName));
+                        entry,
+                        targetPath);
                 }
             }
         }
 
-        private void AddPlannedFile(
+        private void AddPlannedNextcloudFile(
             FileLinkSelection selection,
-            FileInfo fileInfo,
+            NextcloudStorageEntry entry,
             string remotePath)
         {
-            fileInfo.Refresh();
-            if (!fileInfo.Exists)
+            long length = Math.Max(0, entry.Length);
+            _totalBytes = checked(_totalBytes + length);
+            _selectionBytes[selection] = checked(
+                _selectionBytes[selection] + length);
+            _selectionFileCounts[selection] = checked(
+                _selectionFileCounts[selection] + 1);
+            _files.Add(new FileLinkPlannedFile(
+                selection,
+                entry.RelativePath,
+                remotePath,
+                length,
+                entry.LastModifiedUtc ?? DateTime.MinValue,
+                FileLinkUploadTransport.ServerCopy));
+        }
+
+        private static bool IsDescendantPath(
+            string parent,
+            string candidate)
+        {
+            string normalizedParent = (parent ?? string.Empty)
+                .Trim('/');
+            string normalizedCandidate = (candidate ?? string.Empty)
+                .Trim('/');
+            if (normalizedParent.Length == 0)
+            {
+                return normalizedCandidate.Length > 0;
+            }
+            return normalizedCandidate.StartsWith(
+                normalizedParent + "/",
+                StringComparison.Ordinal);
+        }
+
+        private void AddLocalSnapshot(
+            FileLinkSelection selection,
+            FileLinkQueueNode snapshot)
+        {
+            bool expectsDirectory =
+                selection.SelectionType
+                == FileLinkSelectionType.Directory;
+            if (snapshot.IsDirectory != expectsDirectory
+                || !PathsEqual(
+                    selection.LocalPath,
+                    snapshot.SourcePath))
             {
                 throw CreateSourceChangedException();
             }
 
-            long length = Math.Max(0, fileInfo.Length);
+            if (!snapshot.IsDirectory)
+            {
+                string fileName = SanitizeSnapshotName(
+                    snapshot,
+                    false);
+                AddSnapshotFile(
+                    selection,
+                    snapshot,
+                    ReserveUniqueName(
+                        string.Empty,
+                        fileName,
+                        selection,
+                        false));
+                return;
+            }
+
+            string rootName = SanitizeSnapshotName(
+                snapshot,
+                true);
+            string remoteRoot = ReserveUniqueName(
+                string.Empty,
+                rootName,
+                selection,
+                true);
+            AddSnapshotDirectory(
+                selection,
+                snapshot,
+                remoteRoot);
+        }
+
+        private void AddSnapshotDirectory(
+            FileLinkSelection selection,
+            FileLinkQueueNode directory,
+            string remotePath)
+        {
+            _cancellationToken.ThrowIfCancellationRequested();
+            ValidateSnapshotDirectory(directory);
+            _directories.Add(remotePath);
+
+            var childDirectories =
+                new List<KeyValuePair<FileLinkQueueNode, string>>();
+            foreach (FileLinkQueueNode child in directory.Children)
+            {
+                _cancellationToken.ThrowIfCancellationRequested();
+                if (child == null || !child.IsDirectory)
+                {
+                    continue;
+                }
+                ValidateDirectChild(directory, child);
+                string targetPath = FileLinkPath.Combine(
+                    remotePath,
+                    ReserveUniqueName(
+                        remotePath,
+                        SanitizeSnapshotName(child, true),
+                        selection,
+                        true));
+                childDirectories.Add(
+                    new KeyValuePair<FileLinkQueueNode, string>(
+                        child,
+                        targetPath));
+            }
+
+            foreach (FileLinkQueueNode child in directory.Children)
+            {
+                _cancellationToken.ThrowIfCancellationRequested();
+                if (child == null || child.IsDirectory)
+                {
+                    continue;
+                }
+                ValidateDirectChild(directory, child);
+                string targetPath = FileLinkPath.Combine(
+                    remotePath,
+                    ReserveUniqueName(
+                        remotePath,
+                        SanitizeSnapshotName(child, false),
+                        selection,
+                        false));
+                AddSnapshotFile(
+                    selection,
+                    child,
+                    targetPath);
+            }
+
+            foreach (KeyValuePair<FileLinkQueueNode, string> child
+                in childDirectories)
+            {
+                AddSnapshotDirectory(
+                    selection,
+                    child.Key,
+                    child.Value);
+            }
+        }
+
+        private void AddSnapshotFile(
+            FileLinkSelection selection,
+            FileLinkQueueNode snapshot,
+            string remotePath)
+        {
+            _cancellationToken.ThrowIfCancellationRequested();
+            var fileInfo = new FileInfo(snapshot.SourcePath);
+            fileInfo.Refresh();
+            if (!fileInfo.Exists
+                || snapshot.IsDirectory
+                || !snapshot.Length.HasValue
+                || !snapshot.LastWriteTimeUtc.HasValue)
+            {
+                throw CreateSourceChangedException();
+            }
+            RejectReparsePoint(fileInfo);
+            if (fileInfo.Length != snapshot.Length.Value
+                || fileInfo.LastWriteTimeUtc
+                   != snapshot.LastWriteTimeUtc.Value)
+            {
+                throw CreateSourceChangedException();
+            }
+
+            long length = Math.Max(0, snapshot.Length.Value);
             _totalBytes = checked(_totalBytes + length);
             _selectionBytes[selection] = checked(
                 _selectionBytes[selection] + length);
@@ -269,7 +464,85 @@ namespace NcTalkOutlookAddIn.Services
                 fileInfo.FullName,
                 remotePath,
                 length,
-                fileInfo.LastWriteTimeUtc));
+                snapshot.LastWriteTimeUtc.Value));
+        }
+
+        private static void ValidateSnapshotDirectory(
+            FileLinkQueueNode snapshot)
+        {
+            if (snapshot == null || !snapshot.IsDirectory)
+            {
+                throw CreateSourceChangedException();
+            }
+            var directory = new DirectoryInfo(snapshot.SourcePath);
+            directory.Refresh();
+            if (!directory.Exists)
+            {
+                throw CreateSourceChangedException();
+            }
+            RejectReparsePoint(directory);
+        }
+
+        private static void ValidateDirectChild(
+            FileLinkQueueNode parent,
+            FileLinkQueueNode child)
+        {
+            string childParent;
+            try
+            {
+                childParent = Path.GetDirectoryName(
+                    Path.GetFullPath(child.SourcePath));
+            }
+            catch
+            {
+                throw CreateSourceChangedException();
+            }
+            if (!PathsEqual(parent.SourcePath, childParent))
+            {
+                throw CreateSourceChangedException();
+            }
+        }
+
+        private static bool PathsEqual(
+            string left,
+            string right)
+        {
+            try
+            {
+                string normalizedLeft = Path.GetFullPath(
+                    left ?? string.Empty)
+                    .TrimEnd(
+                        Path.DirectorySeparatorChar,
+                        Path.AltDirectorySeparatorChar);
+                string normalizedRight = Path.GetFullPath(
+                    right ?? string.Empty)
+                    .TrimEnd(
+                        Path.DirectorySeparatorChar,
+                        Path.AltDirectorySeparatorChar);
+                return string.Equals(
+                    normalizedLeft,
+                    normalizedRight,
+                    StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static string SanitizeSnapshotName(
+            FileLinkQueueNode snapshot,
+            bool isDirectory)
+        {
+            string name = FileLinkPath.SanitizeComponent(
+                snapshot == null
+                    ? string.Empty
+                    : snapshot.DisplayName);
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                return name;
+            }
+            return isDirectory ? "Folder" : "File";
         }
 
         private static void RejectReparsePoint(
@@ -354,23 +627,5 @@ namespace NcTalkOutlookAddIn.Services
                 null);
         }
 
-        private sealed class DirectoryScanEntry
-        {
-            internal DirectoryScanEntry(
-                DirectoryInfo localDirectory,
-                string remotePath)
-            {
-                LocalDirectory = localDirectory;
-                RemotePath = remotePath;
-            }
-
-            internal DirectoryInfo LocalDirectory
-            {
-                get;
-                private set;
-            }
-
-            internal string RemotePath { get; private set; }
-        }
     }
 }

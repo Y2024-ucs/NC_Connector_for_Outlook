@@ -438,7 +438,7 @@
     "message": "E dátum után a hivatkozás már nem érhető el."
   },
   "sharing_step_files_title": {
-    "message": "Fájlok vagy mappák kiválasztása"
+    "message": "Megosztás összeállítása"
   },
   "sharing_files_table_path": {
     "message": "Elérési út"
@@ -595,6 +595,9 @@
   },
   "outlook_confirm_replace_room": {
     "message": "Ehhez a találkozóhoz már létezik Talk szoba. Lecseréli?"
+  },
+  "outlook_error_attach_room_to_appointment": {
+    "message": "A Talk-szobát nem sikerült hozzáadni a találkozóhoz. A találkozó korábbi tartalma megmaradt."
   },
   "outlook_error_create_room_unexpected_format": {
     "message": "Váratlan hiba a Talk szoba létrehozásakor: $1"
@@ -1015,5 +1018,149 @@
   },
   "options_update_changelog_fixed": {
     "message": "Javítva"
+  },
+  "sharing_base_path_info": {
+    "message": "Célmappa:"
+  },
+  "sharing_button_add_local": {
+    "message": "+ Helyi"
+  },
+  "sharing_button_add_nextcloud": {
+    "message": "+ Saját Nextcloud"
+  },
+  "sharing_button_add_nextcloud_files": {
+    "message": "Fájlok kiválasztása"
+  },
+  "sharing_button_add_nextcloud_folder": {
+    "message": "Mappa kiválasztása"
+  },
+  "sharing_source_local": {
+    "message": "Helyi"
+  },
+  "sharing_source_nextcloud": {
+    "message": "Saját Nextcloud"
+  },
+  "sharing_queue_entries_summary": {
+    "message": "Elemek: $1"
+  },
+  "sharing_queue_sources_summary": {
+    "message": "Források: $1"
+  },
+  "sharing_queue_total_summary": {
+    "message": "Összesen: $1"
+  },
+  "sharing_queue_storage_loading": {
+    "message": "Tárhelyadatok betöltése…"
+  },
+  "sharing_queue_storage_available": {
+    "message": "Szabad hely: $1 / $2"
+  },
+  "sharing_queue_storage_unlimited": {
+    "message": "Nincs tárhelykorlát · $1 használatban"
+  },
+  "sharing_queue_storage_unknown": {
+    "message": "A tárhelyadatok nem érhetők el"
+  },
+  "sharing_queue_storage_insufficient": {
+    "message": "Szükséges: $1 · Elérhető: $2"
+  },
+  "sharing_queue_expand_folder": {
+    "message": "Mappa kibontása: „$1“"
+  },
+  "sharing_queue_collapse_folder": {
+    "message": "Mappa összecsukása: „$1“"
+  },
+  "sharing_queue_remove_item": {
+    "message": "„$1“ eltávolítása"
+  },
+  "sharing_status_waiting": {
+    "message": "Várakozás"
+  },
+  "sharing_files_empty": {
+    "message": "Nincs kiválasztott fájl."
+  },
+  "outlook_sharing_queue_read_failed": {
+    "message": "A kijelölt elem nem olvasható: $1"
+  },
+  "outlook_nextcloud_picker_load_failed": {
+    "message": "A Nextcloud-mappa nem tölthető be."
+  },
+  "outlook_sharing_source_my_nextcloud": {
+    "message": "Saját Nextcloud"
+  },
+  "outlook_nextcloud_picker_files_title": {
+    "message": "Fájlok kiválasztása"
+  },
+  "outlook_nextcloud_picker_folder_title": {
+    "message": "Mappa kiválasztása"
+  },
+  "outlook_nextcloud_picker_filter_placeholder": {
+    "message": "Szűrés név szerint..."
+  },
+  "outlook_nextcloud_picker_navigate_back": {
+    "message": "Vissza"
+  },
+  "outlook_nextcloud_picker_navigate_forward": {
+    "message": "Előre"
+  },
+  "outlook_nextcloud_picker_navigate_up": {
+    "message": "Egy szinttel feljebb"
+  },
+  "outlook_nextcloud_picker_refresh": {
+    "message": "Frissítés"
+  },
+  "outlook_nextcloud_picker_column_name": {
+    "message": "Név"
+  },
+  "outlook_nextcloud_picker_column_size": {
+    "message": "Méret"
+  },
+  "outlook_nextcloud_picker_column_modified": {
+    "message": "Módosítva"
+  },
+  "outlook_nextcloud_picker_no_selection": {
+    "message": "Nincs fájl kiválasztva"
+  },
+  "outlook_nextcloud_picker_no_preview": {
+    "message": "Nincs elérhető előnézet"
+  },
+  "outlook_nextcloud_picker_multiple_selection": {
+    "message": "Kiválasztott elemek: {0}"
+  },
+  "outlook_nextcloud_picker_preview_loading": {
+    "message": "Előnézet betöltése..."
+  },
+  "outlook_nextcloud_picker_preview_load_failed": {
+    "message": "Az előnézet nem tölthető be"
+  },
+  "outlook_nextcloud_picker_preview_skipped": {
+    "message": "Előnézet kihagyva nagy fájloknál"
+  },
+  "outlook_nextcloud_picker_close_button": {
+    "message": "Bezárás"
+  },
+  "outlook_nextcloud_picker_select_files_button": {
+    "message": "Fájlok kiválasztása"
+  },
+  "outlook_nextcloud_picker_select_folder_button": {
+    "message": "Mappa kiválasztása"
+  },
+  "outlook_nextcloud_picker_loading": {
+    "message": "Mappa betöltése..."
+  },
+  "outlook_nextcloud_picker_reading_folder": {
+    "message": "Mappa tartalmának beolvasása..."
+  },
+  "outlook_nextcloud_picker_storage_used": {
+    "message": "Tárhely: $1 használatban"
+  },
+  "outlook_nextcloud_picker_storage_of": {
+    "message": "Tárhely: $1 / $2 használatban"
+  },
+  "outlook_sharing_add_nextcloud_files": {
+    "message": "Fájlok a Saját Nextcloudból..."
+  },
+  "outlook_sharing_add_nextcloud_folder": {
+    "message": "Mappa a Saját Nextcloudból..."
   }
 }

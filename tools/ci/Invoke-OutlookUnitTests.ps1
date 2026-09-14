@@ -82,6 +82,9 @@ internal static class OutlookUtilityTests
         TestComposeShareCleanupTracker();
         TestFileLinkUploadPolicy();
         TestFileLinkPath();
+        TestPickerNavigation();
+        TestFileLinkSelectionIdentity();
+        TestFileLinkQueueSnapshotBuilder();
         TestFileLinkSelectionScanner();
         TestFileLinkUploadPlanner();
         TestPlainTextUtilities();
@@ -100,6 +103,34 @@ internal static class OutlookUtilityTests
         }
         Console.WriteLine("All Outlook utility unit tests passed.");
         return 0;
+    }
+
+    private static void TestPickerNavigation()
+    {
+        var navigation = new NcTalkOutlookAddIn.UI.NextcloudPickerNavigation();
+        int targetIndex;
+        string targetPath;
+        Check("Empty picker history cannot go back", !navigation.CanGoBack);
+        Check("Empty picker history cannot go forward", !navigation.CanGoForward);
+        Check("Empty picker history has no target", !navigation.TryGetTarget(-1, out targetIndex, out targetPath));
+        navigation.Record("");
+        navigation.Record("/folder");
+        navigation.Record("folder");
+        Check("Picker history accepts a back target", navigation.TryGetTarget(-1, out targetIndex, out targetPath));
+        Equal("Duplicate folder navigation creates no extra step", "", targetPath);
+        Check("Failed navigation leaves history position unchanged", navigation.CanGoBack && !navigation.CanGoForward);
+        navigation.CompleteHistoryNavigation(targetIndex, targetPath);
+        Check("Returning to root enables forward navigation", !navigation.CanGoBack && navigation.CanGoForward);
+        Check("Forward navigation retains the folder", navigation.TryGetTarget(1, out targetIndex, out targetPath));
+        Equal("Forward target is normalized", "folder", targetPath);
+        navigation.CompleteHistoryNavigation(targetIndex, "server-folder");
+        navigation.TryGetTarget(-1, out targetIndex, out targetPath);
+        navigation.CompleteHistoryNavigation(targetIndex, targetPath);
+        navigation.TryGetTarget(1, out targetIndex, out targetPath);
+        Equal("History records the server-returned path", "server-folder", targetPath);
+        navigation.Record("replacement");
+        Check("New navigation discards the old forward branch", !navigation.CanGoForward);
+        Check("History refuses an out-of-range target", !navigation.TryGetTarget(2, out targetIndex, out targetPath));
     }
 
     private static void TestPasswordGenerator()
@@ -564,7 +595,7 @@ internal static class OutlookUtilityTests
             var bulkSelection = new FileLinkSelection(
                 FileLinkSelectionType.Directory,
                 bulkRoot);
-            var bulkPlan = FileLinkUploadPlanBuilder.Build(
+            var bulkPlan = BuildFileLinkUploadPlan(
                 new List<FileLinkSelection> { bulkSelection },
                 true,
                 1,
@@ -581,7 +612,7 @@ internal static class OutlookUtilityTests
                 "FileLink planner preserves an empty directory",
                 bulkPlan.DirectoriesToCreate.Any(path => path.EndsWith("/empty", StringComparison.OrdinalIgnoreCase)));
 
-            var directPlan = FileLinkUploadPlanBuilder.Build(
+            var directPlan = BuildFileLinkUploadPlan(
                 new List<FileLinkSelection> { bulkSelection },
                 false,
                 1,
@@ -601,7 +632,7 @@ internal static class OutlookUtilityTests
             File.WriteAllText(
                 Path.Combine(directOnlyRoot, "file.txt"),
                 "direct");
-            var directOnlyPlan = FileLinkUploadPlanBuilder.Build(
+            var directOnlyPlan = BuildFileLinkUploadPlan(
                 new List<FileLinkSelection>
                 {
                     new FileLinkSelection(
@@ -634,7 +665,7 @@ internal static class OutlookUtilityTests
             File.WriteAllText(
                 Path.Combine(sharedDirectRight, "right.txt"),
                 "right");
-            var sharedDirectPlan = FileLinkUploadPlanBuilder.Build(
+            var sharedDirectPlan = BuildFileLinkUploadPlan(
                 new List<FileLinkSelection>
                 {
                     new FileLinkSelection(
@@ -655,6 +686,131 @@ internal static class OutlookUtilityTests
                     "shared-direct",
                     StringComparison.OrdinalIgnoreCase));
 
+            var nextcloudRoot = new NextcloudStorageEntry(
+                "Team: Archive",
+                "Team: Archive",
+                true,
+                0,
+                null);
+            var nextcloudSelection =
+                FileLinkSelection.FromNextcloudFolder(
+                    nextcloudRoot,
+                    new[]
+                    {
+                        new NextcloudStorageEntry(
+                            "Team: Archive/Empty",
+                            "Empty",
+                            true,
+                            0,
+                            null),
+                        new NextcloudStorageEntry(
+                            "Team: Archive/report.pdf",
+                            "report.pdf",
+                            false,
+                            42,
+                            new DateTime(
+                                2026,
+                                9,
+                                11,
+                                0,
+                                0,
+                                0,
+                                DateTimeKind.Utc))
+                    });
+            var nextcloudPlan = BuildFileLinkUploadPlan(
+                new List<FileLinkSelection> { nextcloudSelection },
+                true,
+                1,
+                null,
+                CancellationToken.None);
+            Equal(
+                "FileLink planner keeps remote files on the server",
+                FileLinkUploadTransport.ServerCopy,
+                nextcloudPlan.Files[0].Transport);
+            Equal(
+                "FileLink planner preserves the Nextcloud source path",
+                "Team: Archive/report.pdf",
+                nextcloudPlan.Files[0].NextcloudSourcePath);
+            Equal(
+                "FileLink planner tracks remote file bytes",
+                42L,
+                nextcloudPlan.TotalBytes);
+            Check(
+                "FileLink planner keeps an empty Nextcloud folder",
+                nextcloudPlan.DirectoriesToCreate.Any(
+                    path => path.EndsWith(
+                        "/Empty",
+                        StringComparison.OrdinalIgnoreCase)));
+
+            string stableRoot = Path.Combine(
+                fixtureRoot,
+                "stable-queue");
+            Directory.CreateDirectory(stableRoot);
+            string queuedFile = Path.Combine(
+                stableRoot,
+                "queued.txt");
+            File.WriteAllText(queuedFile, "queued");
+            var stableSelection = new FileLinkSelection(
+                FileLinkSelectionType.Directory,
+                stableRoot);
+            var stableSelections = new List<FileLinkSelection>
+            {
+                stableSelection
+            };
+            var stableSnapshots =
+                new Dictionary<FileLinkSelection, FileLinkQueueNode>
+                {
+                    {
+                        stableSelection,
+                        FileLinkQueueSnapshotBuilder.Build(
+                            stableSelection,
+                            CancellationToken.None)
+                    }
+                };
+            File.WriteAllText(
+                Path.Combine(stableRoot, "late.txt"),
+                "late");
+            FileLinkUploadPlan stablePlan =
+                FileLinkUploadPlanBuilder.Build(
+                    stableSelections,
+                    stableSnapshots,
+                    false,
+                    1,
+                    null,
+                    CancellationToken.None);
+            Equal(
+                "FileLink planner uploads only files captured in the queue",
+                1,
+                stablePlan.Files.Count);
+            Check(
+                "FileLink planner keeps the queued local file",
+                stablePlan.Files[0].LocalPath.EndsWith(
+                    "queued.txt",
+                    StringComparison.OrdinalIgnoreCase));
+
+            File.Delete(queuedFile);
+            bool removedQueuedFileRejected = false;
+            try
+            {
+                FileLinkUploadPlanBuilder.Build(
+                    stableSelections,
+                    stableSnapshots,
+                    false,
+                    1,
+                    null,
+                    CancellationToken.None);
+            }
+            catch (TalkServiceException ex)
+            {
+                removedQueuedFileRejected = string.Equals(
+                    ex.Message,
+                    "source changed",
+                    StringComparison.Ordinal);
+            }
+            Check(
+                "FileLink planner rejects a file removed from the queue snapshot",
+                removedQueuedFileRejected);
+
         }
         finally
         {
@@ -665,12 +821,256 @@ internal static class OutlookUtilityTests
         }
     }
 
+    private static FileLinkUploadPlan BuildFileLinkUploadPlan(
+        IList<FileLinkSelection> selections,
+        bool bulkUploadSupported,
+        int fixedRequestCount,
+        Func<FileLinkDuplicateInfo, string> duplicateResolver,
+        CancellationToken cancellationToken)
+    {
+        var snapshots =
+            new Dictionary<FileLinkSelection, FileLinkQueueNode>();
+        foreach (FileLinkSelection selection in selections)
+        {
+            snapshots.Add(
+                selection,
+                FileLinkQueueSnapshotBuilder.Build(
+                    selection,
+                    cancellationToken));
+        }
+        return FileLinkUploadPlanBuilder.Build(
+            selections,
+            snapshots,
+            bulkUploadSupported,
+            fixedRequestCount,
+            duplicateResolver,
+            cancellationToken);
+    }
+
+    private static void TestFileLinkQueueSnapshotBuilder()
+    {
+        string fixtureRoot = Path.Combine(
+            Path.GetTempPath(),
+            "nc4ol-queue-tests-" + Guid.NewGuid().ToString("N"));
+        string junctionPath = string.Empty;
+        Directory.CreateDirectory(fixtureRoot);
+        try
+        {
+            string selectedFolder = Path.Combine(fixtureRoot, "Selected");
+            Directory.CreateDirectory(selectedFolder);
+            Directory.CreateDirectory(Path.Combine(selectedFolder, "Empty"));
+            Directory.CreateDirectory(Path.Combine(selectedFolder, "Nested"));
+            File.WriteAllText(
+                Path.Combine(selectedFolder, "root.txt"),
+                "root");
+            File.WriteAllText(
+                Path.Combine(selectedFolder, "Nested", "child.pdf"),
+                "child");
+
+            FileLinkQueueNode local = FileLinkQueueSnapshotBuilder.Build(
+                new FileLinkSelection(
+                    FileLinkSelectionType.Directory,
+                    selectedFolder),
+                CancellationToken.None);
+            Equal("Queue snapshot keeps the selected local folder", "Selected", local.DisplayName);
+            Check("Queue snapshot keeps local folders before files", local.Children.Count == 3 && local.Children[0].IsDirectory && local.Children[1].IsDirectory && !local.Children[2].IsDirectory);
+            FileLinkQueueNode nested = local.Children.First(node => node.DisplayName == "Nested");
+            Check("Queue snapshot includes nested local files", nested.Children.Count == 1 && nested.Children[0].DisplayName == "child.pdf" && nested.Children[0].Length == 5);
+            Check("Queue snapshot captures local modification time", nested.Children[0].LastWriteTimeUtc.HasValue);
+            FileLinkQueueNode empty = local.Children.First(node => node.DisplayName == "Empty");
+            Check("Queue snapshot preserves empty local folders", empty.Children.Count == 0);
+
+            string reparseRoot = Path.Combine(
+                fixtureRoot,
+                "reparse-selection");
+            string reparseTarget = Path.Combine(
+                fixtureRoot,
+                "reparse-target");
+            junctionPath = Path.Combine(
+                reparseRoot,
+                "linked");
+            Directory.CreateDirectory(reparseRoot);
+            Directory.CreateDirectory(reparseTarget);
+            File.WriteAllText(
+                Path.Combine(reparseTarget, "outside.txt"),
+                "outside");
+
+            bool junctionCreated = TryCreateDirectoryJunction(
+                junctionPath,
+                reparseTarget);
+            Check(
+                "Queue snapshot test creates a directory junction",
+                junctionCreated);
+            if (junctionCreated)
+            {
+                bool linkedItemRejected = false;
+                try
+                {
+                    FileLinkQueueSnapshotBuilder.Build(
+                        new FileLinkSelection(
+                            FileLinkSelectionType.Directory,
+                            reparseRoot),
+                        CancellationToken.None);
+                }
+                catch (IOException ex)
+                {
+                    linkedItemRejected = string.Equals(
+                        ex.Message,
+                        "linked item unsupported",
+                        StringComparison.Ordinal);
+                }
+                Check(
+                    "Queue snapshot rejects a nested directory junction",
+                    linkedItemRejected);
+            }
+
+            var remoteRoot = new NextcloudStorageEntry(
+                "Projects",
+                "Projects",
+                true,
+                0,
+                null);
+            FileLinkSelection remoteSelection = FileLinkSelection.FromNextcloudFolder(
+                remoteRoot,
+                new[]
+                {
+                    new NextcloudStorageEntry(
+                        "Projects/Empty",
+                        "Empty",
+                        true,
+                        0,
+                        null),
+                    new NextcloudStorageEntry(
+                        "Projects/report.docx",
+                        "report.docx",
+                        false,
+                        42,
+                        null)
+                });
+            FileLinkQueueNode remote = FileLinkQueueSnapshotBuilder.Build(
+                remoteSelection,
+                CancellationToken.None);
+            Equal("Queue snapshot keeps the selected Nextcloud folder", "Projects", remote.DisplayName);
+            Check("Queue snapshot preserves empty Nextcloud folders", remote.Children.Count == 2 && remote.Children[0].IsDirectory && remote.Children[0].Children.Count == 0);
+            Check("Queue snapshot exposes the Nextcloud file size", !remote.Children[1].IsDirectory && remote.Children[1].Length == 42);
+
+            bool missingParentRejected = false;
+            try
+            {
+                FileLinkSelection incomplete = FileLinkSelection.FromNextcloudFolder(
+                    remoteRoot,
+                    new[]
+                    {
+                        new NextcloudStorageEntry(
+                            "Projects/Missing/file.txt",
+                            "file.txt",
+                            false,
+                            1,
+                            null)
+                    });
+                FileLinkQueueSnapshotBuilder.Build(
+                    incomplete,
+                    CancellationToken.None);
+            }
+            catch (IOException)
+            {
+                missingParentRejected = true;
+            }
+            Check("Queue snapshot rejects an incomplete Nextcloud hierarchy", missingParentRejected);
+        }
+        finally
+        {
+            if (!string.IsNullOrEmpty(junctionPath)
+                && Directory.Exists(junctionPath))
+            {
+                Directory.Delete(junctionPath);
+            }
+            if (Directory.Exists(fixtureRoot))
+            {
+                Directory.Delete(fixtureRoot, true);
+            }
+        }
+    }
+
+    private static void TestFileLinkSelectionIdentity()
+    {
+        var localFile = new FileLinkSelection(
+            FileLinkSelectionType.File,
+            @"C:\Reports\report.pdf");
+        var localFileCaseVariant = new FileLinkSelection(
+            FileLinkSelectionType.File,
+            @"c:\reports\Report.pdf");
+        var localSelections = new HashSet<FileLinkSelection>(
+            new[] { localFile },
+            FileLinkSelection.IdentityComparer);
+        Check("Queue identity deduplicates Windows file path case variants", !localSelections.Add(localFileCaseVariant));
+        Equal("Per-selection state retains reference identity", 2, new HashSet<FileLinkSelection>(new[] { localFile, localFileCaseVariant }).Count);
+
+        var localFolder = new FileLinkSelection(
+            FileLinkSelectionType.Directory,
+            @"C:\Reports");
+        var localFolderCaseVariant = new FileLinkSelection(
+            FileLinkSelectionType.Directory,
+            @"c:\reports");
+        Check("Queue identity accepts a different Windows selection", localSelections.Add(localFolder));
+        Check("Queue identity deduplicates Windows folder path case variants", !localSelections.Add(localFolderCaseVariant));
+
+        var lowerFile = FileLinkSelection.FromNextcloudFile(
+            new NextcloudStorageEntry("Reports/report.pdf", "report.pdf", false, 1, null));
+        var upperFile = FileLinkSelection.FromNextcloudFile(
+            new NextcloudStorageEntry("Reports/Report.pdf", "Report.pdf", false, 2, null));
+        var sameFile = FileLinkSelection.FromNextcloudFile(
+            new NextcloudStorageEntry("/Reports/report.pdf", "report.pdf", false, 1, null));
+        var remoteSelections = new HashSet<FileLinkSelection>(
+            new[] { lowerFile },
+            FileLinkSelection.IdentityComparer);
+        Check("Queue identity retains distinct Nextcloud file path case variants", remoteSelections.Add(upperFile));
+        Check("Queue identity deduplicates the exact normalized Nextcloud path", !remoteSelections.Add(sameFile));
+        var laterBatch = new HashSet<FileLinkSelection>(
+            remoteSelections,
+            FileLinkSelection.IdentityComparer);
+        Check("Queue identity deduplicates a Nextcloud file from an earlier batch", !laterBatch.Add(upperFile));
+        Check("Queue identity separates local paths from identical Nextcloud paths", laterBatch.Add(new FileLinkSelection(FileLinkSelectionType.File, lowerFile.NextcloudPath)));
+
+        var lowerFolder = FileLinkSelection.FromNextcloudFolder(
+            new NextcloudStorageEntry("reports", "reports", true, 0, null),
+            null);
+        var upperFolder = FileLinkSelection.FromNextcloudFolder(
+            new NextcloudStorageEntry("Reports", "Reports", true, 0, null),
+            null);
+        Check("Queue identity accepts a Nextcloud folder", remoteSelections.Add(lowerFolder));
+        Check("Queue identity retains distinct Nextcloud folder path case variants", remoteSelections.Add(upperFolder));
+        Check("Queue identity deduplicates an exact Nextcloud folder", !remoteSelections.Add(FileLinkSelection.FromNextcloudFolder(new NextcloudStorageEntry("reports", "reports", true, 0, null), null)));
+
+        var selections = new List<FileLinkSelection> { lowerFile, upperFile };
+        var snapshots = selections.ToDictionary(
+            selection => selection,
+            selection => FileLinkQueueSnapshotBuilder.Build(selection, CancellationToken.None));
+        int resolverCalls = 0;
+        FileLinkSelectionScanResult scan = FileLinkSelectionScanner.Scan(
+            selections,
+            snapshots,
+            info =>
+            {
+                resolverCalls++;
+                return "report-copy.pdf";
+            },
+            CancellationToken.None);
+        Equal("Nextcloud case variants both reach the upload plan", 2, scan.Files.Count);
+        Equal("Destination case collisions still invoke the existing rename resolver", 1, resolverCalls);
+        Equal("The first Nextcloud source keeps its exact path", lowerFile.NextcloudPath, scan.Files[0].NextcloudSourcePath);
+        Equal("The second Nextcloud source keeps its exact path", upperFile.NextcloudPath, scan.Files[1].NextcloudSourcePath);
+        Equal("The destination rename remains separate from source identity", "report-copy.pdf", scan.Files[1].RemotePath);
+        Equal("Nextcloud case variants retain their combined size", 3L, scan.TotalBytes);
+        Equal("The first Nextcloud selection retains its own count", 1, scan.SelectionFileCounts[lowerFile]);
+        Equal("The second Nextcloud selection retains its own count", 1, scan.SelectionFileCounts[upperFile]);
+    }
+
     private static void TestFileLinkSelectionScanner()
     {
         string fixtureRoot = Path.Combine(
             Path.GetTempPath(),
             "nc4ol-scan-tests-" + Guid.NewGuid().ToString("N"));
-        string junctionPath = string.Empty;
         Directory.CreateDirectory(fixtureRoot);
         try
         {
@@ -694,9 +1094,20 @@ internal static class OutlookUtilityTests
             var selection = new FileLinkSelection(
                 FileLinkSelectionType.Directory,
                 selectionRoot);
+            var queueSnapshots =
+                new Dictionary<FileLinkSelection, FileLinkQueueNode>
+                {
+                    {
+                        selection,
+                        FileLinkQueueSnapshotBuilder.Build(
+                            selection,
+                            CancellationToken.None)
+                    }
+                };
             FileLinkSelectionScanResult scan =
                 FileLinkSelectionScanner.Scan(
                     new List<FileLinkSelection> { selection },
+                    queueSnapshots,
                     info =>
                     {
                         resolverCalls++;
@@ -739,61 +1150,48 @@ internal static class OutlookUtilityTests
                 6L,
                 scan.TotalBytes);
 
-            string reparseRoot = Path.Combine(
-                fixtureRoot,
-                "reparse-selection");
-            string reparseTarget = Path.Combine(
-                fixtureRoot,
-                "reparse-target");
-            junctionPath = Path.Combine(
-                reparseRoot,
-                "linked");
-            Directory.CreateDirectory(reparseRoot);
-            Directory.CreateDirectory(reparseTarget);
-            File.WriteAllText(
-                Path.Combine(reparseTarget, "outside.txt"),
-                "outside");
-
-            bool junctionCreated = TryCreateDirectoryJunction(
-                junctionPath,
-                reparseTarget);
-            Check(
-                "FileLink scanner test creates a directory junction",
-                junctionCreated);
-            if (junctionCreated)
+            bool missingSnapshotMapRejected = false;
+            try
             {
-                bool linkedItemRejected = false;
-                try
-                {
-                    FileLinkSelectionScanner.Scan(
-                        new List<FileLinkSelection>
-                        {
-                            new FileLinkSelection(
-                                FileLinkSelectionType.Directory,
-                                reparseRoot)
-                        },
-                        null,
-                        CancellationToken.None);
-                }
-                catch (TalkServiceException ex)
-                {
-                    linkedItemRejected = string.Equals(
-                        ex.Message,
-                        "linked item unsupported",
-                        StringComparison.Ordinal);
-                }
-                Check(
-                    "FileLink scanner rejects a nested directory junction",
-                    linkedItemRejected);
+                FileLinkSelectionScanner.Scan(
+                    new List<FileLinkSelection> { selection },
+                    null,
+                    null,
+                    CancellationToken.None);
             }
+            catch (ArgumentNullException ex)
+            {
+                missingSnapshotMapRejected = string.Equals(
+                    ex.ParamName,
+                    "queueSnapshots",
+                    StringComparison.Ordinal);
+            }
+            Check(
+                "FileLink scanner rejects a missing snapshot map",
+                missingSnapshotMapRejected);
+
+            bool missingSnapshotRejected = false;
+            try
+            {
+                FileLinkSelectionScanner.Scan(
+                    new List<FileLinkSelection> { selection },
+                    new Dictionary<FileLinkSelection, FileLinkQueueNode>(),
+                    null,
+                    CancellationToken.None);
+            }
+            catch (TalkServiceException ex)
+            {
+                missingSnapshotRejected = string.Equals(
+                    ex.Message,
+                    "source changed",
+                    StringComparison.Ordinal);
+            }
+            Check(
+                "FileLink scanner rejects a missing selection snapshot",
+                missingSnapshotRejected);
         }
         finally
         {
-            if (!string.IsNullOrEmpty(junctionPath)
-                && Directory.Exists(junctionPath))
-            {
-                Directory.Delete(junctionPath);
-            }
             if (Directory.Exists(fixtureRoot))
             {
                 Directory.Delete(fixtureRoot, true);
@@ -1044,10 +1442,13 @@ internal static class OutlookUtilityTests
     $sources = @(
         $testSource,
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Models\FileLinkSelection.cs"),
+        (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Models\FileLinkQueueNode.cs"),
+        (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Models\NextcloudStorageEntry.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Models\ComposeLifecycleOrigin.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Models\ComposeShareCleanupRecord.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\FileLinkDuplicateInfo.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\FileLinkUploadPlan.cs"),
+        (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\FileLinkQueueSnapshotBuilder.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\FileLinkSelectionScanner.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\FileLinkUploadPlanner.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\TalkServiceConfiguration.cs"),
@@ -1056,6 +1457,8 @@ internal static class OutlookUtilityTests
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\PasswordGenerator.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\SizeFormatting.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\NextcloudVersionHelper.cs"),
+        (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\NextcloudPath.cs"),
+        (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\UI\NextcloudPickerNavigation.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\NextcloudUriValidator.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\FileLinkPath.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\FileLinkUploadPolicy.cs"),

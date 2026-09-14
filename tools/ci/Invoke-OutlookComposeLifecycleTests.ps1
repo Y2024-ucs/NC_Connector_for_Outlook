@@ -51,80 +51,120 @@ function Assert-Precedes(
 
 function Get-MethodSlice(
     [string]$Source,
-    [string]$Signature,
-    [string]$NextSignature
+    [string]$Signature
 ) {
     $start = $Source.IndexOf($Signature, [StringComparison]::Ordinal)
-    $end = $Source.IndexOf(
-        $NextSignature,
-        $start + $Signature.Length,
-        [StringComparison]::Ordinal)
-    if ($start -lt 0 -or $end -le $start) {
+    if ($start -lt 0) {
+        throw "Could not locate method '$Signature'."
+    }
+    $lineStart = $Source.LastIndexOf([char]10, $start) + 1
+    $indent = $Source.Substring($lineStart, $start - $lineStart)
+    $closingLine = [string][char]10 + $indent + "}"
+    $end = $Source.IndexOf($closingLine, $start, [StringComparison]::Ordinal)
+    if ($end -lt 0) {
         throw "Could not isolate method '$Signature'."
     }
-    return $Source.Substring($start, $end - $start)
+    return $Source.Substring($start, $end + $closingLine.Length - $start)
 }
 
-$composePath = "src\NcTalkOutlookAddIn\Controllers\ComposeShareLifecycleController.cs"
+$composePath = "src\NcTalkOutlookAddIn\Controllers\SeparatePasswordDeliveryController.cs"
 $trackerPath = "src\NcTalkOutlookAddIn\Controllers\ComposeShareCleanupTracker.cs"
 $sendPath = "src\NcTalkOutlookAddIn\NextcloudTalkAddIn.MailComposeSubscription.Send.cs"
 $shareCleanupPath = "src\NcTalkOutlookAddIn\NextcloudTalkAddIn.MailComposeSubscription.ShareCleanup.cs"
+$addinPath = "src\NcTalkOutlookAddIn\NextcloudTalkAddIn.cs"
 $subscriptionPath = "src\NcTalkOutlookAddIn\NextcloudTalkAddIn.MailComposeSubscription.cs"
 $attachmentFlowPath = "src\NcTalkOutlookAddIn\NextcloudTalkAddIn.MailComposeSubscription.AttachmentFlow.cs"
+$subscriptionRegistryPath = "src\NcTalkOutlookAddIn\Controllers\MailComposeSubscriptionRegistryController.cs"
 $hooksPath = "src\NcTalkOutlookAddIn\NextcloudTalkAddIn.Hooks.cs"
 $fileLinkPath = "src\NcTalkOutlookAddIn\Controllers\FileLinkLaunchController.cs"
+$fileLinkLaunchOptionsPath = "src\NcTalkOutlookAddIn\Models\FileLinkWizardLaunchOptions.cs"
+$fileLinkWizardPath = "src\NcTalkOutlookAddIn\UI\FileLinkWizardForm.cs"
+$fileLinkWizardFilesPath = "src\NcTalkOutlookAddIn\UI\FileLinkWizardForm.Files.cs"
+$fileLinkWizardDragDropPath = "src\NcTalkOutlookAddIn\UI\FileLinkWizardForm.DragDrop.cs"
 $projectPath = "src\NcTalkOutlookAddIn\NcTalkOutlookAddIn.csproj"
 
 $compose = Read-Source $composePath
 $tracker = Read-Source $trackerPath
 $send = Read-Source $sendPath
 $shareCleanup = Read-Source $shareCleanupPath
+$addin = Read-Source $addinPath
 $subscription = Read-Source $subscriptionPath
 $attachmentFlow = Read-Source $attachmentFlowPath
+$attachmentPolicy = Read-Source "src\NcTalkOutlookAddIn\NextcloudTalkAddIn.MailComposeSubscription.AttachmentPolicy.cs"
+$attachmentMaterialization = Read-Source "src\NcTalkOutlookAddIn\NextcloudTalkAddIn.MailComposeSubscription.AttachmentMaterialization.cs"
+$attachmentQueue = Read-Source "src\NcTalkOutlookAddIn\NextcloudTalkAddIn.MailComposeSubscription.AttachmentQueue.cs"
+$subscriptionRegistry = Read-Source $subscriptionRegistryPath
 $hooks = Read-Source $hooksPath
 $fileLink = Read-Source $fileLinkPath
+$fileLinkLaunchOptions = Read-Source $fileLinkLaunchOptionsPath
+$fileLinkWizard = Read-Source $fileLinkWizardPath
+$fileLinkWizardFiles = Read-Source $fileLinkWizardFilesPath
+$fileLinkWizardDragDrop = Read-Source $fileLinkWizardDragDropPath
 $project = Read-Source $projectPath
 $directPasswordDispatch = Get-MethodSlice `
     $compose `
-    "internal void DispatchSeparatePasswordMailQueue(" `
-    "private List<string> PopulatePasswordMail("
+    "internal void DispatchSeparatePasswordMailQueue("
 $passwordMailPopulation = Get-MethodSlice `
     $compose `
-    "private List<string> PopulatePasswordMail(" `
-    "private bool TryOpenSeparatePasswordFallback("
+    "private List<string> PopulatePasswordMail("
 $manualPasswordFallback = Get-MethodSlice `
     $compose `
-    "private bool TryOpenSeparatePasswordFallback(" `
-    "private static bool ReadSubmittedOrAmbiguous("
+    "private bool TryOpenSeparatePasswordFallback("
+$fileLinkWizardUi = Get-MethodSlice `
+    $fileLink `
+    "private bool RunFileLinkWizardOnUiThread("
 
 $attachmentAdd = Get-MethodSlice `
     $attachmentFlow `
-    "private void OnAttachmentAdd(" `
-    "private void OnBeforeAttachmentAdd("
+    "private void OnAttachmentAdd("
 $beforeAttachmentAdd = Get-MethodSlice `
     $attachmentFlow `
-    "private void OnBeforeAttachmentAdd(" `
-    "private void OnPropertyChange("
+    "private void OnBeforeAttachmentAdd("
 $snapshotAttachments = Get-MethodSlice `
-    $attachmentFlow `
-    "private List<AttachmentSnapshot> SnapshotAttachments()" `
-    "private static long SumAttachmentBytes("
+    $attachmentMaterialization `
+    "private List<AttachmentSnapshot> SnapshotAttachments()"
 $hiddenAttachment = Get-MethodSlice `
-    $attachmentFlow `
-    "private static bool IsHiddenAttachment(" `
-    "private static void ShowForcedAttachmentProcessingError("
+    $attachmentMaterialization `
+    "private static bool IsHiddenAttachment("
 $collectAttachments = Get-MethodSlice `
-    $attachmentFlow `
-    "private void CollectAttachmentSelectionsForShare(" `
-    "private bool TryResolveAttachmentLocalPath("
-$removeSuppressedAttachment = Get-MethodSlice `
-    $attachmentFlow `
-    "private void RemoveSuppressedBeforeAddAttachmentByName(" `
+    $attachmentMaterialization `
+    "private void CollectAttachmentSelectionsForShare("
+$startAttachmentShareFlow = Get-MethodSlice `
+    $attachmentQueue `
+    "private async Task StartComposeAttachmentShareFlowAsync("
+$prepareAttachmentSelections = Get-MethodSlice `
+    $attachmentQueue `
+    "private bool PrepareComposeAttachmentSelections("
+$removeAttachmentsByIndices = Get-MethodSlice `
+    $attachmentMaterialization `
     "private void RemoveAttachmentsByIndices("
+$lastAddedBatch = Get-MethodSlice `
+    $attachmentMaterialization `
+    "private AttachmentBatchInfo BuildLastAddedBatchInfo("
+$readAttachmentSettings = Get-MethodSlice `
+    $attachmentPolicy `
+    "private AttachmentAutomationSettings ReadAttachmentAutomationSettings()"
+$attachmentSendGate = Get-MethodSlice `
+    $attachmentPolicy `
+    "private bool TryValidateAttachmentPolicyBeforeSend("
+$removeSuppressedAttachment = Get-MethodSlice `
+    $attachmentMaterialization `
+    "private void RemoveSuppressedBeforeAddAttachmentByName("
 $removeLastAttachmentBatch = Get-MethodSlice `
-    $attachmentFlow `
-    "private void RemoveLastAddedAttachmentBatch(" `
-    "private void EndAttachmentSuppression("
+    $attachmentMaterialization `
+    "private void RemoveLastAddedAttachmentBatch("
+$queueSelectionScan = Get-MethodSlice `
+    $fileLinkWizardFiles `
+    "private async Task AddSelectionsAsync("
+$initialFileSelection = Get-MethodSlice `
+    $fileLinkWizardDragDrop `
+    "private bool TryAddInitialFileSelection("
+$initialQueueSelections = Get-MethodSlice `
+    $fileLinkWizardFiles `
+    "private void AddInitialSelections("
+$reserveQueueSelection = Get-MethodSlice `
+    $fileLinkWizardDragDrop `
+    "private bool TryReserveSelection("
 
 Assert-Precedes `
     "Hidden attachments are ignored before post-add batching" `
@@ -154,6 +194,139 @@ Assert-Precedes `
     $collectAttachments `
     "IsHiddenAttachment(attachment)" `
     "TryResolveAttachmentLocalPath("
+Assert-Precedes `
+    "Post-add attachments are detached only through queue adoption" `
+    $startAttachmentShareFlow `
+    "OnInitialQueueAdopted = () =>" `
+    "bool wizardAccepted = await _owner.RunFileLinkWizardForMailAsync(_mail, launchOptions);"
+Assert-Contains `
+    "Queue adoption removes the original Outlook attachments" `
+    $startAttachmentShareFlow `
+    'RemoveAttachmentsByIndices('
+Assert-Contains `
+    "Attachment launch options expose the queue-adoption boundary" `
+    $fileLinkLaunchOptions `
+    "internal Action OnInitialQueueAdopted { get; set; }"
+Assert-NotContains `
+    "Attachment positions are not captured before server prefetch" `
+    $startAttachmentShareFlow `
+    "CollectAttachmentSelectionsForShare("
+Assert-Contains `
+    "Post-add capture is deferred until the UI handoff" `
+    $startAttachmentShareFlow `
+    "launchOptions.PrepareInitialSelections = () =>"
+Assert-Contains `
+    "The UI handoff captures the current attachment collection" `
+    $prepareAttachmentSelections `
+    "CollectAttachmentSelectionsForShare(selections, removeIndices, tempFiles);"
+Assert-NotContains `
+    "Attachment capture cannot yield before queue adoption" `
+    $prepareAttachmentSelections `
+    "await "
+Assert-Precedes `
+    "Current attachments are captured on the STA before wizard construction" `
+    $fileLinkWizardUi `
+    "!launchOptions.PrepareInitialSelections()" `
+    "new FileLinkWizardForm("
+Assert-NotContains `
+    "Wizard construction and attachment adoption do not yield" `
+    $fileLinkWizardUi `
+    "await "
+Assert-Contains `
+    "The wizard reports its accepted queue size" `
+    $fileLinkWizard `
+    "internal int QueuedSelectionCount"
+Assert-Precedes `
+    "The complete attachment queue is checked before adoption" `
+    $fileLinkWizardUi `
+    "wizard.QueuedSelectionCount" `
+    "launchOptions.OnInitialQueueAdopted();"
+Assert-Precedes `
+    "Attachment ownership transfers before the wizard opens" `
+    $fileLinkWizardUi `
+    "launchOptions.OnInitialQueueAdopted();" `
+    "wizard.ShowDialog()"
+Assert-Precedes `
+    "Synchronous attachment events refresh an expired settings snapshot" `
+    $readAttachmentSettings `
+    "HasFreshAttachmentAutomationSettingsSnapshot()" `
+    "BeginAttachmentAutomationSettingsRefresh();"
+Assert-Contains `
+    "The send gate waits for a current attachment policy snapshot" `
+    $attachmentSendGate `
+    "if (!HasFreshAttachmentAutomationSettingsSnapshot()"
+Assert-Contains `
+    "Settings changes invalidate open compose attachment caches" `
+    $addin `
+    ".RefreshAttachmentAutomationSettings();"
+Assert-Contains `
+    "The compose registry refreshes every open subscription" `
+    $subscriptionRegistry `
+    "current[i].RefreshAttachmentAutomationSettings();"
+Assert-Contains `
+    "Superseded attachment-policy requests cannot replace current settings" `
+    $attachmentPolicy `
+    "== _attachmentAutomationSettingsRefreshGeneration"
+Assert-Contains `
+    "The threshold prompt uses the last attachment size" `
+    $lastAddedBatch `
+    "latestBatchEntry.SizeBytes)"
+Assert-NotContains `
+    "The threshold prompt does not label a batch total as the last file size" `
+    $lastAddedBatch `
+    "total +="
+Assert-Contains `
+    "Local queue snapshots are built off the wizard thread" `
+    $queueSelectionScan `
+    "FileLinkQueueNode snapshot = await Task.Run("
+Assert-Contains `
+    "Local queue snapshots use the cancellable scan token" `
+    $queueSelectionScan `
+    "selection,`r`n                                token)"
+Assert-NotContains `
+    "Interactive queue scans do not use an uncancellable token" `
+    $queueSelectionScan `
+    "CancellationToken.None"
+Assert-Precedes `
+    "Queue snapshots return to the wizard before UI state changes" `
+    $queueSelectionScan `
+    "FileLinkQueueNode snapshot = await Task.Run(" `
+    "AddPreparedSelection(selection, snapshot);"
+Assert-NotContains `
+    "Queue scans retain the captured WinForms context" `
+    $queueSelectionScan `
+    "ConfigureAwait(false)"
+Assert-Contains `
+    "The wizard busy state includes local queue scans" `
+    $fileLinkWizard `
+    "|| _queueScanInProgress;"
+Assert-Contains `
+    "Drag and drop awaits the background queue scan" `
+    $fileLinkWizardDragDrop `
+    "await AddSelectionsAsync(selections);"
+foreach ($selectionAdmission in @($queueSelectionScan, $initialQueueSelections)) {
+    Assert-Contains `
+        "Queue admission uses the model's source-aware identity comparer" `
+        $selectionAdmission `
+        "FileLinkSelection.IdentityComparer"
+    Assert-Contains `
+        "Queue admission reserves typed selections" `
+        $selectionAdmission `
+        "new HashSet<FileLinkSelection>("
+}
+Assert-Contains `
+    "Queue reservation uses the source-aware selection set" `
+    $reserveQueueSelection `
+    "return existingSelections.Add(selection);"
+Assert-Contains `
+    "Attachment mode still bypasses source deduplication" `
+    $reserveQueueSelection `
+    "if (!_attachmentMode && existingSelections != null)"
+Assert-Precedes `
+    "Only individual attachment files use synchronous initial capture" `
+    $initialFileSelection `
+    "!= FileLinkSelectionType.File" `
+    "CancellationToken.None"
 Assert-Precedes `
     "Suppressed host cleanup preserves hidden attachments" `
     $removeSuppressedAttachment `
@@ -425,20 +598,19 @@ Assert-Contains `
     $fileLink `
     "ComposeLifecycleOrigin.Create("
 
-$deleteMethodStart = $compose.IndexOf(
-    "internal bool TryDeleteComposeShareFolder(",
-    [StringComparison]::Ordinal)
-$deleteMethodEnd = $compose.IndexOf(
-    "internal void CaptureSeparatePasswordSignatureSnapshot(",
-    $deleteMethodStart,
-    [StringComparison]::Ordinal)
-Assert-True `
+$deleteMethod = Read-Source "src\NcTalkOutlookAddIn\Services\ComposeShareCleanupService.cs"
+Assert-Contains `
     "Compose cleanup method is present" `
-    ($deleteMethodStart -ge 0 `
-        -and $deleteMethodEnd -gt $deleteMethodStart)
-$deleteMethod = $compose.Substring(
-    $deleteMethodStart,
-    $deleteMethodEnd - $deleteMethodStart)
+    $deleteMethod `
+    "internal bool TryDeleteComposeShareFolder("
+Assert-NotContains `
+    "Password delivery does not own remote cleanup" `
+    $compose `
+    "TryDeleteComposeShareFolder"
+Assert-NotContains `
+    "Remote cleanup has no Outlook COM dependency" `
+    $deleteMethod `
+    "Microsoft.Office.Interop"
 Assert-Contains `
     "Compose cleanup requires its captured origin" `
     $deleteMethod `
@@ -491,5 +663,165 @@ Assert-Contains `
     "Project includes the compose cleanup subscription partial" `
     $project `
     'NextcloudTalkAddIn.MailComposeSubscription.ShareCleanup.cs'
+
+$attachmentHandoffHarness = @'
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Threading.Tasks;
+using NcTalkOutlookAddIn.Models;
+
+namespace NcTalkOutlookAddIn.Models
+{
+    internal sealed class FileLinkSelection
+    {
+        internal string LocalPath;
+        internal FileLinkSelection(string path) { LocalPath = path; }
+    }
+    __LAUNCH_OPTIONS__
+}
+
+namespace Outlook
+{
+    internal sealed class Attachments
+    {
+        internal readonly List<string> Names = new List<string>();
+        internal int Count { get { return Names.Count; } }
+        internal void Remove(int index) { Names.RemoveAt(index - 1); }
+    }
+}
+
+public static class AttachmentHandoffRegression
+{
+    private static class OutlookAttachmentAutomationGuardService
+    {
+        internal sealed class GuardState { }
+    }
+    private static class DiagnosticsLogger
+    {
+        internal static void LogException(string category, string message, Exception ex) { }
+    }
+    private static class LogCategories { internal const string FileLink = "FILELINK"; }
+    private static class ComInteropScope
+    {
+        internal static void TryRelease(object value, string category, string message) { }
+    }
+    private sealed class AttachmentBatchInfo
+    {
+        internal string Name;
+        internal long SizeBytes;
+    }
+    private sealed class Mail
+    {
+        internal readonly Outlook.Attachments Attachments = new Outlook.Attachments();
+    }
+    private sealed class Owner
+    {
+        internal readonly TaskCompletionSource<bool> Prefetch = new TaskCompletionSource<bool>();
+        internal readonly List<string> Queue = new List<string>();
+        internal bool RejectQueue;
+        internal bool TryGetAttachmentAutomationGuardState(
+            string stage, string key, out OutlookAttachmentAutomationGuardService.GuardState state)
+        { state = null; return false; }
+        internal async Task<bool> RunFileLinkWizardForMailAsync(Mail mail, FileLinkWizardLaunchOptions options)
+        {
+            await Prefetch.Task;
+            if (!options.PrepareInitialSelections()) { return false; }
+            if (RejectQueue) { return false; }
+            foreach (FileLinkSelection item in options.InitialSelections) { Queue.Add(item.LocalPath); }
+            options.OnInitialQueueAdopted();
+            return false; // The user cancels the wizard after adoption.
+        }
+    }
+    private sealed class Subscription
+    {
+        internal readonly Mail _mail = new Mail();
+        internal readonly Owner _owner = new Owner();
+        internal bool _disposed;
+        private readonly string _composeKey = "test";
+        private bool _attachmentSuppressed;
+        private readonly List<string> _pendingAddedBatch = new List<string>();
+        internal int Captures;
+        internal int CleanupCalls;
+        internal Task Start() { return StartComposeAttachmentShareFlowAsync("threshold", 12, 1, null); }
+        private void LogFileLink(string message) { }
+        private void EndAttachmentSuppression(string reason) { _attachmentSuppressed = false; }
+        private void CleanupTemporaryFiles(List<string> files) { CleanupCalls++; }
+        private void CollectAttachmentSelectionsForShare(
+            List<FileLinkSelection> selections, List<int> indices, List<string> files)
+        {
+            Captures++;
+            for (int index = 0; index < _mail.Attachments.Count; index++)
+            {
+                selections.Add(new FileLinkSelection(_mail.Attachments.Names[index]));
+                indices.Add(index + 1);
+            }
+        }
+        __START_FLOW__
+        __PREPARE_SELECTIONS__
+        __REMOVE_ATTACHMENTS__
+    }
+    private static void Check(bool condition, string message)
+    {
+        if (!condition) { throw new InvalidOperationException(message); }
+    }
+    public static void Run()
+    {
+        var changed = new Subscription();
+        changed._mail.Attachments.Names.AddRange(new[] { "A.pdf", "B.pdf" });
+        Task changedFlow = changed.Start();
+        Check(changed.Captures == 0, "Attachments were captured before prefetch completed.");
+        changed._mail.Attachments.Remove(1);
+        changed._mail.Attachments.Names.Add("C.pdf");
+        changed._owner.Prefetch.SetResult(true);
+        changedFlow.GetAwaiter().GetResult();
+        Check(string.Join(",", changed._owner.Queue) == "B.pdf,C.pdf", "Queue did not capture the current attachments.");
+        Check(changed._mail.Attachments.Count == 0, "Adopted originals remained or were restored after cancellation.");
+        Check(changed.CleanupCalls == 1, "Temporary-file cleanup was skipped.");
+
+        var rejected = new Subscription();
+        rejected._mail.Attachments.Names.Add("keep.pdf");
+        rejected._owner.RejectQueue = true;
+        Task rejectedFlow = rejected.Start();
+        rejected._owner.Prefetch.SetResult(true);
+        rejectedFlow.GetAwaiter().GetResult();
+        Check(rejected._mail.Attachments.Count == 1, "A rejected queue removed an Outlook attachment.");
+
+        var closed = new Subscription();
+        closed._mail.Attachments.Names.Add("closed.pdf");
+        Task closedFlow = closed.Start();
+        closed._disposed = true;
+        closed._owner.Prefetch.SetResult(true);
+        closedFlow.GetAwaiter().GetResult();
+        Check(closed.Captures == 0 && closed._mail.Attachments.Count == 1, "A closed compose item was accessed after prefetch.");
+
+        var empty = new Subscription();
+        empty._mail.Attachments.Names.Add("removed.pdf");
+        Task emptyFlow = empty.Start();
+        empty._mail.Attachments.Remove(1);
+        empty._owner.Prefetch.SetResult(true);
+        emptyFlow.GetAwaiter().GetResult();
+        Check(empty._owner.Queue.Count == 0, "An empty compose item opened a stale queue.");
+
+        var failed = new Subscription();
+        failed._mail.Attachments.Names.Add("offline.pdf");
+        Task failedFlow = failed.Start();
+        failed._owner.Prefetch.SetException(new InvalidOperationException("prefetch failed"));
+        try { failedFlow.GetAwaiter().GetResult(); }
+        catch (InvalidOperationException) { }
+        Check(failed.Captures == 0 && failed._mail.Attachments.Count == 1, "Failed prefetch touched the attachments.");
+        Check(failed.CleanupCalls == 1, "Failed prefetch skipped cleanup.");
+    }
+}
+'@
+$attachmentHandoffHarness = $attachmentHandoffHarness.Replace(
+    "__LAUNCH_OPTIONS__",
+    (Get-MethodSlice $fileLinkLaunchOptions "internal sealed class FileLinkWizardLaunchOptions"))
+$attachmentHandoffHarness = $attachmentHandoffHarness.Replace("__START_FLOW__", $startAttachmentShareFlow)
+$attachmentHandoffHarness = $attachmentHandoffHarness.Replace("__PREPARE_SELECTIONS__", $prepareAttachmentSelections)
+$attachmentHandoffHarness = $attachmentHandoffHarness.Replace("__REMOVE_ATTACHMENTS__", $removeAttachmentsByIndices)
+Add-Type -TypeDefinition $attachmentHandoffHarness -Language CSharp -IgnoreWarnings -WarningAction SilentlyContinue
+[AttachmentHandoffRegression]::Run()
+Write-Host "[OK] Deferred attachment capture, changed collection, cancellation, rejected queue and failed prefetch"
 
 Write-Host "All Outlook compose lifecycle regression checks passed."

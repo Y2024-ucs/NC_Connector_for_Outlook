@@ -8,8 +8,9 @@ $SourceRoot = Join-Path $ProjectRoot "src\NcTalkOutlookAddIn"
 $SignaturePath = Join-Path $SourceRoot "NextcloudTalkAddIn.MailComposeSubscription.Signature.cs"
 $SendPath = Join-Path $SourceRoot "NextcloudTalkAddIn.MailComposeSubscription.Send.cs"
 $ComposeSubscriptionPath = Join-Path $SourceRoot "NextcloudTalkAddIn.MailComposeSubscription.cs"
-$InteropPath = Join-Path $SourceRoot "Controllers\MailInteropController.cs"
-$PasswordDispatchPath = Join-Path $SourceRoot "Controllers\ComposeShareLifecycleController.cs"
+$SignatureInteropPath = Join-Path $SourceRoot "Controllers\ManagedEmailSignatureController.cs"
+$BodyInsertionPath = Join-Path $SourceRoot "Controllers\MailBodyInsertionController.cs"
+$PasswordDispatchPath = Join-Path $SourceRoot "Controllers\SeparatePasswordDeliveryController.cs"
 $PolicyPath = Join-Path $SourceRoot "NextcloudTalkAddIn.PolicyTemplates.cs"
 $SignatureContentPath = Join-Path $SourceRoot "Utilities\HtmlToPlainTextConverter.cs"
 $SignaturePlacementPath = Join-Path $SourceRoot "Utilities\EmailSignatureSlotPlacementPolicy.cs"
@@ -18,7 +19,8 @@ foreach ($requiredPath in @(
     $SignaturePath,
     $SendPath,
     $ComposeSubscriptionPath,
-    $InteropPath,
+    $SignatureInteropPath,
+    $BodyInsertionPath,
     $PasswordDispatchPath,
     $PolicyPath,
     $SignatureContentPath,
@@ -32,7 +34,8 @@ foreach ($requiredPath in @(
 $SignatureSource = Get-Content -Raw -LiteralPath $SignaturePath
 $SendSource = Get-Content -Raw -LiteralPath $SendPath
 $ComposeSubscriptionSource = Get-Content -Raw -LiteralPath $ComposeSubscriptionPath
-$InteropSource = Get-Content -Raw -LiteralPath $InteropPath
+$SignatureInteropSource = Get-Content -Raw -LiteralPath $SignatureInteropPath
+$BodyInsertionSource = Get-Content -Raw -LiteralPath $BodyInsertionPath
 $PasswordDispatchSource = Get-Content -Raw -LiteralPath $PasswordDispatchPath
 $PolicySource = Get-Content -Raw -LiteralPath $PolicyPath
 $SignatureContentSource = Get-Content -Raw -LiteralPath $SignatureContentPath
@@ -204,9 +207,9 @@ foreach ($forbidden in @(
 foreach ($required in @(
     @{ Pattern = '\bGetEmailSignaturePolicyStatusAsync\s*\('; Message = 'Signature subscription does not use the asynchronous signature-policy cache.' },
     @{ Pattern = '\bRunOnOutlookUiThreadAsync\s*\('; Message = 'Signature reconciliation is not marshalled back to the Outlook UI STA.' },
-    @{ Pattern = '\.\s*ApplyManagedEmailSignature\s*\('; Message = 'Signature subscription does not apply through MailInteropController.' },
-    @{ Pattern = '\.\s*ClearManagedEmailSignature\s*\('; Message = 'Signature subscription does not clear its managed Word bookmark through MailInteropController.' },
-    @{ Pattern = '\.\s*ClearInitialEmailSignatureSlot\s*\('; Message = 'Signature subscription does not clear the exact initial Outlook signature slot through MailInteropController.' },
+    @{ Pattern = '\.\s*ApplyManagedEmailSignature\s*\('; Message = 'Signature subscription does not apply through ManagedEmailSignatureController.' },
+    @{ Pattern = '\.\s*ClearManagedEmailSignature\s*\('; Message = 'Signature subscription does not clear its managed Word bookmark through ManagedEmailSignatureController.' },
+    @{ Pattern = '\.\s*ClearInitialEmailSignatureSlot\s*\('; Message = 'Signature subscription does not clear the exact initial Outlook signature slot through ManagedEmailSignatureController.' },
     @{ Pattern = 'EmailSignatureContentBuilder\.BuildPlainText\s*\('; Message = 'Signature subscription bypasses the shared plain-text content builder.' },
     @{ Pattern = 'EmailSignatureContentBuilder\.BuildManagedHtml\s*\('; Message = 'Signature subscription bypasses the shared managed HTML wrapper.' }
 )) {
@@ -250,25 +253,25 @@ if ($null -eq $signatureTimerBlock) {
 
 # The shared interop path owns all supported body formats and exact Word slots.
 foreach ($required in @(
-    @{ Pattern = 'ManagedEmailSignatureBookmarkName\s*=\s*"NcConnectorSignature"'; Message = 'MailInteropController does not declare the managed signature bookmark.' },
-    @{ Pattern = 'OutlookAutoSignatureBookmarkName\s*=\s*"_MailAutoSig"'; Message = 'MailInteropController does not declare Outlook''s auto-signature bookmark.' },
-    @{ Pattern = 'OutlookOriginalMessageBookmarkName\s*=\s*"_MailOriginal"'; Message = 'MailInteropController does not declare Outlook''s original-message bookmark.' },
-    @{ Pattern = 'OutlookOriginalMessageProtectedGap\s*=\s*2\s*;'; Message = 'MailInteropController does not preserve Outlook''s two-character gap before _MailOriginal.' },
-    @{ Pattern = '\bReconcileEmailSignatureWordSlot\s*\('; Message = 'MailInteropController does not expose one shared WordEditor reconciliation path.' },
-    @{ Pattern = '\bTryResolveSafeEmailSignatureInsertionPoint\s*\('; Message = 'MailInteropController lacks a safe insertion-point resolver.' },
-    @{ Pattern = '\bTryAddMissingEmailSignatureLeadingParagraphs\s*\('; Message = 'MailInteropController does not normalize the leading signature gap.' },
-    @{ Pattern = '\bCaptureEmailSignatureSelectionBookmark\s*\('; Message = 'MailInteropController does not preserve the cursor with a temporary bookmark.' },
-    @{ Pattern = '\bRestoreEmailSignatureSelection\s*\('; Message = 'MailInteropController does not restore the cursor from its temporary bookmark.' }
+    @{ Pattern = 'ManagedEmailSignatureBookmarkName\s*=\s*"NcConnectorSignature"'; Message = 'ManagedEmailSignatureController does not declare the managed signature bookmark.' },
+    @{ Pattern = 'OutlookAutoSignatureBookmarkName\s*=\s*"_MailAutoSig"'; Message = 'ManagedEmailSignatureController does not declare Outlook''s auto-signature bookmark.' },
+    @{ Pattern = 'OutlookOriginalMessageBookmarkName\s*=\s*"_MailOriginal"'; Message = 'ManagedEmailSignatureController does not declare Outlook''s original-message bookmark.' },
+    @{ Pattern = 'OutlookOriginalMessageProtectedGap\s*=\s*2\s*;'; Message = 'ManagedEmailSignatureController does not preserve Outlook''s two-character gap before _MailOriginal.' },
+    @{ Pattern = '\bReconcileEmailSignatureWordSlot\s*\('; Message = 'ManagedEmailSignatureController does not expose one shared WordEditor reconciliation path.' },
+    @{ Pattern = '\bTryResolveSafeEmailSignatureInsertionPoint\s*\('; Message = 'ManagedEmailSignatureController lacks a safe insertion-point resolver.' },
+    @{ Pattern = '\bTryAddMissingEmailSignatureLeadingParagraphs\s*\('; Message = 'ManagedEmailSignatureController does not normalize the leading signature gap.' },
+    @{ Pattern = '\bCaptureEmailSignatureSelectionBookmark\s*\('; Message = 'ManagedEmailSignatureController does not preserve the cursor with a temporary bookmark.' },
+    @{ Pattern = '\bRestoreEmailSignatureSelection\s*\('; Message = 'ManagedEmailSignatureController does not restore the cursor from its temporary bookmark.' }
 )) {
-    Require-Pattern $InteropSource $required.Pattern $required.Message
+    Require-Pattern $SignatureInteropSource $required.Pattern $required.Message
 }
 
-$interopStart = $InteropSource.IndexOf('internal EmailSignatureReconcileResult ApplyManagedEmailSignature', [StringComparison]::Ordinal)
-$interopEnd = $InteropSource.IndexOf('private static void TryShowHiddenBookmarks', [StringComparison]::Ordinal)
+$interopStart = $SignatureInteropSource.IndexOf('internal EmailSignatureReconcileResult ApplyManagedEmailSignature', [StringComparison]::Ordinal)
+$interopEnd = $SignatureInteropSource.IndexOf('private static void TryShowHiddenBookmarks', [StringComparison]::Ordinal)
 if ($interopStart -lt 0 -or $interopEnd -le $interopStart) {
-    Add-Failure 'MailInteropController signature-reconciler section could not be isolated.'
+    Add-Failure 'ManagedEmailSignatureController signature-reconciler section could not be isolated.'
 } else {
-    $interopSignatureSection = $InteropSource.Substring($interopStart, $interopEnd - $interopStart)
+    $interopSignatureSection = $SignatureInteropSource.Substring($interopStart, $interopEnd - $interopStart)
     Forbid-Pattern $interopSignatureSection '\.(?:HTMLBody|RTFBody)\s*=(?!=)' 'WordEditor signature reconciliation writes an Outlook body property directly.'
     Forbid-Pattern $interopSignatureSection '\.Body\s*=(?!=)' 'WordEditor signature reconciliation writes MailItem.Body directly.'
     Forbid-Pattern $interopSignatureSection '\.BodyFormat\s*=(?!=)' 'WordEditor signature reconciliation changes the compose body format.'
@@ -283,7 +286,7 @@ if ($interopStart -lt 0 -or $interopEnd -le $interopStart) {
     Require-Pattern $interopSignatureSection 'ManagedEmailSignatureBookmarkName[\s\S]*TryDeleteEmailSignatureSlot' 'Managed insertion is not paired with exact old-slot deletion.'
 }
 
-$signatureReconciler = Get-CSharpMethodBlock $InteropSource 'ReconcileEmailSignatureWordSlot'
+$signatureReconciler = Get-CSharpMethodBlock $SignatureInteropSource 'ReconcileEmailSignatureWordSlot'
 if ($null -eq $signatureReconciler) {
     Add-Failure 'ReconcileEmailSignatureWordSlot could not be parsed.'
 } else {
@@ -306,7 +309,7 @@ if ($null -eq $signatureReconciler) {
     Forbid-Pattern $signatureReconciler 'replacingManaged\s*=\s*[^;]*(?:resolvedSlotSource|safeSource|slotSource)' 'Managed-slot replacement ownership depends on a logged or mutated source string.'
 }
 
-$safeInsertionResolver = Get-CSharpMethodBlock $InteropSource 'TryResolveSafeEmailSignatureInsertionPoint'
+$safeInsertionResolver = Get-CSharpMethodBlock $SignatureInteropSource 'TryResolveSafeEmailSignatureInsertionPoint'
 if ($null -eq $safeInsertionResolver) {
     Add-Failure 'TryResolveSafeEmailSignatureInsertionPoint could not be parsed.'
 } else {
@@ -318,14 +321,14 @@ Require-Pattern $SignaturePlacementSource 'slotStart\s*<=\s*quoteBoundaryPositio
 Require-Pattern $SignaturePlacementSource 'slotStart\s*>\s*quoteBoundaryPosition' 'A signature entirely below quoted content is not detected against the actual quote boundary.'
 Require-Pattern $SignaturePlacementSource 'safeInsertionPosition\s*>\s*slotEnd\s*&&\s*hasMeaningfulTextBetween' 'Authored-content placement no longer uses the safe insertion target.'
 
-$quoteSeparatorFinder = Get-CSharpMethodBlock $InteropSource 'TryFindInlineQuoteSeparatorStart'
+$quoteSeparatorFinder = Get-CSharpMethodBlock $SignatureInteropSource 'TryFindInlineQuoteSeparatorStart'
 if ($null -eq $quoteSeparatorFinder) {
     Add-Failure 'TryFindInlineQuoteSeparatorStart could not be parsed.'
 } else {
     Require-Pattern $quoteSeparatorFinder 'hasExcludedRange\s*&&\s*(?:paragraphStart\s*<\s*excludedEnd\s*&&\s*paragraphEnd\s*>\s*excludedStart|paragraphEnd\s*>\s*excludedStart\s*&&\s*paragraphStart\s*<\s*excludedEnd)[\s\S]{0,200}?continue\s*;' 'The quote-separator fallback can mistake a border inside the current signature slot for the quote boundary.'
 }
 
-$meaningfulTextProbe = Get-CSharpMethodBlock $InteropSource 'TryHasMeaningfulEmailSignatureText'
+$meaningfulTextProbe = Get-CSharpMethodBlock $SignatureInteropSource 'TryHasMeaningfulEmailSignatureText'
 if ($null -eq $meaningfulTextProbe) {
     Add-Failure 'TryHasMeaningfulEmailSignatureText could not be parsed.'
 } else {
@@ -333,7 +336,7 @@ if ($null -eq $meaningfulTextProbe) {
     Require-Pattern $meaningfulTextProbe 'hasMeaningfulText\s*=\s*text\.Trim\([\s\S]*?\)\.Length\s*>\s*0\s*;' 'Authored-content detection does not ignore whitespace-only text.'
 }
 
-$signatureWordEditorOpen = Get-CSharpMethodBlock $InteropSource 'TryOpenEmailSignatureWordEditor'
+$signatureWordEditorOpen = Get-CSharpMethodBlock $SignatureInteropSource 'TryOpenEmailSignatureWordEditor'
 if ($null -eq $signatureWordEditorOpen) {
     Add-Failure 'TryOpenEmailSignatureWordEditor could not be parsed.'
 } else {
@@ -342,7 +345,7 @@ if ($null -eq $signatureWordEditorOpen) {
     Require-Pattern $signatureWordEditorOpen 'if\s*\(\s*isInlineResponse\s*\|\|\s*activeInline\s*\)\s*\{[\s\S]*?TryOpenInline\([\s\S]*?inlineExplorerIdentityKey[\s\S]*?return\s+false\s*;\s*\}\s*if\s*\(\s*OutlookWordEditorContext\.TryOpenInspector' 'Tracked inline lookup can fall through to an unrelated Inspector Word editor.'
 }
 
-$htmlShareInsert = Get-CSharpMethodBlock $InteropSource 'InsertHtmlIntoMail'
+$htmlShareInsert = Get-CSharpMethodBlock $BodyInsertionSource 'InsertHtmlIntoMail'
 if ($null -eq $htmlShareInsert) {
     Add-Failure 'InsertHtmlIntoMail could not be parsed.'
 } else {

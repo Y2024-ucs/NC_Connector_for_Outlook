@@ -30,11 +30,14 @@ Without the backend, sharing, Talk, and IFB work locally in Outlook. With NC Con
 
 ## Sharing
 
-The sharing wizard uploads files and folders to Nextcloud and inserts the finished share block into the mail. HTML/RTF receives a formatted block, plain text receives a clean text block.
+The sharing wizard combines local files and folders with existing items from your own Nextcloud, then inserts the finished share block into the mail. HTML/RTF receives a formatted block, plain text receives a clean text block.
 
 Key points:
 
 - available in compose windows, replies, forwards, and inline replies
+- the queue groups `Local` and `My Nextcloud` items and shows folders as an expandable tree
+- the `My Nextcloud` picker provides Explorer-style back, forward, up, refresh and clickable path navigation, familiar file icons, clear multi-selection feedback, and on-demand previews for images and documents supported by the Nextcloud server
+- existing Nextcloud files and folders are copied into the new share inside Nextcloud; the originals remain unchanged and are not downloaded to Outlook for the transfer
 - optional expiration date and custom permissions per share
 - attachment automation for large attachments or always through NC Connector, with a selectable `ZIP download` (default) or `Nextcloud share page` link target
 - one local scan builds a root-relative upload plan; the destination root is created atomically, and attachment automation tries numbered names after a collision without a preliminary server probe

@@ -21,13 +21,11 @@ namespace NcTalkOutlookAddIn.UI
     {
         private const int DefaultMinPasswordLength = 8;
         private const string AttachmentShareNameBase = "email_attachment";
-        private const int PathColumnWheelStepPixels = 48;
         private const int StepHostBottomReservedPixels = 88;
         private const int StepHostMinimumHeightPixels = 180;
         private const int FileStepPaddingPixels = 12;
         private const int FileStepButtonGapPixels = 8;
-        private const int FileStepButtonColumnSpacingPixels = 12;
-        private const int FileStepButtonColumnMinWidthPixels = 168;
+        private const int FileQueueIndentPixels = 22;
         private readonly UiThemePalette _themePalette = UiThemeManager.DetectPalette();
 
         private readonly FileLinkService _service;
@@ -57,8 +55,13 @@ namespace NcTalkOutlookAddIn.UI
         private readonly ProgressBar _progressBar = new ProgressBar();
         private readonly Label _progressLabel = new Label();
         private readonly PathScrollableListView _fileListView = new PathScrollableListView();
-        private readonly ImageList _fileListRowHeightImageList = new ImageList();
+        private readonly ImageList _fileQueueImageList;
+        private readonly Label _targetFolderCaptionLabel = new Label();
         private readonly Label _basePathLabel = new Label();
+        private readonly TableLayoutPanel _queueSummaryPanel = new TableLayoutPanel();
+        private readonly Label _queueSummaryLabel = new Label();
+        private readonly Label _queueStorageLabel = new Label();
+        private readonly Label _queueEmptyLabel = new Label();
         private readonly Label _shareNameLabel = new Label();
         private readonly Label _permissionsLabel = new Label();
         private readonly TableLayoutPanel _fileStepLayout = new TableLayoutPanel();
@@ -78,25 +81,34 @@ namespace NcTalkOutlookAddIn.UI
         private readonly CheckBox _expireToggleCheckBox = new CheckBox();
         private readonly DateTimePicker _expireDatePicker = new DateTimePicker();
         private readonly Label _expireHintLabel = new Label();
-        private readonly Button _addFilesButton = new Button();
-        private readonly Button _addFolderButton = new Button();
-        private readonly Button _removeItemButton = new Button();
+        private readonly Button _localSourceButton = new Button();
+        private readonly Button _nextcloudSourceButton = new Button();
+        private readonly ContextMenuStrip _localSourceMenu = new ContextMenuStrip();
+        private readonly ContextMenuStrip _nextcloudSourceMenu = new ContextMenuStrip();
         private readonly Label _attachmentModeInfoLabel = new Label();
         private readonly CheckBox _noteToggleCheckBox = new CheckBox();
         private readonly TextBox _noteTextBox = new TextBox();
         private readonly List<FileLinkSelection> _items = new List<FileLinkSelection>();
         private readonly Dictionary<FileLinkSelection, SelectionUploadState> _selectionStates = new Dictionary<FileLinkSelection, SelectionUploadState>();
+        private readonly Dictionary<FileLinkSelection, FileLinkQueueNode> _queueSnapshots = new Dictionary<FileLinkSelection, FileLinkQueueNode>();
+        private readonly HashSet<string> _expandedQueueFolders = new HashSet<string>(StringComparer.Ordinal);
         private int _currentStepIndex;
         private CancellationTokenSource _cancellationSource;
         private FileLinkUploadContext _uploadContext;
         private bool _uploadInProgress;
         private bool _preflightInProgress;
+        private bool _queueScanInProgress;
         private bool _uploadCompleted;
         private bool _allowEmptyUpload;
         private bool _shareFinalized;
         private bool _closeAfterCancellation;
-        private int _pathColumnHorizontalOffset;
-        private int _pathColumnMaxHorizontalOffset;
+        private CancellationTokenSource _queueStorageCancellation;
+        private Task _queueStorageTask = Task.CompletedTask;
+        private int _queueStorageRequestId;
+        private bool _queueStorageLoading;
+        private bool _queueStorageLoaded;
+        private long? _queueStorageUsedBytes;
+        private long? _queueStorageAvailableBytes;
         private FileLinkRequest _requestSnapshot;
         private readonly bool _attachmentMode;
         private readonly DateTime _shareDate;
@@ -125,6 +137,9 @@ namespace NcTalkOutlookAddIn.UI
             _launchOptions = launchOptions ?? new FileLinkWizardLaunchOptions();
             _attachmentMode = _launchOptions.AttachmentMode;
             _shareDate = DateTime.Now;
+            _fileQueueImageList = FileLinkIconProvider.CreateImageList(
+                ScaleLogical(20),
+                ScaleLogical(30));
             _request.BasePath = basePath ?? string.Empty;
             _request.AttachmentMode = _attachmentMode;
             _request.ShareDate = _shareDate;
@@ -162,6 +177,7 @@ namespace NcTalkOutlookAddIn.UI
             AdjustInitialDialogSizeForDisplay();
 
             UiThemeManager.ApplyToForm(this);
+            ApplyQueueTheme();
 
             LoadInitialSelections();
             if (_attachmentMode)
@@ -182,6 +198,11 @@ namespace NcTalkOutlookAddIn.UI
         internal FileLinkRequest RequestSnapshot
         {
             get { return _requestSnapshot; }
+        }
+
+        internal int QueuedSelectionCount
+        {
+            get { return _items.Count; }
         }
 
 
@@ -221,6 +242,12 @@ namespace NcTalkOutlookAddIn.UI
             }
             _titleLabel.Text = title;
 
+            if (index == 2)
+            {
+                RefreshQueueTargetPath();
+                EnsureQueueStorageLoaded();
+            }
+
             UpdateNavigationState();
             UpdateUploadButtonState();
             LayoutCurrentStep();
@@ -230,7 +257,12 @@ namespace NcTalkOutlookAddIn.UI
 
         private bool IsWizardBusy
         {
-            get { return _uploadInProgress || _preflightInProgress; }
+            get
+            {
+                return _uploadInProgress
+                       || _preflightInProgress
+                       || _queueScanInProgress;
+            }
         }
 
         private async Task NavigateAsync(int direction)
@@ -622,10 +654,15 @@ namespace NcTalkOutlookAddIn.UI
                     continue;
                 }
 
-                validSelections.Add(new FileLinkSelection(selection.SelectionType, selection.LocalPath));
+                validSelections.Add(
+                    selection.Source == FileLinkSelectionSource.Local
+                        ? new FileLinkSelection(
+                            selection.SelectionType,
+                            selection.LocalPath)
+                        : selection);
             }
 
-            AddSelections(validSelections);
+            AddInitialSelections(validSelections);
         }
 
         private void ApplyAttachmentModeDefaults()
@@ -777,6 +814,9 @@ namespace NcTalkOutlookAddIn.UI
         {
             bool onFileStep = _currentStepIndex == 2;
             bool onLastStep = _currentStepIndex == _steps.Count - 1;
+            bool queueInputEnabled = onFileStep && !IsWizardBusy;
+            _localSourceButton.Enabled = queueInputEnabled;
+            _nextcloudSourceButton.Enabled = queueInputEnabled;
 
             if (_attachmentMode)
             {
@@ -791,8 +831,8 @@ namespace NcTalkOutlookAddIn.UI
             }
 
             _backButton.Visible = true;
-            _nextButton.Visible = true;
-            _finishButton.Visible = true;
+            _nextButton.Visible = !onLastStep;
+            _finishButton.Visible = onLastStep;
             _cancelButton.Visible = true;
 
             _backButton.Enabled = _currentStepIndex > 0 && !IsWizardBusy;
@@ -821,7 +861,11 @@ namespace NcTalkOutlookAddIn.UI
 
         private void UpdateUploadButtonState()
         {
-            _uploadButton.Enabled = _uploadButton.Visible && !IsWizardBusy && _items.Count > 0 && !_uploadCompleted;
+            _uploadButton.Enabled = _uploadButton.Visible
+                                    && !IsWizardBusy
+                                    && _items.Count > 0
+                                    && !_uploadCompleted
+                                    && !HasInsufficientQueueStorage();
         }
 
 

@@ -87,6 +87,26 @@ namespace NcTalkOutlookAddIn.Utilities
         {
             get { return "upload failed"; }
         }
+
+        internal static string FileLinkUploadSourceChanged
+        {
+            get { return "source changed"; }
+        }
+
+        internal static string NextcloudPickerLoadFailed
+        {
+            get { return "folder load failed"; }
+        }
+
+        internal static string NextcloudPickerPreviewLoadFailed
+        {
+            get { return "preview load failed"; }
+        }
+
+        internal static string NextcloudPickerPreviewSkipped
+        {
+            get { return "preview skipped"; }
+        }
     }
 
     internal static class ParallelExecution
@@ -133,6 +153,8 @@ namespace NcTalkOutlookAddIn.Services
         internal bool IncludeAuthHeader { get; set; }
         internal bool IncludeOcsApiHeader { get; set; }
         internal bool ParseJson { get; set; }
+        internal bool ReadResponseAsBytes { get; set; }
+        internal long MaximumResponseBytes { get; set; }
         internal long ContentLength { get; set; }
         internal bool AllowWriteStreamBuffering { get; set; }
         internal CancellationToken CancellationToken { get; set; }
@@ -146,6 +168,7 @@ namespace NcTalkOutlookAddIn.Services
         internal bool HasHttpResponse { get; set; }
         internal HttpStatusCode StatusCode { get; set; }
         internal string ResponseText { get; set; }
+        internal byte[] ResponseBytes { get; set; }
         internal IDictionary<string, object> ParsedJson { get; set; }
         internal WebException TransportException { get; set; }
         internal IDictionary<string, string> Headers { get; set; }
@@ -240,6 +263,14 @@ internal static class FileLinkProtocolTests
     {
         TestAutoMkcolHeader();
         TestDavPathNormalization();
+        TestNextcloudDirectoryListing();
+        TestNextcloudGeneratedPreviewDownload();
+        TestNextcloudGeneratedPreviewUnavailable();
+        TestNextcloudGeneratedPreviewAuthenticationFailure();
+        TestNextcloudGeneratedPreviewLimit();
+        TestNextcloudOriginalImagePreviewDownload();
+        TestNextcloudOriginalImagePreviewLimit();
+        TestNextcloudServerCopy();
         TestMissingResourcePreflight();
         TestExistingResourcePreflight();
         TestUnauthorizedPreflight();
@@ -286,6 +317,349 @@ internal static class FileLinkProtocolTests
                 "https://cloud.example.test",
                 "user",
                 "safe/../file.txt"));
+        Equal(
+            "Nextcloud source DAV URL uses the shared segment encoding",
+            "https://cloud.example.test/remote.php/dav/files/user/Design%3A2026/report%20draft.pdf",
+            FileLinkDavClient.BuildNextcloudSourceUrl(
+                "https://cloud.example.test/",
+                "user",
+                "/Design:2026/report draft.pdf"));
+    }
+
+    private static void TestNextcloudDirectoryListing()
+    {
+        string xml =
+            "<?xml version=\"1.0\"?>"
+            + "<d:multistatus xmlns:d=\"DAV:\">"
+            + "<d:response><d:href>"
+            + "/nextcloud/remote.php/dav/files/user/Projects/"
+            + "</d:href><d:propstat><d:prop>"
+            + "<d:resourcetype><d:collection/></d:resourcetype>"
+            + "<d:quota-used-bytes>100</d:quota-used-bytes>"
+            + "<d:quota-available-bytes>900</d:quota-available-bytes>"
+            + "</d:prop></d:propstat></d:response>"
+            + "<d:response><d:href>"
+            + "/nextcloud/remote.php/dav/files/user/Projects/Design%3A2026/"
+            + "</d:href><d:propstat><d:prop>"
+            + "<d:displayname>Design:2026</d:displayname>"
+            + "<d:resourcetype><d:collection/></d:resourcetype>"
+            + "</d:prop></d:propstat></d:response>"
+            + "<d:response><d:href>"
+            + "/nextcloud/remote.php/dav/files/user/Projects/report%20one.pdf"
+            + "</d:href><d:propstat><d:prop>"
+            + "<d:displayname>report one.pdf</d:displayname>"
+            + "<d:resourcetype/>"
+            + "<d:getcontentlength>42</d:getcontentlength>"
+            + "<d:getlastmodified>Fri, 11 Sep 2026 03:00:00 GMT</d:getlastmodified>"
+            + "</d:prop></d:propstat></d:response>"
+            + "</d:multistatus>";
+
+        NextcloudStorageListing listing =
+            FileLinkDavClient.ParseDirectoryListing(
+                "https://cloud.example.test/nextcloud",
+                "user",
+                "Projects",
+                xml);
+        Equal("Nextcloud listing excludes its own folder", 2, listing.Entries.Count);
+        Equal(
+            "Nextcloud listing keeps server file names",
+            "Projects/Design:2026",
+            listing.Entries[0].RelativePath);
+        Check(
+            "Nextcloud listing keeps folders before files",
+            listing.Entries[0].IsDirectory
+            && !listing.Entries[1].IsDirectory);
+        Equal("Nextcloud listing reads file sizes", 42L, listing.Entries[1].Length);
+        Equal("Nextcloud listing reads occupied storage", 100L, listing.UsedBytes.Value);
+        Equal("Nextcloud listing reads available storage", 900L, listing.AvailableBytes.Value);
+    }
+
+    private static void TestNextcloudOriginalImagePreviewDownload()
+    {
+        var requests = new List<NcHttpRequestOptions>();
+        var client = new FileLinkDavClient(options =>
+        {
+            requests.Add(options);
+            return new NcHttpResponse
+            {
+                HasHttpResponse = true,
+                StatusCode = HttpStatusCode.OK,
+                ResponseBytes = new byte[] { 1, 2, 3 }
+            };
+        });
+
+        byte[] preview = client.ReadFilePreview(
+            "https://cloud.example.test/nextcloud",
+            "user name",
+            "Photos/Summer #1.png",
+            5L * 1024L * 1024L,
+            CancellationToken.None);
+
+        Equal("Original image preview returns the response bytes", 3, preview.Length);
+        Equal("Original image preview sends one request", 1, requests.Count);
+        Equal("Original image preview uses DAV GET", "GET", requests[0].Method);
+        Equal(
+            "Original image preview encodes the canonical DAV path",
+            "https://cloud.example.test/nextcloud/remote.php/dav/files/user%20name/Photos/Summer%20%231.png",
+            requests[0].Url);
+        Check(
+            "Original image preview reads a binary response",
+            requests[0].ReadResponseAsBytes);
+        Equal(
+            "Original image preview carries the five MiB response limit",
+            5L * 1024L * 1024L,
+            requests[0].MaximumResponseBytes);
+        Check(
+            "Original image preview does not send the OCS header",
+            !requests[0].IncludeOcsApiHeader);
+    }
+
+    private static void TestNextcloudGeneratedPreviewDownload()
+    {
+        var requests = new List<NcHttpRequestOptions>();
+        var client = new FileLinkDavClient(options =>
+        {
+            requests.Add(options);
+            return new NcHttpResponse
+            {
+                HasHttpResponse = true,
+                StatusCode = HttpStatusCode.OK,
+                ResponseBytes = new byte[] { 1, 2, 3 }
+            };
+        });
+        using (var cancellation = new CancellationTokenSource())
+        {
+            CancellationToken token = cancellation.Token;
+
+            byte[] preview = client.TryReadGeneratedPreview(
+                "https://cloud.example.test/nextcloud",
+                "Reports/Q3 #1 & \u00dcbersichten.xlsx",
+                1024,
+                768,
+                5L * 1024L * 1024L,
+                token);
+
+            Equal(
+                "Generated Nextcloud preview returns the response bytes",
+                3,
+                preview.Length);
+            Equal(
+                "Generated Nextcloud preview sends one request",
+                1,
+                requests.Count);
+            Equal(
+                "Generated Nextcloud preview uses GET",
+                "GET",
+                requests[0].Method);
+            Equal(
+                "Generated Nextcloud preview preserves the server subpath and encodes the file path",
+                "https://cloud.example.test/nextcloud/index.php/core/preview.png"
+                + "?file=%2FReports%2FQ3%20%231%20%26%20%C3%9Cbersichten.xlsx"
+                + "&x=1024&y=768&a=1&forceIcon=0&mode=fill&mimeFallback=0",
+                requests[0].Url);
+            Equal(
+                "Generated Nextcloud preview requests image content",
+                "image/*",
+                requests[0].Accept);
+            Check(
+                "Generated Nextcloud preview is authenticated",
+                requests[0].IncludeAuthHeader);
+            Check(
+                "Generated Nextcloud preview reads a binary response",
+                requests[0].ReadResponseAsBytes);
+            Equal(
+                "Generated Nextcloud preview carries the five MiB response limit",
+                5L * 1024L * 1024L,
+                requests[0].MaximumResponseBytes);
+            Equal(
+                "Generated Nextcloud preview carries the cancellation token",
+                token,
+                requests[0].CancellationToken);
+            Check(
+                "Generated Nextcloud preview does not send the OCS header",
+                !requests[0].IncludeOcsApiHeader);
+            Check(
+                "Generated Nextcloud preview does not bypass no-download restrictions",
+                requests[0].Headers == null
+                || !requests[0].Headers.ContainsKey("X-NC-Preview"));
+        }
+    }
+
+    private static void TestNextcloudGeneratedPreviewUnavailable()
+    {
+        var unavailableStatuses = new[]
+        {
+            HttpStatusCode.BadRequest,
+            HttpStatusCode.Forbidden,
+            HttpStatusCode.NotFound
+        };
+
+        foreach (HttpStatusCode status in unavailableStatuses)
+        {
+            var client = new FileLinkDavClient(options =>
+                new NcHttpResponse
+                {
+                    HasHttpResponse = true,
+                    StatusCode = status
+                });
+
+            byte[] preview = client.TryReadGeneratedPreview(
+                "https://cloud.example.test",
+                "Documents/report.pdf",
+                1024,
+                1024,
+                5L * 1024L * 1024L,
+                CancellationToken.None);
+            Check(
+                "Unavailable generated preview returns no image for HTTP "
+                + ((int)status).ToString(),
+                preview == null);
+        }
+    }
+
+    private static void TestNextcloudGeneratedPreviewAuthenticationFailure()
+    {
+        var client = new FileLinkDavClient(options =>
+            new NcHttpResponse
+            {
+                HasHttpResponse = true,
+                StatusCode = HttpStatusCode.Unauthorized
+            });
+
+        bool rejected = false;
+        try
+        {
+            client.TryReadGeneratedPreview(
+                "https://cloud.example.test",
+                "Documents/report.pdf",
+                1024,
+                1024,
+                5L * 1024L * 1024L,
+                CancellationToken.None);
+        }
+        catch (TalkServiceException ex)
+        {
+            rejected = ex.IsAuthenticationError
+                       && ex.StatusCode == HttpStatusCode.Unauthorized
+                       && string.Equals(
+                           ex.Message,
+                           "preview load failed",
+                           StringComparison.Ordinal);
+        }
+        Check(
+            "Generated preview preserves authentication failures",
+            rejected);
+    }
+
+    private static void TestNextcloudGeneratedPreviewLimit()
+    {
+        var client = new FileLinkDavClient(options =>
+            new NcHttpResponse
+            {
+                HasHttpResponse = true,
+                StatusCode = HttpStatusCode.OK,
+                ResponseBytes = new byte[] { 1, 2, 3, 4 }
+            });
+
+        bool rejected = false;
+        try
+        {
+            client.TryReadGeneratedPreview(
+                "https://cloud.example.test",
+                "Documents/report.pdf",
+                1024,
+                1024,
+                3,
+                CancellationToken.None);
+        }
+        catch (TalkServiceException ex)
+        {
+            rejected = string.Equals(
+                ex.Message,
+                "preview skipped",
+                StringComparison.Ordinal);
+        }
+        Check(
+            "Generated preview rejects a response above its byte limit",
+            rejected);
+    }
+
+    private static void TestNextcloudOriginalImagePreviewLimit()
+    {
+        var client = new FileLinkDavClient(options =>
+            new NcHttpResponse
+            {
+                HasHttpResponse = true,
+                StatusCode = HttpStatusCode.OK,
+                ResponseBytes = new byte[] { 1, 2, 3, 4 }
+            });
+
+        bool rejected = false;
+        try
+        {
+            client.ReadFilePreview(
+                "https://cloud.example.test",
+                "user",
+                "large.png",
+                3,
+                CancellationToken.None);
+        }
+        catch (TalkServiceException ex)
+        {
+            rejected = string.Equals(
+                ex.Message,
+                "preview skipped",
+                StringComparison.Ordinal);
+        }
+        Check(
+            "Original image preview rejects a response above its byte limit",
+            rejected);
+    }
+
+    private static void TestNextcloudServerCopy()
+    {
+        var requests = new List<NcHttpRequestOptions>();
+        var client = new FileLinkDavClient(options =>
+        {
+            requests.Add(options);
+            if (options.Method == "PROPFIND")
+            {
+                return new NcHttpResponse
+                {
+                    HasHttpResponse = true,
+                    StatusCode = (HttpStatusCode)207,
+                    ResponseText =
+                        "<?xml version=\"1.0\"?>"
+                        + "<d:multistatus xmlns:d=\"DAV:\">"
+                        + "<d:response><d:propstat><d:prop>"
+                        + "<d:resourcetype/>"
+                        + "<d:getcontentlength>42</d:getcontentlength>"
+                        + "</d:prop></d:propstat></d:response>"
+                        + "</d:multistatus>"
+                };
+            }
+            return Http(HttpStatusCode.Created);
+        });
+
+        client.CopyFile(
+            "https://cloud.example.test",
+            "user",
+            "Projects/Design:2026/report.pdf",
+            "NC Connector/share/report.pdf",
+            42,
+            CancellationToken.None);
+
+        Equal("Nextcloud copy probes and copies once", 2, requests.Count);
+        Equal("Nextcloud copy uses DAV COPY", "COPY", requests[1].Method);
+        Equal(
+            "Nextcloud copy preserves and encodes the source path",
+            "https://cloud.example.test/remote.php/dav/files/user/Projects/Design%3A2026/report.pdf",
+            requests[1].Url);
+        Equal(
+            "Nextcloud copy addresses the new share folder",
+            "https://cloud.example.test/remote.php/dav/files/user/NC%20Connector/share/report.pdf",
+            requests[1].Headers["Destination"]);
+        Equal("Nextcloud copy never overwrites", "F", requests[1].Headers["Overwrite"]);
     }
 
     private static void TestMissingResourcePreflight()
@@ -1049,11 +1423,15 @@ internal static class FileLinkProtocolTests
     $sources = @(
         $testSource,
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\FileLinkDavClient.cs"),
+        (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\FileLinkDavClient.Browsing.cs"),
+        (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\FileLinkDavClient.Copy.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\FileLinkDavClient.Probes.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\FileLinkDavClient.Requests.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\FileLinkShareClient.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\FileLinkShareClient.Recovery.cs"),
+        (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Models\NextcloudStorageEntry.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\FileLinkPath.cs"),
+        (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\NextcloudPath.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\FileLinkUploadPolicy.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\NcJson.cs")
     )

@@ -50,10 +50,13 @@ namespace NcTalkOutlookAddIn
         private readonly MailComposeSubscriptionRegistryController _mailComposeSubscriptionRegistry = new MailComposeSubscriptionRegistryController();
         private readonly OutlookAttachmentAutomationGuardService _attachmentGuardService = new OutlookAttachmentAutomationGuardService();
         private readonly TalkAppointmentController _talkAppointmentController;
-        private readonly ComposeShareLifecycleController _composeShareLifecycleController;
+        private readonly ComposeShareCleanupService _composeShareCleanupService = new ComposeShareCleanupService();
+        private readonly SeparatePasswordDeliveryController _separatePasswordDeliveryController;
         private readonly FileLinkLaunchController _fileLinkLaunchController;
         private readonly TalkRibbonController _talkRibbonController;
         private readonly MailInteropController _mailInteropController;
+        private readonly MailBodyInsertionController _mailBodyInsertionController;
+        private readonly ManagedEmailSignatureController _managedEmailSignatureController;
         private readonly UpdateCheckService _updateCheckService = new UpdateCheckService();
         private readonly DeferredAppointmentEnsureState _deferredAppointmentEnsureState = new DeferredAppointmentEnsureState();
         private OutlookUiSynchronizationContext _uiSynchronizationContext;
@@ -75,11 +78,13 @@ namespace NcTalkOutlookAddIn
         public NextcloudTalkAddIn()
         {
             _talkAppointmentController = new TalkAppointmentController(this);
-            _composeShareLifecycleController =
-                new ComposeShareLifecycleController(this);
+            _separatePasswordDeliveryController =
+                new SeparatePasswordDeliveryController(this);
             _fileLinkLaunchController = new FileLinkLaunchController(this);
             _talkRibbonController = new TalkRibbonController(this);
             _mailInteropController = new MailInteropController(this);
+            _mailBodyInsertionController = new MailBodyInsertionController(this, _mailInteropController);
+            _managedEmailSignatureController = new ManagedEmailSignatureController(this);
         }
 
         internal AddinSettings CurrentSettings
@@ -241,7 +246,12 @@ namespace NcTalkOutlookAddIn
             return new SettingsWorkflowController(
                 _outlookApplication,
                 () => _currentSettings,
-                settings => _currentSettings = settings,
+                settings =>
+                {
+                    _currentSettings = settings;
+                    _mailComposeSubscriptionRegistry
+                        .RefreshAttachmentAutomationSettings();
+                },
                 (configuration, trigger) => FetchBackendPolicyStatus(configuration, trigger),
                 settings => ConfigureDiagnosticsLogger(settings),
                 (settings, source, showWarning) =>
@@ -559,7 +569,7 @@ namespace NcTalkOutlookAddIn
 
         internal static bool TryWriteAppointmentHtmlBody(Outlook.AppointmentItem appointment, string html)
         {
-            return MailInteropController.TryWriteAppointmentHtmlBody(appointment, html);
+            return AppointmentHtmlBodyWriter.TryWriteAppointmentHtmlBody(appointment, html);
         }
 
         internal Outlook.AppointmentItem GetActiveAppointment()
@@ -629,9 +639,9 @@ namespace NcTalkOutlookAddIn
                 _currentSettings.AppPassword));
         }
 
-        internal void ApplyRoomToAppointment(Outlook.AppointmentItem appointment, TalkRoomRequest request, TalkRoomCreationResult result)
+        internal bool ApplyRoomToAppointment(Outlook.AppointmentItem appointment, TalkRoomRequest request, TalkRoomCreationResult result)
         {
-            _talkAppointmentController.ApplyRoomToAppointment(appointment, request, result);
+            return _talkAppointmentController.ApplyRoomToAppointment(appointment, request, result);
         }
 
         private static long? GetIcalStartEpochOrNull(Outlook.AppointmentItem appointment)
@@ -785,12 +795,11 @@ namespace NcTalkOutlookAddIn
                 AppointmentSubscription existingByEntry;
                 if (_subscriptionByEntryId.TryGetValue(entryId, out existingByEntry))
                 {
-                    if (existingByEntry.IsFor(appointment))
+                    if (existingByEntry.IsFor(appointment)
+                        && existingByEntry.MatchesToken(normalizedRoomToken))
                     {
                         return;
                     }
-
-                    existingByEntry.Dispose();
                 }
             }
 
@@ -806,6 +815,15 @@ namespace NcTalkOutlookAddIn
             }
             var key = Guid.NewGuid().ToString("N");
             var subscription = new AppointmentSubscription(this, appointment, key, normalizedRoomToken, normalizedRoomUrl, lobbyEnabled, isEventConversation, entryId);
+
+            AppointmentSubscription staleByEntry;
+            if (!string.IsNullOrEmpty(entryId)
+                && _subscriptionByEntryId.TryGetValue(entryId, out staleByEntry)
+                && staleByEntry != subscription)
+            {
+                staleByEntry.Dispose();
+            }
+
             _activeSubscriptions[key] = subscription;
             _subscriptionByToken[normalizedRoomToken] = subscription;
 
@@ -847,7 +865,7 @@ namespace NcTalkOutlookAddIn
             return TryDeleteRoom(roomToken, isEventConversation, true);
         }
 
-        private bool TryDeleteRoom(string roomToken, bool isEventConversation, bool showWarning)
+        internal bool TryDeleteRoom(string roomToken, bool isEventConversation, bool showWarning)
         {
             if (string.IsNullOrWhiteSpace(roomToken))
             {

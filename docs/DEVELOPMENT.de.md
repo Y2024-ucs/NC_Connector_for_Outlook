@@ -117,7 +117,13 @@ Root:
 - `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.MailComposeSubscription.cs`
   Runtime-Subscription-Core fuer Compose-Lifecycle-Zustand (`Dispose`, Identity, gemeinsame Helper).
 - `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.MailComposeSubscription.AttachmentFlow.cs`
-  Compose-Attachment-Interception/Evaluation/Share-Launch-Flow.
+  Anhangsereignisse, Timer und Prompt-Orchestrierung.
+- `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.MailComposeSubscription.AttachmentPolicy.cs`
+  Policy-Snapshots, Aktualisierung und Versandprüfung für Anhänge.
+- `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.MailComposeSubscription.AttachmentMaterialization.cs`
+  Anhangs-Snapshots, lokale Dateien und Entfernung aus Outlook.
+- `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.MailComposeSubscription.AttachmentQueue.cs`
+  Queue-Übergabe, Before-add-Batches und Abschluss der Ereignisunterdrückung.
 - `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.MailComposeSubscription.Signature.cs`
   Backend-E-Mail-Signatur-Policy fuer das passende Outlook-Absenderkonto.
 - `src/NcTalkOutlookAddIn/NextcloudTalkAddIn.MailComposeSubscription.Send.cs`
@@ -145,19 +151,25 @@ Controller:
 
 - `src/NcTalkOutlookAddIn/Controllers/TalkAppointmentController.cs` mit `Sync`-Partial (Terminmetadaten, lokaler Snapshot und entfernte Raumaktualisierung)
 - `src/NcTalkOutlookAddIn/Controllers/ComposeShareCleanupTracker.cs` (In-Memory-Status neu eingefügter, noch nicht geschriebener Compose-Freigaben)
-- `src/NcTalkOutlookAddIn/Controllers/ComposeShareLifecycleController.cs` (Löschung nicht persistierter oder nicht eingefügter Serverartefakte über den exakten Ursprung sowie Body-, Empfänger-, Absender-, Secrets- und Signaturaufbereitung der Passwortmail)
+- `src/NcTalkOutlookAddIn/Controllers/SeparatePasswordDeliveryController.cs` (Body-, Empfänger-, Absender-, Secrets- und Signaturaufbereitung sowie direkte Outlook-Übergabe der Passwortmail)
 - `src/NcTalkOutlookAddIn/Controllers/TalkDescriptionTemplateController.cs` (Talk-Template-/Block-Rendering)
 - `src/NcTalkOutlookAddIn/Controllers/OutlookRecipientResolverController.cs` (SMTP- und Attendee-Aufloesung)
 - `src/NcTalkOutlookAddIn/Controllers/MailComposeSubscriptionRegistryController.cs` (Compose-Subscription-Registry)
-- `src/NcTalkOutlookAddIn/Controllers/MailInteropController.cs` (gemeinsame Mail-/Inspector-Interop-Helper und einheitlicher WordEditor-Signatur-Slot-Reconciler)
+- `src/NcTalkOutlookAddIn/Controllers/MailInteropController.cs` (aktive Mail, Inline-Compose, Inspector-Identität und Dialogbesitzer)
+- `src/NcTalkOutlookAddIn/Controllers/MailBodyInsertionController.cs` (Freigabeblöcke über die bestehenden WordEditor- und HTMLBody-Pfade)
+- `src/NcTalkOutlookAddIn/Controllers/ManagedEmailSignatureController.cs` (gemeinsamer WordEditor-Signatur-Slot-Reconciler)
+- `src/NcTalkOutlookAddIn/Controllers/AppointmentHtmlBodyWriter.cs` (HTML-zu-RTF-Brücke für Termine)
 - `src/NcTalkOutlookAddIn/Models/SeparatePasswordDispatchEntry.cs` (gemeinsames Queue-Modell fuer separaten Passwort-Follow-up)
 - `src/NcTalkOutlookAddIn/Settings/ManagedSetupPolicy.cs` (verwaltete Nextcloud-URL aus Registry/GPO)
 - `src/NcTalkOutlookAddIn/Settings/SettingsFileTransaction.cs` (serialisiert Profil-Schreibvorgänge über einen benannten Mutex, ersetzt nur validierte Dateien und behält die letzte gültige Sicherung)
 
 Services:
 
+- `src/NcTalkOutlookAddIn/Services/ComposeShareCleanupService.cs` (Löschung nicht persistierter oder nicht eingefügter Serverartefakte über den exakten Ursprung)
 - `src/NcTalkOutlookAddIn/Services/TalkService.cs` (Talk API Calls)
 - `src/NcTalkOutlookAddIn/Services/FileLinkService.cs` (Orchestrierung von Uploadplan, Freigabe-Stammordner, Transfer und Share-Erstellung)
+- `src/NcTalkOutlookAddIn/Services/FileLinkQueueSnapshotBuilder.cs` (quellengruppierter Ordnerbaum für die Freigabe-Warteschlange)
+- `src/NcTalkOutlookAddIn/Services/FileLinkDavClient.Browsing.cs` (DAV-Hierarchie und Speicherwerte des Benutzers) sowie `FileLinkDavClient.Copy.cs` (Kopieren ausgewählter Nextcloud-Dateien in die Freigabe)
 - `src/NcTalkOutlookAddIn/Services/NextcloudCapabilitiesService.cs` (globale Nextcloud-32-Prüfung und typisierter OCS-Capabilities-Snapshot mit fünf Minuten Cache)
 - `src/NcTalkOutlookAddIn/Services/FileLinkSelectionScanner.cs` (einmaliger lokaler Scan und Pfade relativ zum Freigabe-Stammordner)
 - `src/NcTalkOutlookAddIn/Services/FileLinkUploadPlanner.cs` (Auswahl von Direct, Chunked oder optionalem Bulk vor der ersten serverseitigen Änderung)
@@ -186,14 +198,20 @@ Update-Check:
 UI:
 
 - `src/NcTalkOutlookAddIn/UI/SettingsForm.cs`
+  Die Partials `General`, `Sharing`, `Talk`, `Signature`, `Ifb`, `Advanced`, `Debug` und `About` enthalten Layout und Aktionen ihres Tabs. Control-Erzeugung, gemeinsame Speichervalidierung, Backend-Policy-Zustand und tabübergreifende Control-Aktualisierung bleiben in der Hauptform; das bestehende `Language`-Partial enthält weiterhin die Lokalisierung.
 - `src/NcTalkOutlookAddIn/UI/TalkLinkForm.cs`
 - `src/NcTalkOutlookAddIn/UI/FileLinkWizardForm.cs`
+- `src/NcTalkOutlookAddIn/UI/NextcloudFilePickerForm.cs` (Datei- und Ordnerauswahl für **Meine Nextcloud**)
+- `src/NcTalkOutlookAddIn/UI/NextcloudPickerNavigation.cs` hält den Verlauf. Die Form übernimmt eine neue Verlaufsposition erst nach erfolgreichem Laden des Ordners.
+- `src/NcTalkOutlookAddIn/UI/NextcloudPickerPreview.cs` lädt und dekodiert eine Dateivorschau. Auswahl, Abbruchgeneration und Besitz des angezeigten Bildes bleiben bei der Form; Anfragen laufen weiterhin über `FileLinkService`.
 - `src/NcTalkOutlookAddIn/UI/ComposeAttachmentPromptForm.cs` (2-Aktions-Prompt fuer Schwellwertmodus)
 - `src/NcTalkOutlookAddIn/UI/BrandedHeader.cs` (Header-Banner inkl. `AttachToParent(...)` fuer konsistente Header-Initialisierung in Forms)
 - `src/NcTalkOutlookAddIn/UI/ScaledForm.cs` (zentrale DPI-Skalierung via `ScaleLogical(...)`, damit Form-Wrapper nicht dupliziert werden)
 
 Utilities:
 
+- `src/NcTalkOutlookAddIn/Utilities/RecipientAddressList.cs` (gemeinsame Normalisierung, Deduplizierung und Semikolonlisten für Empfänger)
+- `src/NcTalkOutlookAddIn/Utilities/WordHtmlInsertionFile.cs` (gemeinsame HTML-Dokumenthülle und Bereinigung temporärer Dateien für Word-Einfügungen)
 - `src/NcTalkOutlookAddIn/Utilities/BrowserLauncher.cs` (zentraler Shell-Start für Dateien und Ordner; `OpenUrl` lehnt Nicht-HTTPS-Ziele ab)
 - `src/NcTalkOutlookAddIn/Utilities/SizeFormatting.cs` (zentrale MB-Formatierung fuer UI-Texte)
 - `src/NcTalkOutlookAddIn/Utilities/ComInteropScope.cs` (zentrale COM-Release-/FinalRelease-Helfer)
@@ -253,11 +271,13 @@ Runtime-Regeln:
 1. Der Benutzer klickt in einem Termin auf **Talk-Link einfügen**.
 2. `TalkLinkForm` erfasst Titel, Passwort, Lobby, Sichtbarkeit, Raumtyp, Teilnehmersynchronisierung und optionales Ziel der Moderatorübergabe.
 3. `TalkRibbonController` lädt Backend- und Passwort-Policy parallel, bevor der Wizard geöffnet wird. Ein Delegationsziel wird als eigener Benutzer abgelehnt, wenn es zur kanonischen UID, zum konfigurierten Login oder zur bekannten primären E-Mail-Adresse passt.
-4. `TalkService` erstellt den Raum. `TalkAppointmentController.ApplyRoomToAppointment(...)` schreibt URL, lokalisierten Body-Block und `X-NCTALK-*`-Metadaten in den Termin.
-5. Beim Speichern liest die Appointment-Subscription die benötigten Outlook-Werte auf dem STA-Thread. `TalkAppointmentSyncCoordinator` fasst unveränderliche Snapshots zusammen und führt Lobby-, Beschreibungs-, Teilnehmer- und Delegationsaufrufe im Hintergrund aus.
-6. `BeforeDelete` verwendet Outlooks terminspezifisches Löschereignis. Organizer-, Token-, Delegations- und Serienprüfung laufen an diesem Termin, bevor `QueueSavedTalkRoomDeletion(...)` einen Löschauftrag mit `PolicyRequired=true` erstellt; URL- oder Ortsauswertung ist keine Löschquelle. Der Hintergrund-Worker wertet die wirksame `TalkDeleteRoomOnEventDelete`-Policy vor der Raumlöschung aus. Derselbe Ereignispfad gilt für die Löschung aus dem geöffneten Termin und aus der Kalenderansicht. `Explorer.SelectionChange` bindet nur ausgewählte Talk-Termine; beim Hook jedes Explorers wird dessen aktuelle Auswahl einmal verarbeitet, damit die Kalenderlöschung direkt nach einem Outlook-Neustart ohne vorheriges Öffnen funktioniert.
-7. Beim Start werden nur der persistente Lösch-Retry-Worker und bestehende Explorer-Oberflächen initialisiert. Stores oder Kalenderordner werden nicht aufgezählt, Kalenderelemente nicht durchsucht und keine ordnerbezogenen `Items`-Subscriptions gehalten.
-8. Die DPAPI-geschützte Löschqueue besitzt Primärdatei und Sicherung. Die Nextcloud-Löschung läuft im Hintergrund; fehlgeschlagene Löschungen werden verzögert und nach einem Outlook-Neustart wiederholt. Die Bereinigung eines neu erstellten Raums aus einem ungespeicherten und verworfenen Termin verwendet dieselbe Queue mit `PolicyRequired=false`. Beim Laden älterer Zustände bleiben nur bereits zur Löschung vorgemerkte Einträge erhalten; reine Tracking-Einträge werden verworfen.
+4. Vor der Serveranfrage sichert das Add-in Betreff, Ort, Body und alle `X-NCTALK-*`-Eigenschaften des Termins. `TalkService` erstellt anschließend den neuen Raum, während ein vorhandener Raum weiterhin verfügbar bleibt.
+5. `TalkAppointmentController.ApplyRoomToAppointment(...)` schreibt URL, lokalisierten Body-Block und `X-NCTALK-*`-Metadaten in den Termin.
+6. Erst wenn alle Terminänderungen erfolgreich waren, wird die neue Appointment-Subscription registriert und ein vorhandener Raum entfernt. Scheitert eine Terminänderung, stellt das Add-in den gesicherten Zustand wieder her und löscht ausschließlich den neu erstellten Raum; eine fehlgeschlagene Bereinigung wird in die unbedingte persistente Löschqueue eingestellt. Scheitert nach erfolgreicher Ersetzung nur die Löschung des alten Raums, bleibt der neue Raum verknüpft und die alte Raumlöschung wird zur Wiederholung vorgemerkt.
+7. Beim Speichern liest die Appointment-Subscription die benötigten Outlook-Werte auf dem STA-Thread. `TalkAppointmentSyncCoordinator` fasst unveränderliche Snapshots zusammen und führt Lobby-, Beschreibungs-, Teilnehmer- und Delegationsaufrufe im Hintergrund aus.
+8. `BeforeDelete` verwendet Outlooks terminspezifisches Löschereignis. Organizer-, Token-, Delegations- und Serienprüfung laufen an diesem Termin, bevor `QueueSavedTalkRoomDeletion(...)` einen Löschauftrag mit `PolicyRequired=true` erstellt; URL- oder Ortsauswertung ist keine Löschquelle. Der Hintergrund-Worker wertet die wirksame `TalkDeleteRoomOnEventDelete`-Policy vor der Raumlöschung aus. Derselbe Ereignispfad gilt für die Löschung aus dem geöffneten Termin und aus der Kalenderansicht. `Explorer.SelectionChange` bindet nur ausgewählte Talk-Termine; beim Hook jedes Explorers wird dessen aktuelle Auswahl einmal verarbeitet, damit die Kalenderlöschung direkt nach einem Outlook-Neustart ohne vorheriges Öffnen funktioniert.
+9. Beim Start werden nur der persistente Lösch-Retry-Worker und bestehende Explorer-Oberflächen initialisiert. Stores oder Kalenderordner werden nicht aufgezählt, Kalenderelemente nicht durchsucht und keine ordnerbezogenen `Items`-Subscriptions gehalten.
+10. Die DPAPI-geschützte Löschqueue besitzt Primärdatei und Sicherung. Die Nextcloud-Löschung läuft im Hintergrund; fehlgeschlagene Löschungen werden verzögert und nach einem Outlook-Neustart wiederholt. Die Bereinigung eines neu erstellten Raums aus einem ungespeicherten und verworfenen Termin verwendet dieselbe Queue mit `PolicyRequired=false`. Beim Laden älterer Zustände bleiben nur bereits zur Löschung vorgemerkte Einträge erhalten; reine Tracking-Einträge werden verworfen.
 
 #### HTML-Subset für Talk-Termine (Backend-Vorlagen)
 
@@ -267,11 +287,16 @@ Backend-Talk-Templates verwenden für die Outlook-Word-/RTF-Pipeline bevorzugt T
 
 - Der FileLink-Ribbon-Einstieg ist im Mail-Inspector und im Explorer-Tab `Nachricht` fuer Inline-Antworten/-Weiterleitungen sichtbar. Beide Einstiege laufen ueber denselben `FileLinkLaunchController`.
 - Der Wizard startet mit den gespeicherten lokalen FileLink-Vorgaben. Ein gesperrter Share-Policy-Wert überschreibt den zugehörigen lokalen Wert; ein editierbarer Wert lässt die gespeicherte Outlook-Einstellung unverändert.
+- Der Datei-Schritt gruppiert lokale und **Meine Nextcloud**-Auswahlen in derselben Warteschlange. Der sichtbare Ordnerbaum entsteht aus unveränderlichen Auswahl-Snapshots. Interaktive lokale Scans laufen als abbrechbare Dateisystemarbeit im Hintergrund; erst der fertige Snapshot wird wieder im erfassten WinForms-Kontext in die Queue übernommen. Der Uploadplan verwendet genau dieselben Snapshots; später hinzugekommene Dateien werden nicht unsichtbar mit hochgeladen, und eine entfernte oder veränderte Datei aus der Queue stoppt den Upload als geänderte Quelle.
 - Inline-Antworten/-Weiterleitungen fuegen das gerenderte Freigabe-HTML ueber `Explorer.ActiveInlineResponseWordEditor` ein; der Inline-Pfad schreibt nicht direkt in `MailItem.HTMLBody` und behaelt zwei leere Absaetze ueber dem Freigabeblock fuer eigenen Text.
 - Normale HTML-Compose-Fenster verwenden zuerst den Inspector-WordEditor, damit verwaltete Bookmarks erhalten bleiben. Nur wenn dieser Editor nicht geoeffnet werden kann, bleibt die direkte `MailItem.HTMLBody`-Route als Kompatibilitaetsfallback aktiv.
-- `MailComposeSubscription` debounct Anhangsänderungen und verarbeitet Always-via-NC sowie den Schwellwertmodus. `BeforeAttachmentAdd` versucht die Dateidaten früh zu erfassen; bei einer erzwingenden Policy wird ein nicht materialisierbarer oder nicht prüfbarer Host-Anhang abgebrochen. Harte Outlook-/Exchange-Grenzen können weiterhin vor einem Add-in-Ereignis greifen.
+- Offene Verfassenfenster verwerfen ihren Snapshot der Anhangsregeln unmittelbar nach dem Speichern lokaler Einstellungen. Backend-Policy-Snapshots laufen nach fünf Minuten ab; synchrone Anhangsereignisse starten dann eine Aktualisierung, und der Versand wartet bei vorhandenen Anhängen auf einen aktuellen Stand.
+- Die Anhangs-Partials teilen sich eine Compose-Subscription mit ihren bestehenden Ereignisregistrierungen und ihrer Lebensdauer. Policy, Dateierfassung und Queue-Übergabe führen keine unabhängigen Ereignishandler oder Task-Aufrufpfade ein.
+- `MailComposeSubscription` debounct Anhangsänderungen und verarbeitet Always-via-NC sowie den Schwellwertmodus. `BeforeAttachmentAdd` versucht die Dateidaten früh zu erfassen; bei einer erzwingenden Policy wird ein nicht materialisierbarer oder nicht prüfbarer Host-Anhang abgebrochen. Bereits hinzugefügte Outlook-Anhänge werden erst entfernt, nachdem die vollständige Startauswahl in der Queue liegt. Ein späterer Abbruch des Wizards stellt übernommene Anhänge nicht wieder her. Harte Outlook-/Exchange-Grenzen können weiterhin vor einem Add-in-Ereignis greifen.
+- Bei einer Mehrfachauswahl zeigt der Schwellwertdialog den Namen und die Größe derselben zuletzt hinzugefügten Datei. Die Entfernen-Aktion umfasst weiterhin den vollständigen zuletzt hinzugefügten Batch.
+- Die Erfassung der aktuellen Outlook-Anhänge erfolgt erst nach dem Server-Prefetch auf dem Outlook-STA. Dateierfassung, Queue-Annahme und Entfernung der Originale bleiben in einem synchronen UI-Aufruf; Anhangspositionen werden nicht über die Wartezeit der Netzwerkanfragen hinweg gespeichert.
 - Outlook-Body-Ressourcen mit `PR_ATTACHMENT_HIDDEN=true`, beispielsweise Signaturbilder, werden weder in Anhangs-Batches und Schwellwertsummen noch in FileLink-Auswahl, Host-Entfernung oder Send-Gate einbezogen.
-- `NextcloudTalkAddIn.TryInsertHtmlIntoMail(...)` und `TryInsertPlainTextIntoMail(...)` geben den Einfügestatus von `MailInteropController` zurück. Scheitern alle Einfügepfade, stellt `FileLinkLaunchController` die neu erzeugten Serverartefakte zur Bereinigung ein und meldet den Wizard als fehlgeschlagen.
+- `NextcloudTalkAddIn.TryInsertHtmlIntoMail(...)` und `TryInsertPlainTextIntoMail(...)` geben den Einfügestatus von `MailBodyInsertionController` zurück. Scheitern alle Einfügepfade, stellt `FileLinkLaunchController` die neu erzeugten Serverartefakte zur Bereinigung ein und meldet den Wizard als fehlgeschlagen.
 - `ComposeLifecycleOrigin` hält den exakten Server-/Kontokontext für das Löschen der erstellten Freigabe oder eine spätere Secrets-Anfrage. Die Bereinigung fällt nie auf das aktuell ausgewählte Konto zurück.
 - Kann eine neu erstellte Freigabe nicht in die Mail eingefügt werden, versucht der Controller, ihren Serverordner mit diesem erfassten Kontext zu löschen.
 - Nach erfolgreicher Einfügung verfolgt `MailComposeSubscription` den `ComposeShareCleanupRecord`, bis Outlook `AfterWrite` auslöst. Ein abgeschlossener Schreibvorgang umfasst Speichern, automatisches Speichern und den Schreibvorgang für Versand/Postausgang; diese Pfade geben den Bereinigungseintrag frei, ohne die Freigabe zu löschen.
@@ -283,7 +308,7 @@ Backend-Talk-Templates verwenden für die Outlook-Word-/RTF-Pipeline bevorzugt T
 - `OnSend` ist die direkte Übergabegrenze. Die Queue wird einmal verbraucht, der endgültige Secrets-/Klartextinhalt erzeugt, Empfänger und wirksames `SendUsingAccount`/`SentOnBehalfOfName` der Hauptmail übernommen, Body und passende Backend-Signatur fertiggestellt, Empfänger aufgelöst und der Follow-up ohne zwischengespeicherten Outlook-Entwurf übergeben.
 - Für die Passwortzustellung werden weder Entwürfe, Postausgang, Gesendet-Ordner, MIME-Marker noch eine Neustart-Wiederherstellung verwendet. Auch Outlooks verzögerte oder Offline-Übermittlung ruft `OnSend` auf; der Passwort-Follow-up wird deshalb sofort übergeben und wartet nicht auf die Hauptmail im Postausgang. Unerwartete Follow-up-Fehler setzen das `cancel`-Flag der Hauptmail nie.
 - Das Send-Gate bricht den Versand bei einer erzwingenden Anhangs-Policy ab, solange noch ein gewöhnlicher regelwidriger Anhang vorhanden ist.
-- `ComposeShareLifecycleController` übernimmt Aufbereitung und direkte Übergabe der Passwortmail. SMTP-Adressen werden gemeinsam über An, Cc und Bcc dedupliziert. Im Secrets-Modus entsteht ein Einmal-Link pro eindeutiger Adresse. Bei eindeutigem Auto-Send-Fehler wird genau ein vollständig vorbereiteter manueller Fallback geöffnet; bei mehrdeutigem Outlook-Status wird kein Duplikat erzeugt. Scheitert die strikte Absender- oder Empfängeraufbereitung vor der Übergabe, verwendet der Controller denselben Fallback mit normalisierten An-/Cc-/Bcc-Feldern und gleicht die verwaltete Signatur nach Initialisierung des Inspectors ab.
+- `ComposeShareCleanupService` führt die Serverbereinigung im bestehenden Hintergrundtask aus. `SeparatePasswordDeliveryController` übernimmt Aufbereitung und direkte Übergabe der Passwortmail auf dem Outlook-STA im Send-Ereignis der Hauptmail. SMTP-Adressen werden gemeinsam über An, Cc und Bcc dedupliziert. Im Secrets-Modus entsteht ein Einmal-Link pro eindeutiger Adresse. Bei eindeutigem Auto-Send-Fehler wird genau ein vollständig vorbereiteter manueller Fallback geöffnet; bei mehrdeutigem Outlook-Status wird kein Duplikat erzeugt. Scheitert die strikte Absender- oder Empfängeraufbereitung vor der Übergabe, verwendet der Controller denselben Fallback mit normalisierten An-/Cc-/Bcc-Feldern und gleicht die verwaltete Signatur nach Initialisierung des Inspectors ab.
 - Secrets-Links werden lokal per AES-GCM über Windows CNG verschlüsselt. Schlägt die Secrets-Erstellung fehl, wird die Klartext-Passwortmail verwendet und ein Hinweis angezeigt.
 - `OutlookAttachmentAutomationGuardService` erzwingt den Host-Konflikt-Guard live:
   - vor Auswertung
@@ -305,7 +330,9 @@ Backend-Talk-Templates verwenden für die Outlook-Word-/RTF-Pipeline bevorzugt T
 
 - Alle Funktionen setzen Nextcloud 32 oder neuer voraus. `NextcloudCapabilitiesService` validiert die strukturierte Version der authentifizierten OCS-Capabilities-Antwort und speichert den typisierten Snapshot fünf Minuten pro Server/Benutzer zwischen. Verbindungsprüfungen aktualisieren ihn; Funktionseinstiege lehnen ältere Server oder Antworten ohne auswertbare Version ab.
 - `FileLinkService` orchestriert die fachlich getrennten Komponenten für Planung, DAV-Verzeichnisse, Transfer, Share-Erstellung und Fortschritt.
-- `FileLinkSelectionScanner` scannt die lokale Auswahl vor der ersten serverseitigen Änderung einmal. Das relativ zum Freigabe-Stammordner aufgebaute Ergebnis bewahrt leere Verzeichnisse, lehnt symbolische Links und Junctions ab und speichert Dateigröße sowie Änderungszeit. `FileLinkUploadPlanner` weist anschließend die Transferarten zu, ohne den Server zu verändern.
+- Die Queue-Aufnahme verwendet `FileLinkSelection.IdentityComparer`: Lokale Windows-Pfade ignorieren Groß-/Kleinschreibung, Nextcloud-Pfade unterscheiden sie. Dieselbe Quelle wird nicht doppelt aufgenommen; unterschiedliche Nextcloud-Namen wie `report.pdf` und `Report.pdf` bleiben beide erhalten. Namenskonflikte am Ziel verwenden unabhängig davon weiterhin die bestehende Umbenennung.
+- `FileLinkQueueSnapshotBuilder` scannt jede lokale Auswahl genau einmal beim Einfügen in die Queue. Auswahlen aus Dialogen und Drag-and-drop führen den rekursiven Scan mit Abbruchmöglichkeit außerhalb des UI-Threads aus; nur die bereits von Outlook materialisierten einzelnen Anhangsdateien verwenden die synchrone Startübergabe. Der relativ zum Freigabe-Stammordner aufgebaute Snapshot bewahrt leere Verzeichnisse, lehnt symbolische Links und Junctions ab und speichert Dateigröße sowie Änderungszeit. `FileLinkSelectionScanner` verwendet exakt diesen Snapshot; `FileLinkUploadPlanner` weist anschließend die Transferarten zu, ohne den ausgewählten Ordner erneut zu enumerieren oder den Server zu verändern.
+- `NextcloudFilePickerForm` liest den Dateibereich des konfigurierten Benutzers mit DAV-`PROPFIND` der Tiefe eins. Die Adressleiste führt einen lokalen Zurück- und Vorwärtsverlauf, navigiert ohne wiederholten Kontonamen zu Elternordnern oder angeklickten Pfadsegmenten und aktualisiert den aktuellen Ordner ohne neuen Verlaufseintrag. Für den Stamm wird dasselbe Nextcloud-Symbol wie in Thunderbird verwendet. Für eine ausgewählte Datei fordert der Picker zuerst über Nextclouds authentifizierte Route `/index.php/core/preview.png` eine Vorschau mit 1024 × 1024 Pixeln an. Die Antwort ist auf 5 MiB begrenzt, wird außerhalb des UI-Threads dekodiert und nur innerhalb der Grenzwerte für dekodierte Bilder akzeptiert. Meldet Nextcloud, dass keine Vorschau verfügbar ist, wird nur bei unterstützten Rasterbildern mit höchstens 5 MiB Größe das Original über einen bytebegrenzten DAV-`GET` geladen; Dokument-Originale werden für Vorschauen nie heruntergeladen. Überholte Vorschauanfragen werden abgebrochen. Beim Bestätigen eines Ordners wird der vollständige Nachfahren-Snapshot einschließlich leerer Ordner festgehalten. Ausgewählte Dateien plant der Scanner als serverseitige Kopien. Der Transfer prüft ihre aktuelle Größe und kopiert sie mit authentifiziertem DAV-`COPY` in den reservierten Freigabeordner. Das Original bleibt unverändert; für die eigentliche Übertragung läuft kein Dateiinhalt durch Outlook.
 - Beim Weiter aus dem ersten Schritt prüft der manuelle Wizard den aus Basispfad, festgehaltenem Wizard-Datum und bereinigtem Freigabenamen abgeleiteten Zielpfad mit einem DAV-`PROPFIND` der Tiefe null. Ein vorhandenes Ziel hält den Wizard im ersten Schritt. `FileLinkDavClient` reserviert den Freigabe-Stammordner beim späteren Upload atomar mit `MKCOL`, damit eine Kollision zwischen Vorprüfung und Upload sicher abbricht. Ein `405` nach einem unklaren ersten Ergebnis gilt nur dann als erfolgreiche Reservierung, wenn ein DAV-`PROPFIND` der Tiefe null den exakten Pfad als Collection bestätigt. Ein bekannter `405` ohne vorherige Unklarheit bleibt eine Kollision. Die Anhangsautomatisierung überspringt die Vorprüfung und probiert weiterhin nummerierte Freigabenamen. Leere Verzeichnisse, für Bulk oder Chunked benötigte Elternpfade und von mehreren Direct-Dateien gemeinsam genutzte Eltern werden einmal, Eltern vor Kindern, mit maximal drei parallelen Requests pro Ebene angelegt. Direct-Pfadketten mit nur einer Datei legt `X-NC-WebDAV-Auto-Mkcol` an.
 - `FileLinkTransferService` koordiniert getrennte Bulk-, Direct- und Chunked-Uploader. Dateien außerhalb von Bulk bis 20 MiB werden mit dem serverseitig ausgewerteten Header `X-NC-WebDAV-Auto-Mkcol: 1` über direkte `PUT`-Requests hochgeladen. Dateien über 20 MiB verwenden Chunked Upload v2. Direct- und Chunked-Dateien teilen sich das Limit von maximal drei parallelen Transfers.
 - Nur wenn `ocs.data.capabilities.dav.bulkupload` exakt `"1.0"` meldet, kommen mindestens 20 Kandidaten mit höchstens 8 MiB pro Datei für DAV-Bulk infrage. Sequentielle Multipart-Batches sind auf 100 Dateien und ungefähr 20 MiB begrenzt. Der Planner wählt Bulk nur, wenn mindestens 20 Prozent aller Upload-Requests entfallen. Die Berechnung umfasst Basispfad, Freigabe-Stammordner, geplante Verzeichnisse, direkte Dateien sowie jeden Chunk-Ordner, Chunk-`PUT` und abschließenden `MOVE`. Vor der ersten Serveränderung meldet die sequenzielle MD5-Berechnung ihren aktuellen und gesamten Dateizähler als eigene Wizard-Phase.
@@ -351,6 +378,9 @@ Freigaben:
 - Aktuelle kanonische Benutzer-ID: `GET /ocs/v2.php/cloud/user?format=json`
 - Öffentliche Freigabe erstellen: `POST /ocs/v2.php/apps/files_sharing/api/v1/shares`
 - Upload/Ordneranlage: `remote.php/dav/...` (WebDAV)
+- Dateien und Speicherwerte des Benutzers lesen: `PROPFIND /remote.php/dav/files/<user>/...` mit Tiefe eins
+- Vorschau einer ausgewählten Datei: authentifiziertes, bytebegrenztes `GET /index.php/core/preview.png?file=...`; fehlt die generierte Vorschau, folgt `GET /remote.php/dav/files/<user>/...` nur für unterstützte Rasterbilder, deren Original höchstens 5 MiB groß ist
+- Ausgewählte Nextcloud-Datei in die Freigabe kopieren: `COPY /remote.php/dav/files/<user>/...` mit absolutem `Destination` im selben Konto
 - Optionaler Bulk-Upload kleiner Dateien: `POST /remote.php/dav/bulk` (`multipart/related`, nur bei exakt `ocs.data.capabilities.dav.bulkupload = "1.0"`)
 - Upload großer Dateien: `MKCOL /remote.php/dav/uploads/<user>/<upload-id>`, Chunk-`PUT`s, danach `MOVE /remote.php/dav/uploads/<user>/<upload-id>/.file` zum Zielpfad
 

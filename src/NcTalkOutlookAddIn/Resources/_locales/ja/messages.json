@@ -438,7 +438,7 @@
     "message": "この日付以降、リンクは利用できません。"
   },
   "sharing_step_files_title": {
-    "message": "ファイルまたはフォルダーを選択"
+    "message": "共有を作成"
   },
   "sharing_files_table_path": {
     "message": "パス"
@@ -595,6 +595,9 @@
   },
   "outlook_confirm_replace_room": {
     "message": "この予定には既に Talk ルームがあります。置き換えますか？"
+  },
+  "outlook_error_attach_room_to_appointment": {
+    "message": "Talk ルームを予定に追加できませんでした。予定の以前の内容は保持されました。"
   },
   "outlook_error_create_room_unexpected_format": {
     "message": "Talk ルーム作成中に予期しないエラーが発生しました: $1"
@@ -1015,5 +1018,149 @@
   },
   "options_update_changelog_fixed": {
     "message": "修正"
+  },
+  "sharing_base_path_info": {
+    "message": "保存先フォルダー:"
+  },
+  "sharing_button_add_local": {
+    "message": "+ ローカル"
+  },
+  "sharing_button_add_nextcloud": {
+    "message": "+ マイ Nextcloud"
+  },
+  "sharing_button_add_nextcloud_files": {
+    "message": "ファイルを選択"
+  },
+  "sharing_button_add_nextcloud_folder": {
+    "message": "フォルダーを選択"
+  },
+  "sharing_source_local": {
+    "message": "ローカル"
+  },
+  "sharing_source_nextcloud": {
+    "message": "マイ Nextcloud"
+  },
+  "sharing_queue_entries_summary": {
+    "message": "項目数: $1"
+  },
+  "sharing_queue_sources_summary": {
+    "message": "ソース数: $1"
+  },
+  "sharing_queue_total_summary": {
+    "message": "合計サイズ: $1"
+  },
+  "sharing_queue_storage_loading": {
+    "message": "ストレージ情報を読み込み中…"
+  },
+  "sharing_queue_storage_available": {
+    "message": "空き容量: $2 中 $1"
+  },
+  "sharing_queue_storage_unlimited": {
+    "message": "ストレージ上限なし · $1 使用中"
+  },
+  "sharing_queue_storage_unknown": {
+    "message": "ストレージ情報を取得できません"
+  },
+  "sharing_queue_storage_insufficient": {
+    "message": "必要: $1 · 利用可能: $2"
+  },
+  "sharing_queue_expand_folder": {
+    "message": "フォルダー「$1」を展開"
+  },
+  "sharing_queue_collapse_folder": {
+    "message": "フォルダー「$1」を折りたたむ"
+  },
+  "sharing_queue_remove_item": {
+    "message": "「$1」を削除"
+  },
+  "sharing_status_waiting": {
+    "message": "待機中"
+  },
+  "sharing_files_empty": {
+    "message": "ファイルが選択されていません。"
+  },
+  "outlook_sharing_queue_read_failed": {
+    "message": "選択した項目を読み取れませんでした: $1"
+  },
+  "outlook_nextcloud_picker_load_failed": {
+    "message": "Nextcloud フォルダーを読み込めませんでした。"
+  },
+  "outlook_sharing_source_my_nextcloud": {
+    "message": "マイ Nextcloud"
+  },
+  "outlook_nextcloud_picker_files_title": {
+    "message": "ファイルを選択"
+  },
+  "outlook_nextcloud_picker_folder_title": {
+    "message": "フォルダーを選択"
+  },
+  "outlook_nextcloud_picker_filter_placeholder": {
+    "message": "名前で絞り込む..."
+  },
+  "outlook_nextcloud_picker_navigate_back": {
+    "message": "戻る"
+  },
+  "outlook_nextcloud_picker_navigate_forward": {
+    "message": "進む"
+  },
+  "outlook_nextcloud_picker_navigate_up": {
+    "message": "1 つ上のフォルダーへ"
+  },
+  "outlook_nextcloud_picker_refresh": {
+    "message": "更新"
+  },
+  "outlook_nextcloud_picker_column_name": {
+    "message": "名前"
+  },
+  "outlook_nextcloud_picker_column_size": {
+    "message": "サイズ"
+  },
+  "outlook_nextcloud_picker_column_modified": {
+    "message": "更新日"
+  },
+  "outlook_nextcloud_picker_no_selection": {
+    "message": "ファイルが選択されていません"
+  },
+  "outlook_nextcloud_picker_no_preview": {
+    "message": "プレビューを表示できません"
+  },
+  "outlook_nextcloud_picker_multiple_selection": {
+    "message": "選択した項目: {0}"
+  },
+  "outlook_nextcloud_picker_preview_loading": {
+    "message": "プレビューを読み込んでいます..."
+  },
+  "outlook_nextcloud_picker_preview_load_failed": {
+    "message": "プレビューを読み込めませんでした"
+  },
+  "outlook_nextcloud_picker_preview_skipped": {
+    "message": "大きいファイルのプレビューをスキップしました"
+  },
+  "outlook_nextcloud_picker_close_button": {
+    "message": "閉じる"
+  },
+  "outlook_nextcloud_picker_select_files_button": {
+    "message": "ファイルを選択"
+  },
+  "outlook_nextcloud_picker_select_folder_button": {
+    "message": "このフォルダーを選択"
+  },
+  "outlook_nextcloud_picker_loading": {
+    "message": "フォルダーを読み込んでいます..."
+  },
+  "outlook_nextcloud_picker_reading_folder": {
+    "message": "フォルダーの内容を読み込んでいます..."
+  },
+  "outlook_nextcloud_picker_storage_used": {
+    "message": "ストレージ: $1 使用中"
+  },
+  "outlook_nextcloud_picker_storage_of": {
+    "message": "ストレージ: $2 中 $1 使用中"
+  },
+  "outlook_sharing_add_nextcloud_files": {
+    "message": "マイ Nextcloud のファイル..."
+  },
+  "outlook_sharing_add_nextcloud_folder": {
+    "message": "マイ Nextcloud のフォルダー..."
   }
 }

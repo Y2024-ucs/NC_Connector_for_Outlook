@@ -438,7 +438,7 @@
     "message": "此日期之後，連結將不可用。"
   },
   "sharing_step_files_title": {
-    "message": "選擇檔案或資料夾"
+    "message": "建立分享"
   },
   "sharing_files_table_path": {
     "message": "路徑"
@@ -595,6 +595,9 @@
   },
   "outlook_confirm_replace_room": {
     "message": "此約會已存在 Talk 房間。要取代嗎？"
+  },
+  "outlook_error_attach_room_to_appointment": {
+    "message": "無法將 Talk 聊天室新增至約會。已保留約會原有內容。"
   },
   "outlook_error_create_room_unexpected_format": {
     "message": "建立 Talk 房間時發生未預期的錯誤：$1"
@@ -1015,5 +1018,149 @@
   },
   "options_update_changelog_fixed": {
     "message": "修復"
+  },
+  "sharing_base_path_info": {
+    "message": "目標資料夾："
+  },
+  "sharing_button_add_local": {
+    "message": "+ 本機"
+  },
+  "sharing_button_add_nextcloud": {
+    "message": "+ 我的 Nextcloud"
+  },
+  "sharing_button_add_nextcloud_files": {
+    "message": "選擇檔案"
+  },
+  "sharing_button_add_nextcloud_folder": {
+    "message": "選擇資料夾"
+  },
+  "sharing_source_local": {
+    "message": "本機儲存空間"
+  },
+  "sharing_source_nextcloud": {
+    "message": "我的 Nextcloud"
+  },
+  "sharing_queue_entries_summary": {
+    "message": "項目數：$1"
+  },
+  "sharing_queue_sources_summary": {
+    "message": "來源數：$1"
+  },
+  "sharing_queue_total_summary": {
+    "message": "總大小：$1"
+  },
+  "sharing_queue_storage_loading": {
+    "message": "正在載入儲存空間資訊…"
+  },
+  "sharing_queue_storage_available": {
+    "message": "可用空間：$1 / $2"
+  },
+  "sharing_queue_storage_unlimited": {
+    "message": "無儲存配額限制 · 已使用 $1"
+  },
+  "sharing_queue_storage_unknown": {
+    "message": "無法取得儲存空間資訊"
+  },
+  "sharing_queue_storage_insufficient": {
+    "message": "需要：$1 · 可用：$2"
+  },
+  "sharing_queue_expand_folder": {
+    "message": "展開資料夾「$1」"
+  },
+  "sharing_queue_collapse_folder": {
+    "message": "收合資料夾「$1」"
+  },
+  "sharing_queue_remove_item": {
+    "message": "移除「$1」"
+  },
+  "sharing_status_waiting": {
+    "message": "等待中"
+  },
+  "sharing_files_empty": {
+    "message": "未選擇檔案。"
+  },
+  "outlook_sharing_queue_read_failed": {
+    "message": "無法讀取所選項目：$1"
+  },
+  "outlook_nextcloud_picker_load_failed": {
+    "message": "無法載入 Nextcloud 資料夾。"
+  },
+  "outlook_sharing_source_my_nextcloud": {
+    "message": "我的 Nextcloud"
+  },
+  "outlook_nextcloud_picker_files_title": {
+    "message": "選取檔案"
+  },
+  "outlook_nextcloud_picker_folder_title": {
+    "message": "選取資料夾"
+  },
+  "outlook_nextcloud_picker_filter_placeholder": {
+    "message": "依名稱篩選..."
+  },
+  "outlook_nextcloud_picker_navigate_back": {
+    "message": "返回"
+  },
+  "outlook_nextcloud_picker_navigate_forward": {
+    "message": "前進"
+  },
+  "outlook_nextcloud_picker_navigate_up": {
+    "message": "上一層"
+  },
+  "outlook_nextcloud_picker_refresh": {
+    "message": "重新整理"
+  },
+  "outlook_nextcloud_picker_column_name": {
+    "message": "名稱"
+  },
+  "outlook_nextcloud_picker_column_size": {
+    "message": "大小"
+  },
+  "outlook_nextcloud_picker_column_modified": {
+    "message": "修改時間"
+  },
+  "outlook_nextcloud_picker_no_selection": {
+    "message": "尚未選取檔案"
+  },
+  "outlook_nextcloud_picker_no_preview": {
+    "message": "無法預覽"
+  },
+  "outlook_nextcloud_picker_multiple_selection": {
+    "message": "已選取項目：{0}"
+  },
+  "outlook_nextcloud_picker_preview_loading": {
+    "message": "正在載入預覽..."
+  },
+  "outlook_nextcloud_picker_preview_load_failed": {
+    "message": "無法載入預覽"
+  },
+  "outlook_nextcloud_picker_preview_skipped": {
+    "message": "檔案過大，已略過預覽"
+  },
+  "outlook_nextcloud_picker_close_button": {
+    "message": "關閉"
+  },
+  "outlook_nextcloud_picker_select_files_button": {
+    "message": "選取檔案"
+  },
+  "outlook_nextcloud_picker_select_folder_button": {
+    "message": "選取此資料夾"
+  },
+  "outlook_nextcloud_picker_loading": {
+    "message": "正在載入資料夾..."
+  },
+  "outlook_nextcloud_picker_reading_folder": {
+    "message": "正在讀取資料夾內容..."
+  },
+  "outlook_nextcloud_picker_storage_used": {
+    "message": "儲存空間：已使用 $1"
+  },
+  "outlook_nextcloud_picker_storage_of": {
+    "message": "儲存空間：已使用 $1，共 $2"
+  },
+  "outlook_sharing_add_nextcloud_files": {
+    "message": "從「我的 Nextcloud」選取檔案..."
+  },
+  "outlook_sharing_add_nextcloud_folder": {
+    "message": "從「我的 Nextcloud」選取資料夾..."
   }
 }

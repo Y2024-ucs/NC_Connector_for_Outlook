@@ -145,6 +145,23 @@ namespace NcTalkOutlookAddIn.Services
         {
             string normalizedPath =
                 FileLinkPath.NormalizeRelativePath(relativePath);
+            return BuildDavFileUrl(baseUrl, userId, normalizedPath);
+        }
+
+        internal static string BuildNextcloudSourceUrl(
+            string baseUrl,
+            string userId,
+            string relativePath)
+        {
+            string normalizedPath = NextcloudPath.Normalize(relativePath);
+            return BuildDavFileUrl(baseUrl, userId, normalizedPath);
+        }
+
+        private static string BuildDavFileUrl(
+            string baseUrl,
+            string userId,
+            string normalizedPath)
+        {
             string[] segments = normalizedPath.Split(
                 new[] { '/' },
                 StringSplitOptions.RemoveEmptyEntries);
