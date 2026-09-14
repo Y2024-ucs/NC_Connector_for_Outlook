@@ -377,7 +377,7 @@ Freigaben:
 - Öffentliche Freigabe erstellen: `POST /ocs/v2.php/apps/files_sharing/api/v1/shares`
 - Upload/Ordneranlage: `remote.php/dav/...` (WebDAV)
 - Dateien und Speicherwerte des Benutzers lesen: `PROPFIND /remote.php/dav/files/<user>/...` mit Tiefe eins
-- Ausgewähltes unterstütztes Bild anzeigen: bytebegrenztes `GET /remote.php/dav/files/<user>/...` (höchstens 5 MiB)
+- Vorschau einer ausgewählten Datei: authentifiziertes, bytebegrenztes `GET /index.php/core/preview.png?file=...`; fehlt die generierte Vorschau, folgt `GET /remote.php/dav/files/<user>/...` nur für unterstützte Rasterbilder, deren Original höchstens 5 MiB groß ist
 - Ausgewählte Nextcloud-Datei in die Freigabe kopieren: `COPY /remote.php/dav/files/<user>/...` mit absolutem `Destination` im selben Konto
 - Optionaler Bulk-Upload kleiner Dateien: `POST /remote.php/dav/bulk` (`multipart/related`, nur bei exakt `ocs.data.capabilities.dav.bulkupload = "1.0"`)
 - Upload großer Dateien: `MKCOL /remote.php/dav/uploads/<user>/<upload-id>`, Chunk-`PUT`s, danach `MOVE /remote.php/dav/uploads/<user>/<upload-id>/.file` zum Zielpfad
