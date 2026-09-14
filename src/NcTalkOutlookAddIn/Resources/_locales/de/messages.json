@@ -1143,7 +1143,7 @@
     "message": "Dateien auswählen"
   },
   "outlook_nextcloud_picker_select_folder_button": {
-    "message": "Diesen Ordner auswählen"
+    "message": "Aktuellen Ordner auswählen"
   },
   "outlook_nextcloud_picker_loading": {
     "message": "Ordner wird geladen..."

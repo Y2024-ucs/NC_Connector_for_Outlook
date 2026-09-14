@@ -1143,7 +1143,7 @@
     "message": "Fájlok kiválasztása"
   },
   "outlook_nextcloud_picker_select_folder_button": {
-    "message": "Mappa kiválasztása"
+    "message": "Aktuális mappa kiválasztása"
   },
   "outlook_nextcloud_picker_loading": {
     "message": "Mappa betöltése..."

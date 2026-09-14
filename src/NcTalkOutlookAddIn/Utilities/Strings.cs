@@ -1019,7 +1019,7 @@ namespace NcTalkOutlookAddIn.Utilities
         internal static string NextcloudPickerPreviewSkipped { get { return Get("outlook_nextcloud_picker_preview_skipped", "Preview skipped for large files"); } }
         internal static string NextcloudPickerCloseButton { get { return Get("outlook_nextcloud_picker_close_button", "Close"); } }
         internal static string NextcloudPickerSelectFilesButton { get { return Get("outlook_nextcloud_picker_select_files_button", "Select files"); } }
-        internal static string NextcloudPickerSelectFolderButton { get { return Get("outlook_nextcloud_picker_select_folder_button", "Select this folder"); } }
+        internal static string NextcloudPickerSelectFolderButton { get { return Get("outlook_nextcloud_picker_select_folder_button", "Select Current Folder"); } }
         internal static string NextcloudPickerLoading { get { return Get("outlook_nextcloud_picker_loading", "Loading folder..."); } }
         internal static string NextcloudPickerReadingFolder { get { return Get("outlook_nextcloud_picker_reading_folder", "Reading folder contents..."); } }
         internal static string NextcloudPickerStorageUsedFormat { get { return Get("outlook_nextcloud_picker_storage_used", "Storage: {0} used"); } }

@@ -1143,7 +1143,7 @@
     "message": "Vybrat soubory"
   },
   "outlook_nextcloud_picker_select_folder_button": {
-    "message": "Vybrat tuto složku"
+    "message": "Vybrat aktuální složku"
   },
   "outlook_nextcloud_picker_loading": {
     "message": "Načítání složky..."
