@@ -25,6 +25,15 @@ namespace NcTalkOutlookAddIn.UI
         private readonly Button _cardDavSyncNowButton = new Button();
         private CardDavSyncPreferences _cardDavPreferences;
 
+        protected override void OnLoad(EventArgs e)
+        {
+            base.OnLoad(e);
+            if (_cardDavPreferences == null)
+            {
+                InitializeCardDavSettingsSection();
+            }
+        }
+
         private void InitializeCardDavSettingsSection()
         {
             _cardDavPreferences = CardDavSyncPreferences.Load();
