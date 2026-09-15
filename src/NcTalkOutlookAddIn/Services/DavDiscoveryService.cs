@@ -17,6 +17,7 @@ namespace NcTalkOutlookAddIn.Services
     {
         private static readonly XNamespace Dav = "DAV:";
         private static readonly XNamespace CardDav = "urn:ietf:params:xml:ns:carddav";
+        private const string GeneratedSystemAddressBookMarker = "z-server-generated--system";
 
         private readonly TalkServiceConfiguration _configuration;
 
@@ -39,9 +40,12 @@ namespace NcTalkOutlookAddIn.Services
 
         private Uri DiscoverPrincipal()
         {
-            Uri wellKnown = BuildAbsoluteUri("/.well-known/carddav");
+            // This is a Nextcloud-specific add-in, so use the canonical DAV root
+            // directly instead of relying on a .well-known redirect that may drop
+            // the Authorization header in older .NET Framework stacks.
+            Uri davRoot = BuildNextcloudDavRoot();
             XDocument response = SendPropFind(
-                wellKnown,
+                davRoot,
                 0,
                 "<d:prop><d:current-user-principal /></d:prop>");
 
@@ -51,7 +55,7 @@ namespace NcTalkOutlookAddIn.Services
                 throw new InvalidOperationException("CardDAV principal could not be discovered.");
             }
 
-            return ResolveDavUri(wellKnown, href);
+            return ResolveDavUri(davRoot, href);
         }
 
         private Uri DiscoverAddressBookHome(Uri principal)
@@ -99,6 +103,10 @@ namespace NcTalkOutlookAddIn.Services
 
                 string href = (string)responseElement.Element(Dav + "href") ?? string.Empty;
                 Uri resolved = ResolveDavUri(home, href);
+                if (IsGeneratedSystemAddressBook(resolved))
+                {
+                    continue;
+                }
 
                 result.Add(new CardDavAddressBook
                 {
@@ -163,9 +171,18 @@ namespace NcTalkOutlookAddIn.Services
             return resourceType != null && resourceType.Elements(CardDav + "addressbook").Any();
         }
 
+        private static bool IsGeneratedSystemAddressBook(Uri uri)
+        {
+            return uri != null
+                && uri.AbsolutePath.IndexOf(
+                    GeneratedSystemAddressBookMarker,
+                    StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
         private static bool IsSuccessfulStatus(string status)
         {
-            return !string.IsNullOrWhiteSpace(status) && status.IndexOf(" 200 ", StringComparison.Ordinal) >= 0;
+            return !string.IsNullOrWhiteSpace(status)
+                && status.IndexOf(" 200 ", StringComparison.Ordinal) >= 0;
         }
 
         private static string FirstHref(XDocument document, XName containerName)
@@ -176,10 +193,10 @@ namespace NcTalkOutlookAddIn.Services
                 .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
         }
 
-        private Uri BuildAbsoluteUri(string path)
+        private Uri BuildNextcloudDavRoot()
         {
-            string baseUrl = _configuration.GetNormalizedBaseUrl();
-            return new Uri(new Uri(baseUrl.TrimEnd('/') + "/", UriKind.Absolute), path.TrimStart('/'));
+            string baseUrl = _configuration.GetNormalizedBaseUrl().TrimEnd('/');
+            return new Uri(baseUrl + "/remote.php/dav/", UriKind.Absolute);
         }
 
         private static Uri ResolveDavUri(Uri baseUri, string href)
