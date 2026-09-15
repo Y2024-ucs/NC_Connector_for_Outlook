@@ -134,7 +134,6 @@ namespace NcTalkOutlookAddIn.Settings
 
         public string FileLinkBasePath { get; set; }
 
-
         public string SharingDefaultShareName { get; set; }
 
         public bool SharingDefaultPermCreate { get; set; }
@@ -152,6 +151,8 @@ namespace NcTalkOutlookAddIn.Settings
         public int SharingDefaultExpireDays { get; set; }
 
         public bool SharingAttachmentsAlwaysConnector { get; set; }
+
+        public bool SharingAttachmentsOfferAboveEnabled { get; set; }
 
         public int SharingAttachmentsOfferAboveMb { get; set; }
 
