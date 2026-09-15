@@ -22,6 +22,9 @@ namespace NcTalkOutlookAddIn.Services
         internal int SkippedRecurring { get; set; }
         internal int SkippedMeetings { get; set; }
         internal int Failures { get; set; }
+        internal int DeletedFromOutlook { get; set; }
+        internal int DeletedFromNextcloud { get; set; }
+        internal int DeletionsSkippedByGuard { get; set; }
         internal int RecoveryRemoteRemoved { get; set; }
         internal int RecoveryOutlookRemoved { get; set; }
         internal int RecoveryOutlookRelinked { get; set; }
@@ -29,11 +32,12 @@ namespace NcTalkOutlookAddIn.Services
 
     // Regular synchronization for already linked calendar items.
     // Safety rules:
-    // - never interprets absence as deletion
-    // - uses ETag/If-Match for remote writes
-    // - detects local/remote concurrent changes and leaves conflicts untouched
+    // - uses ETag/If-Match for remote writes and deletes
+    // - only propagates deletion after a per-item state proved that both sides
+    //   contained the same linked item on an earlier successful synchronization
+    // - an empty remote result never triggers deletion
+    // - mass deletion is blocked by a hard/relative guard
     // - recurring series and Outlook meetings are deliberately not modified yet
-    //   (the model is prepared for a later dedicated implementation)
     internal sealed class CalDavBidirectionalSyncService
     {
         private const string UidPropertyName = "NC-CalDAV-UID";
@@ -41,6 +45,7 @@ namespace NcTalkOutlookAddIn.Services
         private const string ETagPropertyName = "NC-CalDAV-ETAG";
         private const string CalendarPropertyName = "NC-CalDAV-CALENDAR";
         private const string LocalSnapshotPropertyName = "NC-CalDAV-LOCAL-SNAPSHOT";
+        private const int MaxDeletesPerRun = 10;
 
         private readonly TalkServiceConfiguration _configuration;
 
@@ -67,6 +72,11 @@ namespace NcTalkOutlookAddIn.Services
             }
 
             Dictionary<string, CalDavEventRecord> remoteByUid = BuildRemoteByUid(remoteEvents);
+            Dictionary<string, int> remoteUidCounts = BuildRemoteUidCounts(remoteEvents);
+            var localUidCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var localEntryByUid = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            CalDavSyncStateStore syncState = CalDavSyncStateStore.Load();
+
             Outlook.NameSpace session = null;
             Outlook.MAPIFolder defaultCalendar = null;
             Outlook.MAPIFolder targetFolder = null;
@@ -109,15 +119,11 @@ namespace NcTalkOutlookAddIn.Services
                         {
                             continue;
                         }
+                        uid = uid.Trim();
 
-                        CalDavEventRecord remote;
-                        if (!remoteByUid.TryGetValue(uid.Trim(), out remote))
-                        {
-                            // Missing on one side is not a deletion signal.
-                            continue;
-                        }
-
-                        if (appointment.IsRecurring || remote.Recurring)
+                        // Deletion state currently covers only ordinary single events.
+                        // Meetings and series get their own mapping semantics later.
+                        if (appointment.IsRecurring)
                         {
                             result.SkippedRecurring++;
                             continue;
@@ -128,6 +134,36 @@ namespace NcTalkOutlookAddIn.Services
                             continue;
                         }
 
+                        int localCount;
+                        if (!localUidCounts.TryGetValue(uid, out localCount))
+                        {
+                            localCount = 0;
+                        }
+                        localCount++;
+                        localUidCounts[uid] = localCount;
+                        if (localCount == 1)
+                        {
+                            localEntryByUid[uid] = appointment.EntryID ?? string.Empty;
+                        }
+                        else
+                        {
+                            localEntryByUid.Remove(uid);
+                        }
+
+                        CalDavEventRecord remote;
+                        if (!remoteByUid.TryGetValue(uid, out remote))
+                        {
+                            // Absence is evaluated only after the full local scan and only
+                            // against a previously established per-item two-sided state.
+                            continue;
+                        }
+
+                        if (remote.Recurring)
+                        {
+                            result.SkippedRecurring++;
+                            continue;
+                        }
+
                         string localSnapshot = BuildOutlookSnapshot(appointment);
                         string storedSnapshot = ReadUserProperty(appointment, LocalSnapshotPropertyName);
                         string storedEtag = ReadUserProperty(appointment, ETagPropertyName);
@@ -135,11 +171,8 @@ namespace NcTalkOutlookAddIn.Services
 
                         if (string.IsNullOrWhiteSpace(storedSnapshot))
                         {
-                            // The very first per-item baseline must never silently choose one side.
-                            // Only establish it when Outlook and the actual CalDAV payload already
-                            // represent the same visible event. A difference is an initial conflict
-                            // and remains untouched until the user resolves both sides to the same
-                            // content (or a later conflict UI explicitly chooses a winner).
+                            // Never choose a winner on the first per-item baseline. Only an
+                            // already identical local/remote payload establishes the baseline.
                             string remoteSnapshot = BuildRemoteSnapshot(remote);
                             if (!string.Equals(localSnapshot, remoteSnapshot, StringComparison.Ordinal))
                             {
@@ -155,6 +188,7 @@ namespace NcTalkOutlookAddIn.Services
                             WriteUserProperty(appointment, LocalSnapshotPropertyName, localSnapshot);
                             WriteUserProperty(appointment, ETagPropertyName, remoteEtag);
                             appointment.Save();
+                            syncState.MarkItemSeenOnBothSides(calendar.Href, uid, remote.Href, remoteEtag);
                             result.BaselinesEstablished++;
                             continue;
                         }
@@ -167,6 +201,7 @@ namespace NcTalkOutlookAddIn.Services
 
                         if (localChanged && remoteChanged)
                         {
+                            syncState.MarkItemSeenOnBothSides(calendar.Href, uid, remote.Href, remoteEtag);
                             result.Conflicts++;
                             DiagnosticsLogger.Log(
                                 LogCategories.Core,
@@ -184,6 +219,7 @@ namespace NcTalkOutlookAddIn.Services
                             WriteUserProperty(appointment, LocalSnapshotPropertyName, newSnapshot);
                             WriteUserProperty(appointment, ETagPropertyName, remoteEtag);
                             appointment.Save();
+                            syncState.MarkItemSeenOnBothSides(calendar.Href, uid, remote.Href, remoteEtag);
                             result.RemoteToOutlook++;
                             continue;
                         }
@@ -201,13 +237,18 @@ namespace NcTalkOutlookAddIn.Services
                                 WriteUserProperty(appointment, ETagPropertyName, newEtag);
                                 WriteUserProperty(appointment, LocalSnapshotPropertyName, localSnapshot);
                                 appointment.Save();
+                                syncState.MarkItemSeenOnBothSides(calendar.Href, uid, href, newEtag);
                                 result.OutlookToRemote++;
                             }
                             else
                             {
                                 result.Failures++;
                             }
+                            continue;
                         }
+
+                        // Both sides were observed and no destructive inference is required.
+                        syncState.MarkItemSeenOnBothSides(calendar.Href, uid, remote.Href, remoteEtag);
                     }
                     catch (Exception ex)
                     {
@@ -229,6 +270,18 @@ namespace NcTalkOutlookAddIn.Services
                         }
                     }
                 }
+
+                ApplyGuardedDeletions(
+                    outlookApplication,
+                    calendar,
+                    remoteEvents,
+                    remoteByUid,
+                    remoteUidCounts,
+                    localUidCounts,
+                    localEntryByUid,
+                    direction,
+                    syncState,
+                    result);
             }
             finally
             {
@@ -236,6 +289,16 @@ namespace NcTalkOutlookAddIn.Services
                 ComInteropScope.TryRelease(targetFolder, LogCategories.Core, "Failed to release CalDAV bidirectional target folder.");
                 ComInteropScope.TryRelease(defaultCalendar, LogCategories.Core, "Failed to release CalDAV bidirectional default folder.");
                 ComInteropScope.TryRelease(session, LogCategories.Core, "Failed to release Outlook session after CalDAV bidirectional sync.");
+            }
+
+            try
+            {
+                syncState.Save();
+            }
+            catch (Exception ex)
+            {
+                result.Failures++;
+                DiagnosticsLogger.LogException(LogCategories.Core, "Failed to persist CalDAV per-item sync state.", ex);
             }
 
             DiagnosticsLogger.Log(
@@ -247,9 +310,272 @@ namespace NcTalkOutlookAddIn.Services
                 + ", conflicts=" + result.Conflicts
                 + ", recurringSkipped=" + result.SkippedRecurring
                 + ", meetingsSkipped=" + result.SkippedMeetings
+                + ", deletedFromOutlook=" + result.DeletedFromOutlook
+                + ", deletedFromNextcloud=" + result.DeletedFromNextcloud
+                + ", deletionGuardSkipped=" + result.DeletionsSkippedByGuard
                 + ", failures=" + result.Failures
-                + ", deletions=0).");
+                + ").");
             return result;
+        }
+
+        private void ApplyGuardedDeletions(
+            Outlook.Application outlookApplication,
+            CalDavCalendar calendar,
+            IList<CalDavEventRecord> remoteEvents,
+            Dictionary<string, CalDavEventRecord> remoteByUid,
+            Dictionary<string, int> remoteUidCounts,
+            Dictionary<string, int> localUidCounts,
+            Dictionary<string, string> localEntryByUid,
+            CalDavSyncDirection direction,
+            CalDavSyncStateStore syncState,
+            CalDavBidirectionalSyncResult result)
+        {
+            // An empty result is never authoritative for deletion. This handles server,
+            // parser and range failures conservatively even when they return an empty list.
+            if (remoteEvents == null || remoteEvents.Count == 0)
+            {
+                DiagnosticsLogger.Log(
+                    LogCategories.Core,
+                    "CalDAV deletion phase skipped because the remote scan was empty/non-authoritative (calendar="
+                    + Safe(calendar.DisplayName) + ").");
+                return;
+            }
+
+            IList<CalDavItemSyncState> tracked = syncState.GetItems(calendar.Href);
+            var deleteRemote = new List<CalDavItemSyncState>();
+            var deleteLocal = new List<CalDavItemSyncState>();
+
+            foreach (CalDavItemSyncState state in tracked)
+            {
+                if (state == null || !state.LastSeenBothUtc.HasValue || string.IsNullOrWhiteSpace(state.Uid))
+                {
+                    continue;
+                }
+
+                string uid = state.Uid.Trim();
+                int localCount;
+                if (!localUidCounts.TryGetValue(uid, out localCount))
+                {
+                    localCount = 0;
+                }
+                CalDavEventRecord remote;
+                bool remotePresent = remoteByUid.TryGetValue(uid, out remote);
+
+                if (localCount == 0 && remotePresent)
+                {
+                    if (direction == CalDavSyncDirection.NextcloudToOutlook || calendar.ReadOnly)
+                    {
+                        continue;
+                    }
+                    int remoteCount;
+                    if (!remoteUidCounts.TryGetValue(uid, out remoteCount) || remoteCount != 1)
+                    {
+                        continue;
+                    }
+                    if (remote == null
+                        || remote.Recurring
+                        || string.IsNullOrWhiteSpace(remote.Href)
+                        || string.IsNullOrWhiteSpace(remote.ETag)
+                        || !IsHrefWithinCalendar(remote.Href, calendar.Href))
+                    {
+                        continue;
+                    }
+                    deleteRemote.Add(state);
+                    continue;
+                }
+
+                if (localCount == 1 && !remotePresent)
+                {
+                    if (direction == CalDavSyncDirection.OutlookToNextcloud)
+                    {
+                        continue;
+                    }
+                    string entryId;
+                    if (!localEntryByUid.TryGetValue(uid, out entryId) || string.IsNullOrWhiteSpace(entryId))
+                    {
+                        continue;
+                    }
+                    deleteLocal.Add(state);
+                    continue;
+                }
+
+                if (localCount == 0 && !remotePresent)
+                {
+                    // Already gone on both sides. Forget the tombstone-like tracking entry.
+                    syncState.RemoveItem(calendar.Href, uid);
+                }
+            }
+
+            int candidateCount = deleteRemote.Count + deleteLocal.Count;
+            if (candidateCount == 0)
+            {
+                return;
+            }
+
+            bool massDelete = candidateCount > MaxDeletesPerRun
+                || (tracked.Count >= 20 && candidateCount * 4 > tracked.Count);
+            if (massDelete)
+            {
+                result.DeletionsSkippedByGuard += candidateCount;
+                DiagnosticsLogger.Log(
+                    LogCategories.Core,
+                    "CalDAV deletion guard blocked mass deletion (calendar=" + Safe(calendar.DisplayName)
+                    + ", candidates=" + candidateCount.ToString(CultureInfo.InvariantCulture)
+                    + ", tracked=" + tracked.Count.ToString(CultureInfo.InvariantCulture)
+                    + ", hardLimit=" + MaxDeletesPerRun.ToString(CultureInfo.InvariantCulture)
+                    + ").");
+                return;
+            }
+
+            foreach (CalDavItemSyncState state in deleteRemote)
+            {
+                CalDavEventRecord remote;
+                if (!remoteByUid.TryGetValue(state.Uid, out remote) || remote == null)
+                {
+                    continue;
+                }
+                if (DeleteRemoteItem(remote))
+                {
+                    syncState.RemoveItem(calendar.Href, state.Uid);
+                    result.DeletedFromNextcloud++;
+                    DiagnosticsLogger.Log(
+                        LogCategories.Core,
+                        "CalDAV propagated Outlook deletion to Nextcloud (calendar=" + Safe(calendar.DisplayName)
+                        + ", uid=" + Safe(state.Uid) + ").");
+                }
+                else
+                {
+                    result.Failures++;
+                }
+            }
+
+            foreach (CalDavItemSyncState state in deleteLocal)
+            {
+                string entryId;
+                if (!localEntryByUid.TryGetValue(state.Uid, out entryId))
+                {
+                    continue;
+                }
+                if (DeleteLinkedSingleByEntryId(
+                    outlookApplication,
+                    entryId,
+                    calendar.Href,
+                    state.Uid))
+                {
+                    syncState.RemoveItem(calendar.Href, state.Uid);
+                    result.DeletedFromOutlook++;
+                    DiagnosticsLogger.Log(
+                        LogCategories.Core,
+                        "CalDAV propagated Nextcloud deletion to Outlook (calendar=" + Safe(calendar.DisplayName)
+                        + ", uid=" + Safe(state.Uid) + ").");
+                }
+                else
+                {
+                    result.Failures++;
+                }
+            }
+        }
+
+        private bool DeleteRemoteItem(CalDavEventRecord item)
+        {
+            if (item == null
+                || string.IsNullOrWhiteSpace(item.Href)
+                || string.IsNullOrWhiteSpace(item.ETag))
+            {
+                return false;
+            }
+
+            var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "If-Match", item.ETag.Trim() }
+            };
+            NcHttpResponse response = new NcHttpClient(_configuration).Send(new NcHttpRequestOptions
+            {
+                Method = "DELETE",
+                Url = item.Href,
+                Accept = "*/*",
+                Headers = headers,
+                IncludeOcsApiHeader = false,
+                ParseJson = false,
+                TimeoutMs = 60000
+            });
+
+            bool ok = response.HasHttpResponse
+                && (int)response.StatusCode >= 200
+                && (int)response.StatusCode < 300;
+            if (!ok)
+            {
+                DiagnosticsLogger.Log(
+                    LogCategories.Core,
+                    "CalDAV guarded DELETE failed (href=" + Safe(item.Href)
+                    + ", uid=" + Safe(item.Uid)
+                    + ", http=" + (response.HasHttpResponse
+                        ? ((int)response.StatusCode).ToString(CultureInfo.InvariantCulture)
+                        : "transport")
+                    + ").");
+            }
+            return ok;
+        }
+
+        private static bool DeleteLinkedSingleByEntryId(
+            Outlook.Application outlookApplication,
+            string entryId,
+            string calendarHref,
+            string uid)
+        {
+            if (outlookApplication == null || string.IsNullOrWhiteSpace(entryId))
+            {
+                return false;
+            }
+
+            Outlook.NameSpace session = null;
+            object raw = null;
+            Outlook.AppointmentItem appointment = null;
+            try
+            {
+                session = outlookApplication.Session;
+                raw = session.GetItemFromID(entryId, Type.Missing);
+                appointment = raw as Outlook.AppointmentItem;
+                if (appointment == null
+                    || appointment.IsRecurring
+                    || appointment.MeetingStatus != Outlook.OlMeetingStatus.olNonMeeting)
+                {
+                    return false;
+                }
+
+                string storedUid = ReadUserProperty(appointment, UidPropertyName);
+                string storedCalendar = ReadUserProperty(appointment, CalendarPropertyName);
+                if (!string.Equals(storedUid, uid, StringComparison.OrdinalIgnoreCase)
+                    || !string.Equals(storedCalendar, calendarHref, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                appointment.Delete();
+                return true;
+            }
+            finally
+            {
+                if (appointment != null)
+                {
+                    ComInteropScope.TryRelease(appointment, LogCategories.Core, "Failed to release deleted CalDAV AppointmentItem.");
+                }
+                else
+                {
+                    ComInteropScope.TryRelease(raw, LogCategories.Core, "Failed to release CalDAV delete candidate.");
+                }
+                ComInteropScope.TryRelease(session, LogCategories.Core, "Failed to release Outlook session after CalDAV delete.");
+            }
+        }
+
+        private static bool IsHrefWithinCalendar(string href, string calendarHref)
+        {
+            if (string.IsNullOrWhiteSpace(href) || string.IsNullOrWhiteSpace(calendarHref))
+            {
+                return false;
+            }
+            string prefix = calendarHref.TrimEnd('/') + "/";
+            return href.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
         }
 
         // One-time guarded repair for the known first-merge damage pattern:
@@ -528,6 +854,26 @@ namespace NcTalkOutlookAddIn.Services
                 {
                     result[item.Uid.Trim()] = item;
                 }
+            }
+            return result;
+        }
+
+        private static Dictionary<string, int> BuildRemoteUidCounts(IList<CalDavEventRecord> remoteEvents)
+        {
+            var result = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (CalDavEventRecord item in remoteEvents ?? Enumerable.Empty<CalDavEventRecord>())
+            {
+                if (item == null || string.IsNullOrWhiteSpace(item.Uid))
+                {
+                    continue;
+                }
+                string uid = item.Uid.Trim();
+                int count;
+                if (!result.TryGetValue(uid, out count))
+                {
+                    count = 0;
+                }
+                result[uid] = count + 1;
             }
             return result;
         }
