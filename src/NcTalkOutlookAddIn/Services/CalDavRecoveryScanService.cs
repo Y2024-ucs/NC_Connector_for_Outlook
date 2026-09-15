@@ -68,7 +68,7 @@ namespace NcTalkOutlookAddIn.Services
                 throw new ArgumentNullException("calendar");
             }
 
-            var result = new CalDavRecoveryScanResult();
+            CalDavRecoveryScanResult result = new CalDavRecoveryScanResult();
             ScanNextcloud(remoteEvents, result);
             ScanOutlook(outlookApplication, calendar, useDefaultCalendarFolder, result);
 
@@ -105,9 +105,7 @@ namespace NcTalkOutlookAddIn.Services
             return result;
         }
 
-        private static void ScanNextcloud(
-            IList<CalDavEventRecord> remoteEvents,
-            CalDavRecoveryScanResult result)
+        private static void ScanNextcloud(IList<CalDavEventRecord> remoteEvents, CalDavRecoveryScanResult result)
         {
             Dictionary<string, List<CalDavEventRecord>> groups = GroupRemote(remoteEvents);
             foreach (CalDavEventRecord item in remoteEvents ?? Enumerable.Empty<CalDavEventRecord>())
@@ -134,7 +132,11 @@ namespace NcTalkOutlookAddIn.Services
                 }
 
                 result.NextcloudDuplicateGroups++;
-                if (generated == 1 && original == 1 && group.Count == 2)
+
+                // Recovery stage 2: one connector-generated object is safe to remove
+                // whenever at least one non-generated object with the same fingerprint exists.
+                // Existing non-generated objects are never merged or deleted here.
+                if (generated == 1 && original >= 1)
                 {
                     result.NextcloudSafeRemoveCandidates++;
                 }
@@ -173,7 +175,8 @@ namespace NcTalkOutlookAddIn.Services
                     return;
                 }
 
-                var groups = new Dictionary<string, List<OutlookScanItem>>(StringComparer.OrdinalIgnoreCase);
+                Dictionary<string, List<OutlookScanItem>> groups =
+                    new Dictionary<string, List<OutlookScanItem>>(StringComparer.OrdinalIgnoreCase);
                 items = targetFolder.Items;
                 int count = items.Count;
                 for (int index = 1; index <= count; index++)
@@ -194,19 +197,20 @@ namespace NcTalkOutlookAddIn.Services
                         string storedCalendar = ReadUserProperty(appointment, CalendarPropertyName);
                         bool linked = !string.IsNullOrWhiteSpace(uid)
                             && string.Equals(storedCalendar, calendar.Href, StringComparison.OrdinalIgnoreCase);
-
                         string fingerprint = BuildFingerprint(
                             appointment.Subject,
                             appointment.Location,
                             appointment.Start,
                             appointment.End,
                             appointment.AllDayEvent);
+
                         List<OutlookScanItem> list;
                         if (!groups.TryGetValue(fingerprint, out list))
                         {
                             list = new List<OutlookScanItem>();
                             groups[fingerprint] = list;
                         }
+
                         list.Add(new OutlookScanItem
                         {
                             Subject = appointment.Subject ?? string.Empty,
@@ -249,17 +253,21 @@ namespace NcTalkOutlookAddIn.Services
                     }
 
                     result.OutlookDuplicateGroups++;
-                    int linkedCount = group.Count(v => v.Linked);
-                    int unlinkedCount = group.Count - linkedCount;
-                    bool exactLinkedPair = group.Count == 2
-                        && linkedCount == 2
-                        && !string.IsNullOrWhiteSpace(group[0].Uid)
-                        && string.Equals(group[0].Uid, group[1].Uid, StringComparison.OrdinalIgnoreCase);
-                    bool exactLinkedAndOriginalPair = group.Count == 2
-                        && linkedCount == 1
-                        && unlinkedCount == 1;
+                    List<OutlookScanItem> linked = group.Where(v => v.Linked).ToList();
+                    int unlinkedCount = group.Count - linked.Count;
 
-                    if (exactLinkedPair || exactLinkedAndOriginalPair)
+                    bool exactLinkedPair = group.Count == 2
+                        && linked.Count == 2
+                        && !string.IsNullOrWhiteSpace(linked[0].Uid)
+                        && string.Equals(linked[0].Uid, linked[1].Uid, StringComparison.OrdinalIgnoreCase);
+                    bool exactLinkedAndOriginalPair = group.Count == 2
+                        && linked.Count == 1
+                        && unlinkedCount == 1;
+                    bool generatedWithExistingOriginal = linked.Any(v => IsConnectorGeneratedUid(v.Uid) && !v.Meeting)
+                        && linked.Any(v => !IsConnectorGeneratedUid(v.Uid));
+                    bool exactLocalClone = HasExactNonMeetingClone(linked);
+
+                    if (exactLinkedPair || exactLinkedAndOriginalPair || generatedWithExistingOriginal || exactLocalClone)
                     {
                         result.OutlookSafeRemoveCandidates++;
                     }
@@ -267,7 +275,7 @@ namespace NcTalkOutlookAddIn.Services
                     {
                         result.OutlookAmbiguousGroups++;
                         ambiguousIndex++;
-                        LogOutlookAmbiguousGroup(ambiguousIndex, pair.Key, group, linkedCount, unlinkedCount);
+                        LogOutlookAmbiguousGroup(ambiguousIndex, pair.Key, group, linked.Count, unlinkedCount);
                     }
                 }
             }
@@ -280,6 +288,32 @@ namespace NcTalkOutlookAddIn.Services
             }
         }
 
+        private static bool HasExactNonMeetingClone(IList<OutlookScanItem> linked)
+        {
+            Dictionary<string, int> counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (OutlookScanItem item in linked)
+            {
+                if (item == null || item.Meeting)
+                {
+                    continue;
+                }
+                string identity = BuildSyncIdentity(item.Uid, item.Href, item.ETag);
+                if (string.IsNullOrWhiteSpace(identity))
+                {
+                    continue;
+                }
+                int count;
+                counts.TryGetValue(identity, out count);
+                count++;
+                counts[identity] = count;
+                if (count > 1)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         private static void LogOutlookAmbiguousGroup(
             int index,
             string fingerprint,
@@ -287,7 +321,7 @@ namespace NcTalkOutlookAddIn.Services
             int linkedCount,
             int unlinkedCount)
         {
-            var builder = new StringBuilder();
+            StringBuilder builder = new StringBuilder();
             builder.Append("CalDAV recovery detail OUTLOOK ambiguous #")
                 .Append(index.ToString(CultureInfo.InvariantCulture))
                 .Append(" (count=").Append(group.Count.ToString(CultureInfo.InvariantCulture))
@@ -326,7 +360,7 @@ namespace NcTalkOutlookAddIn.Services
             int generated,
             int original)
         {
-            var builder = new StringBuilder();
+            StringBuilder builder = new StringBuilder();
             CalDavEventRecord first = group.FirstOrDefault(v => v != null);
             builder.Append("CalDAV recovery detail NEXTCLOUD ambiguous #")
                 .Append(index.ToString(CultureInfo.InvariantCulture))
@@ -342,7 +376,6 @@ namespace NcTalkOutlookAddIn.Services
                     .Append(", allDay=").Append(first.AllDay);
             }
             builder.Append(", items=");
-
             for (int i = 0; i < group.Count; i++)
             {
                 CalDavEventRecord item = group[i];
@@ -368,7 +401,7 @@ namespace NcTalkOutlookAddIn.Services
             IList<CalDavEventRecord> remoteEvents,
             bool useDefaultCalendarFolder)
         {
-            var result = new CalDavRecoveryCleanupResult();
+            CalDavRecoveryCleanupResult result = new CalDavRecoveryCleanupResult();
             TalkServiceConfiguration configuration = BuildConfiguration(outlookApplication);
             if (configuration == null || !configuration.IsComplete())
             {
@@ -424,7 +457,8 @@ namespace NcTalkOutlookAddIn.Services
                     return;
                 }
 
-                var groups = new Dictionary<string, List<OutlookCleanupItem>>(StringComparer.OrdinalIgnoreCase);
+                Dictionary<string, List<OutlookCleanupItem>> groups =
+                    new Dictionary<string, List<OutlookCleanupItem>>(StringComparer.OrdinalIgnoreCase);
                 items = targetFolder.Items;
                 int count = items.Count;
                 for (int index = 1; index <= count; index++)
@@ -452,13 +486,15 @@ namespace NcTalkOutlookAddIn.Services
                             list = new List<OutlookCleanupItem>();
                             groups[fingerprint] = list;
                         }
+
                         list.Add(new OutlookCleanupItem
                         {
                             EntryId = appointment.EntryID ?? string.Empty,
                             Uid = ReadUserProperty(appointment, UidPropertyName),
                             Href = ReadUserProperty(appointment, HrefPropertyName),
                             ETag = ReadUserProperty(appointment, ETagPropertyName),
-                            CalendarHref = ReadUserProperty(appointment, CalendarPropertyName)
+                            CalendarHref = ReadUserProperty(appointment, CalendarPropertyName),
+                            Meeting = appointment.MeetingStatus != Outlook.OlMeetingStatus.olNonMeeting
                         });
                     }
                     catch (Exception ex)
@@ -482,15 +518,92 @@ namespace NcTalkOutlookAddIn.Services
                 foreach (KeyValuePair<string, List<OutlookCleanupItem>> pair in groups)
                 {
                     List<OutlookCleanupItem> group = pair.Value;
-                    if (group.Count != 2)
+                    if (group.Count < 2)
                     {
                         continue;
                     }
 
                     List<OutlookCleanupItem> linked = group.Where(v => v.IsLinkedTo(calendar.Href)).ToList();
                     List<OutlookCleanupItem> unlinked = group.Where(v => !v.IsLinkedTo(calendar.Href)).ToList();
+                    HashSet<string> removedEntryIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    bool changed = false;
 
-                    if (linked.Count == 2
+                    // Stage 2a: remove only connector-generated Outlook copies when at least
+                    // one non-generated linked copy with the same fingerprint exists.
+                    List<OutlookCleanupItem> generatedLinked = linked
+                        .Where(v => IsConnectorGeneratedUid(v.Uid) && !v.Meeting)
+                        .ToList();
+                    List<OutlookCleanupItem> originalLinked = linked
+                        .Where(v => !IsConnectorGeneratedUid(v.Uid))
+                        .ToList();
+                    if (generatedLinked.Count > 0 && originalLinked.Count > 0)
+                    {
+                        foreach (OutlookCleanupItem generated in generatedLinked)
+                        {
+                            if (DeleteOutlookByEntryId(session, generated.EntryId))
+                            {
+                                result.OutlookRemoved++;
+                                removedEntryIds.Add(generated.EntryId);
+                                changed = true;
+                            }
+                            else
+                            {
+                                result.Failures++;
+                            }
+                        }
+                    }
+
+                    // Stage 2b: collapse only exact non-meeting local clones that carry
+                    // identical UID + HREF + ETag. Different UIDs are never merged here.
+                    Dictionary<string, List<OutlookCleanupItem>> exactGroups =
+                        new Dictionary<string, List<OutlookCleanupItem>>(StringComparer.OrdinalIgnoreCase);
+                    foreach (OutlookCleanupItem item in linked)
+                    {
+                        if (item.Meeting || removedEntryIds.Contains(item.EntryId))
+                        {
+                            continue;
+                        }
+                        string identity = BuildSyncIdentity(item.Uid, item.Href, item.ETag);
+                        if (string.IsNullOrWhiteSpace(identity))
+                        {
+                            continue;
+                        }
+                        List<OutlookCleanupItem> same;
+                        if (!exactGroups.TryGetValue(identity, out same))
+                        {
+                            same = new List<OutlookCleanupItem>();
+                            exactGroups[identity] = same;
+                        }
+                        same.Add(item);
+                    }
+                    foreach (List<OutlookCleanupItem> exactGroup in exactGroups.Values)
+                    {
+                        for (int i = 1; i < exactGroup.Count; i++)
+                        {
+                            OutlookCleanupItem duplicate = exactGroup[i];
+                            if (DeleteOutlookByEntryId(session, duplicate.EntryId))
+                            {
+                                result.OutlookRemoved++;
+                                removedEntryIds.Add(duplicate.EntryId);
+                                changed = true;
+                            }
+                            else
+                            {
+                                result.Failures++;
+                            }
+                        }
+                    }
+
+                    if (changed)
+                    {
+                        continue;
+                    }
+
+                    // Keep the original conservative two-item recovery rules.
+                    if (group.Count == 2
+                        && linked.Count == 2
+                        && !linked[0].Meeting
+                        && !linked[1].Meeting
                         && !string.IsNullOrWhiteSpace(linked[0].Uid)
                         && string.Equals(linked[0].Uid, linked[1].Uid, StringComparison.OrdinalIgnoreCase))
                     {
@@ -505,7 +618,8 @@ namespace NcTalkOutlookAddIn.Services
                         continue;
                     }
 
-                    if (linked.Count == 1 && unlinked.Count == 1)
+                    if (group.Count == 2 && linked.Count == 1 && unlinked.Count == 1
+                        && !linked[0].Meeting && !unlinked[0].Meeting)
                     {
                         OutlookCleanupItem remove = linked[0];
                         OutlookCleanupItem keep = unlinked[0];
@@ -556,32 +670,54 @@ namespace NcTalkOutlookAddIn.Services
             Dictionary<string, List<CalDavEventRecord>> groups = GroupRemote(remoteEvents);
             foreach (List<CalDavEventRecord> group in groups.Values)
             {
-                if (group.Count != 2)
+                if (group.Count < 2)
                 {
                     continue;
                 }
 
                 List<CalDavEventRecord> generated = group.Where(IsConnectorGeneratedUid).ToList();
                 List<CalDavEventRecord> original = group.Where(v => !IsConnectorGeneratedUid(v)).ToList();
-                if (generated.Count != 1 || original.Count != 1)
+                if (generated.Count != 1 || original.Count < 1)
                 {
                     continue;
                 }
 
                 CalDavEventRecord generatedItem = generated[0];
-                CalDavEventRecord originalItem = original[0];
                 if (string.IsNullOrWhiteSpace(generatedItem.Href) || string.IsNullOrWhiteSpace(generatedItem.ETag))
                 {
                     result.NextcloudSkipped++;
                     continue;
                 }
 
-                result.NextcloudRelinked += RelinkGeneratedUidInOutlook(
-                    outlookApplication,
-                    calendar,
-                    generatedItem,
-                    originalItem,
-                    useDefaultCalendarFolder);
+                if (original.Count == 1)
+                {
+                    result.NextcloudRelinked += RelinkGeneratedUidInOutlook(
+                        outlookApplication,
+                        calendar,
+                        generatedItem,
+                        original[0],
+                        useDefaultCalendarFolder);
+                }
+                else
+                {
+                    // With multiple existing originals there is no safe target to relink to.
+                    // The generated Outlook copy must already have been removed in stage 2a.
+                    int remainingGenerated = CountLinkedUidInOutlook(
+                        outlookApplication,
+                        calendar,
+                        generatedItem.Uid,
+                        useDefaultCalendarFolder);
+                    if (remainingGenerated > 0)
+                    {
+                        result.NextcloudSkipped++;
+                        DiagnosticsLogger.Log(
+                            LogCategories.Core,
+                            "CalDAV recovery kept @nc4ol remote object because a linked Outlook copy still exists (uid="
+                            + Safe(generatedItem.Uid) + ", count="
+                            + remainingGenerated.ToString(CultureInfo.InvariantCulture) + ").");
+                        continue;
+                    }
+                }
 
                 if (DeleteRemoteGeneratedItem(configuration, generatedItem))
                 {
@@ -594,9 +730,86 @@ namespace NcTalkOutlookAddIn.Services
             }
         }
 
+        private static int CountLinkedUidInOutlook(
+            Outlook.Application outlookApplication,
+            CalDavCalendar calendar,
+            string uid,
+            bool useDefaultCalendarFolder)
+        {
+            if (string.IsNullOrWhiteSpace(uid))
+            {
+                return 0;
+            }
+
+            Outlook.NameSpace session = null;
+            Outlook.MAPIFolder defaultCalendar = null;
+            Outlook.MAPIFolder targetFolder = null;
+            Outlook.Items items = null;
+            int found = 0;
+            try
+            {
+                session = outlookApplication.Session;
+                defaultCalendar = session.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderCalendar);
+                targetFolder = useDefaultCalendarFolder
+                    ? defaultCalendar
+                    : FindCalendarFolder(defaultCalendar, BuildCalendarFolderName(calendar));
+                if (useDefaultCalendarFolder)
+                {
+                    defaultCalendar = null;
+                }
+                if (targetFolder == null)
+                {
+                    return 0;
+                }
+
+                items = targetFolder.Items;
+                int count = items.Count;
+                for (int index = 1; index <= count; index++)
+                {
+                    object raw = null;
+                    Outlook.AppointmentItem appointment = null;
+                    try
+                    {
+                        raw = items[index];
+                        appointment = raw as Outlook.AppointmentItem;
+                        if (appointment == null)
+                        {
+                            continue;
+                        }
+                        string currentUid = ReadUserProperty(appointment, UidPropertyName);
+                        string storedCalendar = ReadUserProperty(appointment, CalendarPropertyName);
+                        if (string.Equals(currentUid, uid, StringComparison.OrdinalIgnoreCase)
+                            && string.Equals(storedCalendar, calendar.Href, StringComparison.OrdinalIgnoreCase))
+                        {
+                            found++;
+                        }
+                    }
+                    finally
+                    {
+                        if (appointment != null)
+                        {
+                            ComInteropScope.TryRelease(appointment, LogCategories.Core, "Failed to release CalDAV verification AppointmentItem.");
+                        }
+                        else
+                        {
+                            ComInteropScope.TryRelease(raw, LogCategories.Core, "Failed to release CalDAV verification folder item.");
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(items, LogCategories.Core, "Failed to release CalDAV verification Items collection.");
+                ComInteropScope.TryRelease(targetFolder, LogCategories.Core, "Failed to release CalDAV verification target folder.");
+                ComInteropScope.TryRelease(defaultCalendar, LogCategories.Core, "Failed to release CalDAV verification default folder.");
+                ComInteropScope.TryRelease(session, LogCategories.Core, "Failed to release Outlook session after CalDAV verification.");
+            }
+            return found;
+        }
+
         private static bool DeleteRemoteGeneratedItem(TalkServiceConfiguration configuration, CalDavEventRecord item)
         {
-            var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            Dictionary<string, string> headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 { "If-Match", item.ETag.Trim() }
             };
@@ -728,7 +941,7 @@ namespace NcTalkOutlookAddIn.Services
                     null,
                     CultureInfo.InvariantCulture);
                 string profileName = rawProfileName as string;
-                var storage = new SettingsStorage(profileName);
+                SettingsStorage storage = new SettingsStorage(profileName);
                 AddinSettings settings = storage.Load();
                 return new TalkServiceConfiguration(settings.ServerUrl, settings.Username, settings.AppPassword);
             }
@@ -871,7 +1084,8 @@ namespace NcTalkOutlookAddIn.Services
 
         private static Dictionary<string, List<CalDavEventRecord>> GroupRemote(IList<CalDavEventRecord> remoteEvents)
         {
-            var groups = new Dictionary<string, List<CalDavEventRecord>>(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, List<CalDavEventRecord>> groups =
+                new Dictionary<string, List<CalDavEventRecord>>(StringComparer.OrdinalIgnoreCase);
             foreach (CalDavEventRecord item in remoteEvents ?? Enumerable.Empty<CalDavEventRecord>())
             {
                 if (item == null)
@@ -905,9 +1119,24 @@ namespace NcTalkOutlookAddIn.Services
 
         private static bool IsConnectorGeneratedUid(CalDavEventRecord item)
         {
-            return item != null
-                && !string.IsNullOrWhiteSpace(item.Uid)
-                && item.Uid.Trim().EndsWith("@nc4ol", StringComparison.OrdinalIgnoreCase);
+            return item != null && IsConnectorGeneratedUid(item.Uid);
+        }
+
+        private static bool IsConnectorGeneratedUid(string uid)
+        {
+            return !string.IsNullOrWhiteSpace(uid)
+                && uid.Trim().EndsWith("@nc4ol", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string BuildSyncIdentity(string uid, string href, string etag)
+        {
+            if (string.IsNullOrWhiteSpace(uid)
+                || string.IsNullOrWhiteSpace(href)
+                || string.IsNullOrWhiteSpace(etag))
+            {
+                return string.Empty;
+            }
+            return uid.Trim() + "|" + href.Trim() + "|" + etag.Trim();
         }
 
         private static string ReadUserProperty(Outlook.AppointmentItem item, string name)
@@ -1060,6 +1289,7 @@ namespace NcTalkOutlookAddIn.Services
             internal string Href { get; set; }
             internal string ETag { get; set; }
             internal string CalendarHref { get; set; }
+            internal bool Meeting { get; set; }
 
             internal bool IsLinkedTo(string calendarHref)
             {
