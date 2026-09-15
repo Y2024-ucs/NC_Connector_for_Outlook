@@ -366,11 +366,11 @@ namespace NcTalkOutlookAddIn
                                     pair.Value,
                                     preferences.UseDefaultCalendarFolder);
 
-                                // Only actual recovery work blocks synchronization. Different legitimate
-                                // DAV UIDs with an identical visible fingerprint are diagnostic findings,
-                                // not a reason to stop normal synchronization.
+                                // Only recovery work that is safe and still local, or an ambiguous
+                                // remote recovery state, blocks synchronization. A remote @nc4ol
+                                // candidate that survived the guarded repair is intentionally kept as
+                                // a legacy linked item and must not block the whole calendar.
                                 if (scan.OutlookSafeRemoveCandidates > 0
-                                    || scan.NextcloudSafeRemoveCandidates > 0
                                     || scan.NextcloudAmbiguousGroups > 0)
                                 {
                                     found = true;
