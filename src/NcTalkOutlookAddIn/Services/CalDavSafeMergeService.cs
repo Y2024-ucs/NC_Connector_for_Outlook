@@ -64,9 +64,6 @@ namespace NcTalkOutlookAddIn.Services
             var result = new CalDavMergeResult();
             IList<CalDavEventRecord> remote = remoteEvents ?? new List<CalDavEventRecord>();
 
-            // Critical first-sync rule: match existing Outlook appointments BEFORE
-            // importing remote events. Otherwise a pre-existing local appointment and
-            // its already existing CalDAV counterpart become two Outlook items.
             HashSet<string> matchedRemoteKeys = MatchRemoteToExistingOutlook(
                 outlookApplication,
                 calendar,
@@ -261,7 +258,7 @@ namespace NcTalkOutlookAddIn.Services
                 LogCategories.Core,
                 "CalDAV first-sync pre-match completed (calendar=" + Safe(calendar.DisplayName)
                 + ", matched=" + matchedRemoteKeys.Count
-                + ", remote=" + remote.Count
+                + ", remote=" + (remoteEvents != null ? remoteEvents.Count : 0)
                 + ").");
             return matchedRemoteKeys;
         }
@@ -514,9 +511,6 @@ namespace NcTalkOutlookAddIn.Services
             {
                 return value.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
             }
-            // Outlook and iCalendar conversion can differ in DateTime.Kind while still
-            // representing the same local wall-clock appointment. Match on local ticks
-            // rounded to the minute to avoid false first-sync duplicates.
             DateTime local = value.Kind == DateTimeKind.Utc ? value.ToLocalTime() : value;
             return new DateTime(local.Year, local.Month, local.Day, local.Hour, local.Minute, 0)
                 .ToString("yyyy-MM-dd'T'HH:mm", CultureInfo.InvariantCulture);
