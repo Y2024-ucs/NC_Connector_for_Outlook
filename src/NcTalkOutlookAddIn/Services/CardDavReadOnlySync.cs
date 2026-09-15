@@ -53,14 +53,18 @@ namespace NcTalkOutlookAddIn.Services
 
         internal CardDavReadOnlySync(TalkServiceConfiguration configuration)
         {
-            _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+            if (configuration == null)
+            {
+                throw new ArgumentNullException("configuration");
+            }
+            _configuration = configuration;
         }
 
         internal int Synchronize(Outlook.Application outlookApplication)
         {
             if (outlookApplication == null)
             {
-                throw new ArgumentNullException(nameof(outlookApplication));
+                throw new ArgumentNullException("outlookApplication");
             }
             if (!_configuration.IsComplete())
             {
@@ -82,7 +86,7 @@ namespace NcTalkOutlookAddIn.Services
         {
             if (addressBook == null || string.IsNullOrWhiteSpace(addressBook.Href))
             {
-                throw new ArgumentException("A CardDAV address book is required.", nameof(addressBook));
+                throw new ArgumentException("A CardDAV address book is required.", "addressBook");
             }
 
             string body = "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
@@ -129,7 +133,7 @@ namespace NcTalkOutlookAddIn.Services
         {
             if (outlookApplication == null)
             {
-                throw new ArgumentNullException(nameof(outlookApplication));
+                throw new ArgumentNullException("outlookApplication");
             }
 
             Outlook.NameSpace session = null;
