@@ -105,9 +105,22 @@ namespace NcTalkOutlookAddIn.Services
                 }
             }
 
-            // A Nextcloud avatar may exist even when the CardDAV vCard has no PHOTO field.
-            // Try this for all contacts, not only z-server-generated--system entries. Personal
-            // address books can contain cloud users as regular contacts as well.
+            // Nextcloud exposes a stable DAV image endpoint on contact resources.
+            // This also works when the web UI displays only a temporary blob: URL.
+            if (photo == null && configuration != null)
+            {
+                photo = TryDownloadDavPhoto(href, configuration);
+                if (IsSupportedImage(photo))
+                {
+                    source = "dav-photo";
+                }
+                else
+                {
+                    photo = null;
+                }
+            }
+
+            // A Nextcloud avatar may exist even when the CardDAV resource has no usable PHOTO.
             if (photo == null && configuration != null)
             {
                 string avatarIdentity;
@@ -149,6 +162,8 @@ namespace NcTalkOutlookAddIn.Services
                     + SafeLogValue(email)
                     + ", name="
                     + SafeLogValue(fullName)
+                    + ", href="
+                    + SafeLogValue(href)
                     + ", hasPhotoField="
                     + (!string.IsNullOrWhiteSpace(photoValue))
                     + ").");
@@ -278,6 +293,27 @@ namespace NcTalkOutlookAddIn.Services
             try
             {
                 string url = ResolvePhotoUrl(photoValue, configuration);
+                return DownloadImage(url, configuration);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static byte[] TryDownloadDavPhoto(
+            string href,
+            TalkServiceConfiguration configuration)
+        {
+            if (string.IsNullOrWhiteSpace(href) || configuration == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                string separator = href.IndexOf('?') >= 0 ? "&" : "?";
+                string url = href + separator + "photo";
                 return DownloadImage(url, configuration);
             }
             catch
