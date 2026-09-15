@@ -64,12 +64,24 @@ namespace NcTalkOutlookAddIn.Services
             var result = new CalDavMergeResult();
             IList<CalDavEventRecord> remote = remoteEvents ?? new List<CalDavEventRecord>();
 
-            // In TwoWay mode the first sync is a union. In explicit one-way modes we
-            // respect the selected direction, but still never delete from either side.
+            // Critical first-sync rule: match existing Outlook appointments BEFORE
+            // importing remote events. Otherwise a pre-existing local appointment and
+            // its already existing CalDAV counterpart become two Outlook items.
+            HashSet<string> matchedRemoteKeys = MatchRemoteToExistingOutlook(
+                outlookApplication,
+                calendar,
+                remote,
+                useDefaultCalendarFolder,
+                result);
+
             if (direction != CalDavSyncDirection.OutlookToNextcloud)
             {
+                List<CalDavEventRecord> missingInOutlook = remote
+                    .Where(v => v != null && !matchedRemoteKeys.Contains(BuildRemoteKey(v)))
+                    .ToList();
+
                 result.ImportedToOutlook = new CalDavEventSyncService(_configuration)
-                    .ImportIntoOutlook(outlookApplication, calendar, remote, useDefaultCalendarFolder);
+                    .ImportIntoOutlook(outlookApplication, calendar, missingInOutlook, useDefaultCalendarFolder);
             }
 
             if (direction == CalDavSyncDirection.NextcloudToOutlook || calendar.ReadOnly)
@@ -102,6 +114,158 @@ namespace NcTalkOutlookAddIn.Services
             return result;
         }
 
+        private HashSet<string> MatchRemoteToExistingOutlook(
+            Outlook.Application outlookApplication,
+            CalDavCalendar calendar,
+            IList<CalDavEventRecord> remoteEvents,
+            bool useDefaultCalendarFolder,
+            CalDavMergeResult result)
+        {
+            var matchedRemoteKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var remoteByUid = new Dictionary<string, CalDavEventRecord>(StringComparer.OrdinalIgnoreCase);
+            var remoteByFingerprint = new Dictionary<string, Queue<CalDavEventRecord>>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (CalDavEventRecord remote in remoteEvents ?? Enumerable.Empty<CalDavEventRecord>())
+            {
+                if (remote == null)
+                {
+                    continue;
+                }
+                if (!string.IsNullOrWhiteSpace(remote.Uid) && !remoteByUid.ContainsKey(remote.Uid.Trim()))
+                {
+                    remoteByUid[remote.Uid.Trim()] = remote;
+                }
+
+                string fingerprint = BuildFingerprint(remote.Subject, remote.Location, remote.Start, remote.End, remote.AllDay);
+                Queue<CalDavEventRecord> queue;
+                if (!remoteByFingerprint.TryGetValue(fingerprint, out queue))
+                {
+                    queue = new Queue<CalDavEventRecord>();
+                    remoteByFingerprint[fingerprint] = queue;
+                }
+                queue.Enqueue(remote);
+            }
+
+            Outlook.NameSpace session = null;
+            Outlook.MAPIFolder defaultCalendar = null;
+            Outlook.MAPIFolder targetFolder = null;
+            Outlook.Items items = null;
+            try
+            {
+                session = outlookApplication.Session;
+                defaultCalendar = session.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderCalendar);
+                targetFolder = useDefaultCalendarFolder
+                    ? defaultCalendar
+                    : EnsureCalendarFolder(defaultCalendar, BuildCalendarFolderName(calendar));
+                if (useDefaultCalendarFolder)
+                {
+                    defaultCalendar = null;
+                }
+
+                items = targetFolder.Items;
+                int count = items.Count;
+                for (int index = 1; index <= count; index++)
+                {
+                    object raw = null;
+                    Outlook.AppointmentItem appointment = null;
+                    try
+                    {
+                        raw = items[index];
+                        appointment = raw as Outlook.AppointmentItem;
+                        if (appointment == null)
+                        {
+                            continue;
+                        }
+
+                        string existingUid = ReadUserProperty(appointment, UidPropertyName);
+                        string existingCalendar = ReadUserProperty(appointment, CalendarPropertyName);
+                        if (!string.IsNullOrWhiteSpace(existingUid)
+                            && string.Equals(existingCalendar, calendar.Href, StringComparison.OrdinalIgnoreCase))
+                        {
+                            CalDavEventRecord alreadyLinked;
+                            if (remoteByUid.TryGetValue(existingUid.Trim(), out alreadyLinked))
+                            {
+                                matchedRemoteKeys.Add(BuildRemoteKey(alreadyLinked));
+                            }
+                            continue;
+                        }
+
+                        if (appointment.IsRecurring
+                            || appointment.MeetingStatus != Outlook.OlMeetingStatus.olNonMeeting)
+                        {
+                            continue;
+                        }
+
+                        string fingerprint = BuildFingerprint(
+                            appointment.Subject,
+                            appointment.Location,
+                            appointment.Start,
+                            appointment.End,
+                            appointment.AllDayEvent);
+
+                        Queue<CalDavEventRecord> candidates;
+                        if (!remoteByFingerprint.TryGetValue(fingerprint, out candidates))
+                        {
+                            continue;
+                        }
+
+                        CalDavEventRecord matched = null;
+                        while (candidates.Count > 0)
+                        {
+                            CalDavEventRecord candidate = candidates.Dequeue();
+                            if (!matchedRemoteKeys.Contains(BuildRemoteKey(candidate)))
+                            {
+                                matched = candidate;
+                                break;
+                            }
+                        }
+                        if (matched == null)
+                        {
+                            continue;
+                        }
+
+                        WriteSyncProperties(appointment, matched.Uid, matched.Href, matched.ETag, calendar.Href);
+                        appointment.Save();
+                        matchedRemoteKeys.Add(BuildRemoteKey(matched));
+                        result.MatchedExisting++;
+                    }
+                    catch (Exception ex)
+                    {
+                        DiagnosticsLogger.LogException(
+                            LogCategories.Core,
+                            "CalDAV first-sync pre-match failed for one Outlook appointment; item was left unchanged.",
+                            ex);
+                    }
+                    finally
+                    {
+                        if (appointment != null)
+                        {
+                            ComInteropScope.TryRelease(appointment, LogCategories.Core, "Failed to release CalDAV pre-match AppointmentItem.");
+                        }
+                        else
+                        {
+                            ComInteropScope.TryRelease(raw, LogCategories.Core, "Failed to release CalDAV pre-match folder item.");
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(items, LogCategories.Core, "Failed to release CalDAV pre-match Items collection.");
+                ComInteropScope.TryRelease(targetFolder, LogCategories.Core, "Failed to release CalDAV pre-match target folder.");
+                ComInteropScope.TryRelease(defaultCalendar, LogCategories.Core, "Failed to release CalDAV pre-match default folder.");
+                ComInteropScope.TryRelease(session, LogCategories.Core, "Failed to release Outlook session after CalDAV pre-match.");
+            }
+
+            DiagnosticsLogger.Log(
+                LogCategories.Core,
+                "CalDAV first-sync pre-match completed (calendar=" + Safe(calendar.DisplayName)
+                + ", matched=" + matchedRemoteKeys.Count
+                + ", remote=" + remote.Count
+                + ").");
+            return matchedRemoteKeys;
+        }
+
         private void UploadMissingOutlookAppointments(
             Outlook.Application outlookApplication,
             CalDavCalendar calendar,
@@ -125,17 +289,12 @@ namespace NcTalkOutlookAddIn.Services
                     defaultCalendar = null;
                 }
 
-                var remoteByUid = new Dictionary<string, CalDavEventRecord>(StringComparer.OrdinalIgnoreCase);
                 var remoteByFingerprint = new Dictionary<string, CalDavEventRecord>(StringComparer.OrdinalIgnoreCase);
                 foreach (CalDavEventRecord remote in remoteEvents ?? Enumerable.Empty<CalDavEventRecord>())
                 {
                     if (remote == null)
                     {
                         continue;
-                    }
-                    if (!string.IsNullOrWhiteSpace(remote.Uid) && !remoteByUid.ContainsKey(remote.Uid.Trim()))
-                    {
-                        remoteByUid[remote.Uid.Trim()] = remote;
                     }
                     string fingerprint = BuildFingerprint(remote.Subject, remote.Location, remote.Start, remote.End, remote.AllDay);
                     if (!remoteByFingerprint.ContainsKey(fingerprint))
@@ -323,13 +482,44 @@ namespace NcTalkOutlookAddIn.Services
                 .Replace(";", "\\;");
         }
 
+        private static string BuildRemoteKey(CalDavEventRecord value)
+        {
+            if (value == null)
+            {
+                return string.Empty;
+            }
+            if (!string.IsNullOrWhiteSpace(value.Href))
+            {
+                return "href:" + value.Href.Trim();
+            }
+            if (!string.IsNullOrWhiteSpace(value.Uid))
+            {
+                return "uid:" + value.Uid.Trim();
+            }
+            return "fp:" + BuildFingerprint(value.Subject, value.Location, value.Start, value.End, value.AllDay);
+        }
+
         private static string BuildFingerprint(string subject, string location, DateTime start, DateTime end, bool allDay)
         {
             return Normalize(subject) + "|"
                 + Normalize(location) + "|"
-                + start.ToString("o", CultureInfo.InvariantCulture) + "|"
-                + end.ToString("o", CultureInfo.InvariantCulture) + "|"
+                + NormalizeDateTime(start, allDay) + "|"
+                + NormalizeDateTime(end, allDay) + "|"
                 + (allDay ? "1" : "0");
+        }
+
+        private static string NormalizeDateTime(DateTime value, bool allDay)
+        {
+            if (allDay)
+            {
+                return value.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            }
+            // Outlook and iCalendar conversion can differ in DateTime.Kind while still
+            // representing the same local wall-clock appointment. Match on local ticks
+            // rounded to the minute to avoid false first-sync duplicates.
+            DateTime local = value.Kind == DateTimeKind.Utc ? value.ToLocalTime() : value;
+            return new DateTime(local.Year, local.Month, local.Day, local.Hour, local.Minute, 0)
+                .ToString("yyyy-MM-dd'T'HH:mm", CultureInfo.InvariantCulture);
         }
 
         private static string Normalize(string value)
