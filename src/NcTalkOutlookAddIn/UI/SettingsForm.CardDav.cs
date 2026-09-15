@@ -15,6 +15,7 @@ namespace NcTalkOutlookAddIn.UI
 {
     internal sealed partial class SettingsForm
     {
+        private readonly TabPage _cardDavTab = new TabPage("Kontakte");
         private readonly GroupBox _cardDavSyncGroup = new GroupBox();
         private readonly CheckBox _cardDavEnabledCheckBox = new CheckBox();
         private readonly CheckBox _cardDavCompanyCheckBox = new CheckBox();
@@ -28,11 +29,17 @@ namespace NcTalkOutlookAddIn.UI
         {
             _cardDavPreferences = CardDavSyncPreferences.Load();
 
+            _cardDavTab.AutoScroll = true;
+            if (!_tabControl.TabPages.Contains(_cardDavTab))
+            {
+                _tabControl.TabPages.Insert(1, _cardDavTab);
+            }
+
             _cardDavSyncGroup.Text = "Nextcloud-Kontakte";
-            _cardDavSyncGroup.Location = new Point(18, 275);
-            _cardDavSyncGroup.Size = new Size(440, 230);
+            _cardDavSyncGroup.Location = new Point(18, 20);
+            _cardDavSyncGroup.Size = new Size(700, 230);
             _cardDavSyncGroup.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            _generalTab.Controls.Add(_cardDavSyncGroup);
+            _cardDavTab.Controls.Add(_cardDavSyncGroup);
 
             _cardDavEnabledCheckBox.Text = "Kontaktsynchronisation aktiv";
             _cardDavEnabledCheckBox.AutoSize = true;
@@ -83,7 +90,7 @@ namespace NcTalkOutlookAddIn.UI
 
             var hint = new Label
             {
-                Text = "Nur lesend: Nextcloud → Outlook · Hintergrundaktualisierung alle 15 Minuten",
+                Text = "Nur lesend: Nextcloud → Outlook · nur geänderte Kontakte · Hintergrundaktualisierung alle 15 Minuten",
                 AutoSize = true,
                 Location = new Point(215, 194)
             };
@@ -131,9 +138,10 @@ namespace NcTalkOutlookAddIn.UI
 
             SetBusy(true);
             UpdateCardDavSettingsState();
-            SetStatus("Nextcloud-Kontakte werden synchronisiert ...", false);
+            SetStatus("Nextcloud-Kontakte werden auf Änderungen geprüft ...", false);
             try
             {
+                Dictionary<string, string> knownEtags = CardDavReadOnlySync.LoadKnownEtagsFromOutlook(_outlookApplication);
                 var sync = new CardDavReadOnlySync(configuration);
                 List<CardDavContactRecord> contacts = await Task.Run(() =>
                 {
@@ -151,7 +159,7 @@ namespace NcTalkOutlookAddIn.UI
                         {
                             continue;
                         }
-                        result.AddRange(sync.DownloadContacts(addressBook));
+                        result.AddRange(sync.DownloadContacts(addressBook, knownEtags));
                     }
                     return result;
                 });
@@ -159,7 +167,7 @@ namespace NcTalkOutlookAddIn.UI
                 int count = _cardDavDefaultContactsRadio.Checked
                     ? CardDavDefaultContactsImporter.Import(_outlookApplication, contacts)
                     : sync.ImportIntoOutlook(_outlookApplication, contacts);
-                SetStatus("Nextcloud-Kontakte synchronisiert: " + count + " Einträge.", false);
+                SetStatus("Nextcloud-Kontakte synchronisiert: " + count + " geändert/neu.", false);
             }
             catch (Exception ex)
             {
