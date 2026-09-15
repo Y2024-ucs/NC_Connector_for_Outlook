@@ -25,8 +25,9 @@ namespace NcTalkOutlookAddIn.Services
 
     // Safety rule: this service NEVER deletes anything. It is intentionally suitable
     // for the first synchronization of an existing Outlook calendar with an existing
-    // CalDAV calendar. Missing items are copied to the other side; absence is never
-    // interpreted as a deletion.
+    // CalDAV calendar. Missing items are copied to the other side unless a per-item
+    // state proves that both sides previously contained the item; in that case the
+    // missing side is preserved for the deletion phase instead of being resurrected.
     internal sealed class CalDavSafeMergeService
     {
         private const string UidPropertyName = "NC-CalDAV-UID";
@@ -63,6 +64,7 @@ namespace NcTalkOutlookAddIn.Services
 
             var result = new CalDavMergeResult();
             IList<CalDavEventRecord> remote = remoteEvents ?? new List<CalDavEventRecord>();
+            CalDavSyncStateStore syncState = CalDavSyncStateStore.Load();
 
             HashSet<string> matchedRemoteKeys = MatchRemoteToExistingOutlook(
                 outlookApplication,
@@ -73,9 +75,40 @@ namespace NcTalkOutlookAddIn.Services
 
             if (direction != CalDavSyncDirection.OutlookToNextcloud)
             {
+                int deletionIntentPreserved = 0;
                 List<CalDavEventRecord> missingInOutlook = remote
-                    .Where(v => v != null && !matchedRemoteKeys.Contains(BuildRemoteKey(v)))
+                    .Where(v =>
+                    {
+                        if (v == null || matchedRemoteKeys.Contains(BuildRemoteKey(v)))
+                        {
+                            return false;
+                        }
+
+                        // In TwoWay/Outlook->Nextcloud mode, a remote event that was
+                        // previously confirmed on both sides but is now absent locally
+                        // is a possible local deletion. Do not re-import it here; the
+                        // guarded deletion phase decides whether the remote copy may be
+                        // deleted. In one-way Nextcloud->Outlook mode it is deliberately
+                        // re-imported because Outlook is not authoritative for deletes.
+                        if (direction != CalDavSyncDirection.NextcloudToOutlook
+                            && syncState.WasItemSeenOnBothSides(calendar.Href, v.Uid))
+                        {
+                            deletionIntentPreserved++;
+                            return false;
+                        }
+                        return true;
+                    })
                     .ToList();
+
+                if (deletionIntentPreserved > 0)
+                {
+                    DiagnosticsLogger.Log(
+                        LogCategories.Core,
+                        "CalDAV safe merge preserved "
+                        + deletionIntentPreserved.ToString(CultureInfo.InvariantCulture)
+                        + " possible Outlook-side deletions for guarded deletion processing (calendar="
+                        + Safe(calendar.DisplayName) + ").");
+                }
 
                 result.ImportedToOutlook = new CalDavEventSyncService(_configuration)
                     .ImportIntoOutlook(outlookApplication, calendar, missingInOutlook, useDefaultCalendarFolder);
