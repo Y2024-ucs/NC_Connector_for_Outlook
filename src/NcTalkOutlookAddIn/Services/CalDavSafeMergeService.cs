@@ -130,21 +130,7 @@ namespace NcTalkOutlookAddIn.Services
                 calendar,
                 remote,
                 useDefaultCalendarFolder,
-                result,
-                syncState);
-
-            try
-            {
-                syncState.Save();
-            }
-            catch (Exception ex)
-            {
-                result.UploadFailures++;
-                DiagnosticsLogger.LogException(
-                    LogCategories.Core,
-                    "Failed to persist CalDAV sync state after safe merge upload.",
-                    ex);
-            }
+                result);
 
             DiagnosticsLogger.Log(
                 LogCategories.Core,
@@ -316,8 +302,7 @@ namespace NcTalkOutlookAddIn.Services
             CalDavCalendar calendar,
             IList<CalDavEventRecord> remoteEvents,
             bool useDefaultCalendarFolder,
-            CalDavMergeResult result,
-            CalDavSyncStateStore syncState)
+            CalDavMergeResult result)
         {
             Outlook.NameSpace session = null;
             Outlook.MAPIFolder defaultCalendar = null;
@@ -411,10 +396,15 @@ namespace NcTalkOutlookAddIn.Services
                         WriteSyncProperties(appointment, uid, href, etag, calendar.Href);
                         WriteUserProperty(appointment, LocalSnapshotPropertyName, BuildOutlookSnapshot(appointment));
                         appointment.Save();
-                        if (syncState != null)
-                        {
-                            syncState.MarkItemSeenOnBothSides(calendar.Href, uid, href, etag);
-                        }
+
+                        // Important: do NOT mark this item as seen on both sides yet.
+                        // remoteEvents is a snapshot taken before this PUT, so the
+                        // bidirectional deletion phase in the same run cannot see the
+                        // freshly created remote object. Marking it here would make that
+                        // stale snapshot look like an authoritative remote deletion and
+                        // could delete the local Outlook appointment immediately.
+                        // The next successful remote scan will see the new UID and then
+                        // establish the two-sided per-item state safely.
                         result.UploadedToNextcloud++;
                     }
                     catch (Exception ex)
