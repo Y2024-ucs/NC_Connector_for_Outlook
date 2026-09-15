@@ -70,7 +70,7 @@ namespace NcTalkOutlookAddIn.Services
             string body = "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
                 + "<card:addressbook-query xmlns:d=\"DAV:\" xmlns:card=\"urn:ietf:params:xml:ns:carddav\">"
                 + "<d:prop><d:getetag/><card:address-data content-type=\"text/vcard\"/></d:prop>"
-                + "<card:filter><card:prop-filter name=\"FN\"/></card:filter>"
+                + "<card:filter/>"
                 + "</card:addressbook-query>";
 
             XDocument document = SendDavRequest(addressBook.Href, "REPORT", "1", body);
