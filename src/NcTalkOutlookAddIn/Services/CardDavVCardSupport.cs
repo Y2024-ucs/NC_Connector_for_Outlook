@@ -90,7 +90,9 @@ namespace NcTalkOutlookAddIn.Services
             string tempPath = null;
             try
             {
-                tempPath = Path.Combine(Path.GetTempPath(), "nc4ol-contact-" + Guid.NewGuid().ToString("N") + ".jpg");
+                tempPath = Path.Combine(
+                    Path.GetTempPath(),
+                    "nc4ol-contact-" + Guid.NewGuid().ToString("N") + DetectImageExtension(photo));
                 File.WriteAllBytes(tempPath, photo);
                 target.AddPicture(tempPath);
             }
@@ -181,6 +183,26 @@ namespace NcTalkOutlookAddIn.Services
             {
                 return null;
             }
+        }
+
+        private static string DetectImageExtension(byte[] bytes)
+        {
+            if (bytes != null && bytes.Length >= 8
+                && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47)
+            {
+                return ".png";
+            }
+            if (bytes != null && bytes.Length >= 6
+                && bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46)
+            {
+                return ".gif";
+            }
+            if (bytes != null && bytes.Length >= 2
+                && bytes[0] == 0x42 && bytes[1] == 0x4D)
+            {
+                return ".bmp";
+            }
+            return ".jpg";
         }
     }
 }
