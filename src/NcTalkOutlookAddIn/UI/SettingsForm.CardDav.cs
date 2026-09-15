@@ -3,8 +3,11 @@
 // See LICENSE.txt for details.
 
 using System;
+using System.Collections.Generic;
 using System.Drawing;
+using System.Threading.Tasks;
 using System.Windows.Forms;
+using NcTalkOutlookAddIn.Models;
 using NcTalkOutlookAddIn.Services;
 using NcTalkOutlookAddIn.Utilities;
 
@@ -16,6 +19,7 @@ namespace NcTalkOutlookAddIn.UI
         private readonly CheckBox _cardDavEnabledCheckBox = new CheckBox();
         private readonly CheckBox _cardDavCompanyCheckBox = new CheckBox();
         private readonly CheckBox _cardDavPersonalCheckBox = new CheckBox();
+        private readonly Button _cardDavSyncNowButton = new Button();
         private CardDavSyncPreferences _cardDavPreferences;
 
         private void InitializeCardDavSettingsSection()
@@ -24,7 +28,7 @@ namespace NcTalkOutlookAddIn.UI
 
             _cardDavSyncGroup.Text = "Nextcloud-Kontakte";
             _cardDavSyncGroup.Location = new Point(18, 275);
-            _cardDavSyncGroup.Size = new Size(440, 132);
+            _cardDavSyncGroup.Size = new Size(440, 170);
             _cardDavSyncGroup.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             _generalTab.Controls.Add(_cardDavSyncGroup);
 
@@ -39,19 +43,27 @@ namespace NcTalkOutlookAddIn.UI
             _cardDavCompanyCheckBox.AutoSize = true;
             _cardDavCompanyCheckBox.Location = new Point(30, 55);
             _cardDavCompanyCheckBox.Checked = _cardDavPreferences.SyncCompanyDirectory;
+            _cardDavCompanyCheckBox.CheckedChanged += delegate { UpdateCardDavSettingsState(); };
             _cardDavSyncGroup.Controls.Add(_cardDavCompanyCheckBox);
 
             _cardDavPersonalCheckBox.Text = "Persönliche Kontakte synchronisieren";
             _cardDavPersonalCheckBox.AutoSize = true;
             _cardDavPersonalCheckBox.Location = new Point(30, 82);
             _cardDavPersonalCheckBox.Checked = _cardDavPreferences.SyncPersonalContacts;
+            _cardDavPersonalCheckBox.CheckedChanged += delegate { UpdateCardDavSettingsState(); };
             _cardDavSyncGroup.Controls.Add(_cardDavPersonalCheckBox);
+
+            _cardDavSyncNowButton.Text = "Jetzt synchronisieren";
+            _cardDavSyncNowButton.Location = new Point(30, 108);
+            _cardDavSyncNowButton.Size = new Size(170, 28);
+            _cardDavSyncNowButton.Click += OnCardDavSyncNowClick;
+            _cardDavSyncGroup.Controls.Add(_cardDavSyncNowButton);
 
             var hint = new Label
             {
-                Text = "Nur lesend: Nextcloud → Outlook",
+                Text = "Nur lesend: Nextcloud → Outlook · Hintergrundaktualisierung alle 15 Minuten",
                 AutoSize = true,
-                Location = new Point(30, 108)
+                Location = new Point(30, 142)
             };
             _cardDavSyncGroup.Controls.Add(hint);
 
@@ -62,8 +74,77 @@ namespace NcTalkOutlookAddIn.UI
         private void UpdateCardDavSettingsState()
         {
             bool enabled = _cardDavEnabledCheckBox.Checked;
+            bool hasSelection = _cardDavCompanyCheckBox.Checked || _cardDavPersonalCheckBox.Checked;
             _cardDavCompanyCheckBox.Enabled = enabled;
             _cardDavPersonalCheckBox.Enabled = enabled;
+            _cardDavSyncNowButton.Enabled = enabled && hasSelection && !_isBusy;
+        }
+
+        private async void OnCardDavSyncNowClick(object sender, EventArgs e)
+        {
+            if (_isBusy || _outlookApplication == null)
+            {
+                return;
+            }
+
+            string baseUrl = _serverUrlTextBox.Text.Trim();
+            string user = _usernameTextBox.Text.Trim();
+            string appPassword = _appPasswordTextBox.Text ?? string.Empty;
+            var configuration = new TalkServiceConfiguration(baseUrl, user, appPassword);
+            if (!configuration.IsComplete())
+            {
+                SetStatus("Nextcloud-Zugangsdaten sind unvollständig.", true);
+                return;
+            }
+
+            bool syncCompany = _cardDavCompanyCheckBox.Checked;
+            bool syncPersonal = _cardDavPersonalCheckBox.Checked;
+            if (!syncCompany && !syncPersonal)
+            {
+                SetStatus("Es ist kein Kontaktbereich zur Synchronisation ausgewählt.", true);
+                return;
+            }
+
+            SetBusy(true);
+            UpdateCardDavSettingsState();
+            SetStatus("Nextcloud-Kontakte werden synchronisiert ...", false);
+            try
+            {
+                var sync = new CardDavReadOnlySync(configuration);
+                List<CardDavContactRecord> contacts = await Task.Run(() =>
+                {
+                    IList<CardDavAddressBook> addressBooks =
+                        new DavDiscoveryService(configuration).DiscoverAddressBooks();
+                    var result = new List<CardDavContactRecord>();
+                    foreach (CardDavAddressBook addressBook in addressBooks)
+                    {
+                        bool isSystem = addressBook != null
+                            && !string.IsNullOrWhiteSpace(addressBook.Href)
+                            && addressBook.Href.IndexOf(
+                                "z-server-generated--system",
+                                StringComparison.OrdinalIgnoreCase) >= 0;
+                        if ((isSystem && !syncCompany) || (!isSystem && !syncPersonal))
+                        {
+                            continue;
+                        }
+                        result.AddRange(sync.DownloadContacts(addressBook));
+                    }
+                    return result;
+                });
+
+                int count = sync.ImportIntoOutlook(_outlookApplication, contacts);
+                SetStatus("Nextcloud-Kontakte synchronisiert: " + count + " Einträge.", false);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsLogger.LogException(LogCategories.Core, "Manual CardDAV sync failed.", ex);
+                SetStatus("Kontaktsynchronisation fehlgeschlagen: " + ex.Message, true);
+            }
+            finally
+            {
+                SetBusy(false);
+                UpdateCardDavSettingsState();
+            }
         }
 
         private void OnCardDavSettingsFormClosed(object sender, FormClosedEventArgs e)
