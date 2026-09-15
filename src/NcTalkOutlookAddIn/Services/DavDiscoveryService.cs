@@ -22,7 +22,11 @@ namespace NcTalkOutlookAddIn.Services
 
         internal DavDiscoveryService(TalkServiceConfiguration configuration)
         {
-            _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+            if (configuration == null)
+            {
+                throw new ArgumentNullException("configuration");
+            }
+            _configuration = configuration;
         }
 
         internal IList<CardDavAddressBook> DiscoverAddressBooks()
