@@ -32,7 +32,7 @@
   <ItemGroup>
     <Reference Include="Extensibility, Version=7.0.3300.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a"><EmbedInteropTypes>true</EmbedInteropTypes></Reference>
     <Reference Include="Microsoft.Office.Interop.Outlook, Version=15.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c"><EmbedInteropTypes>true</EmbedInteropTypes></Reference>
-    <Reference Include="office, Version=15.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c"><EmbedInteropTypes>true</EmbedInteropTypes></Reference>
+    <Reference Include="office, Version=15.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111d50a3a"><EmbedInteropTypes>true</EmbedInteropTypes></Reference>
     <Reference Include="stdole, Version=7.0.3300.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -81,6 +81,7 @@
     <Compile Include="Settings\SettingsFileTransaction.cs" />
     <Compile Include="Settings\SettingsStorage.cs" />
     <Compile Include="Models\CardDavAddressBook.cs" />
+    <Compile Include="Models\CalDavCalendar.cs" />
     <Compile Include="Models\TalkRoomType.cs" />
     <Compile Include="Models\TalkRoomRequest.cs" />
     <Compile Include="Models\TalkRoomCreationResult.cs" />
@@ -149,6 +150,7 @@
     <Compile Include="Services\CardDavDefaultContactsImporter.cs" />
     <Compile Include="Services\CardDavSyncPreferences.cs" />
     <Compile Include="Services\CardDavVCardSupport.cs" />
+    <Compile Include="Services\CalDavSyncPreferences.cs" />
     <Compile Include="Services\NextcloudCapabilitiesService.cs" />
     <Compile Include="Services\NextcloudUserIdentityService.cs" />
     <Compile Include="Services\TalkService.cs" />
@@ -190,6 +192,7 @@
     <Compile Include="UI\SettingsForm.About.cs" />
     <Compile Include="UI\SettingsForm.Language.cs" />
     <Compile Include="UI\CardDavFirstRunForm.cs" />
+    <Compile Include="UI\CalDavFirstRunForm.cs" />
     <Compile Include="UI\SettingsTabControl.cs" />
     <Compile Include="UI\ScaledForm.cs" />
     <Compile Include="UI\TalkLinkForm.cs" />
