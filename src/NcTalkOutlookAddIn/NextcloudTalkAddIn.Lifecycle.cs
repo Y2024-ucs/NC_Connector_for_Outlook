@@ -48,8 +48,6 @@ namespace NcTalkOutlookAddIn
                 outlookProfileName);
             _freeBusyManager.Initialize(_outlookApplication);
             InitializeTalkAppointmentSync(outlookProfileName);
-            // Startup resumes durable deletion jobs. It does not enumerate calendars
-            // to rebuild subscriptions.
             InitializeTalkRoomLifecycle(
                 _settingsStorage.DataDirectory,
                 outlookProfileName);
@@ -259,7 +257,7 @@ namespace NcTalkOutlookAddIn
                         return;
                     }
 
-                    int selectedCount = 0;
+                    var selectedCalendars = new List<CalDavCalendar>();
                     int readOnlySelectedCount = 0;
                     foreach (CalDavCalendar calendar in calendars)
                     {
@@ -267,7 +265,7 @@ namespace NcTalkOutlookAddIn
                         {
                             continue;
                         }
-                        selectedCount++;
+                        selectedCalendars.Add(calendar);
                         if (calendar.ReadOnly)
                         {
                             readOnlySelectedCount++;
@@ -279,7 +277,7 @@ namespace NcTalkOutlookAddIn
                         "CalDAV calendar configuration ready (available="
                         + calendars.Count
                         + ", selected="
-                        + selectedCount
+                        + selectedCalendars.Count
                         + ", readOnlySelected="
                         + readOnlySelectedCount
                         + ", direction="
@@ -291,12 +289,67 @@ namespace NcTalkOutlookAddIn
                         + ", intervalMinutes="
                         + preferences.IntervalMinutes
                         + ").");
+
+                    if (!preferences.SyncOnStartup)
+                    {
+                        return;
+                    }
+                    if (preferences.Direction == CalDavSyncDirection.OutlookToNextcloud)
+                    {
+                        DiagnosticsLogger.Log(
+                            LogCategories.Core,
+                            "CalDAV startup download skipped because sync direction is OutlookToNextcloud.");
+                        return;
+                    }
+
+                    var sync = new CalDavEventSyncService(configuration);
+                    var downloaded = new List<KeyValuePair<CalDavCalendar, IList<CalDavEventRecord>>>();
+                    foreach (CalDavCalendar calendar in selectedCalendars)
+                    {
+                        downloaded.Add(new KeyValuePair<CalDavCalendar, IList<CalDavEventRecord>>(
+                            calendar,
+                            sync.DownloadEvents(calendar)));
+                    }
+
+                    int imported = await RunOnOutlookUiThreadAsync(
+                        () =>
+                        {
+                            if (_outlookApplication == null)
+                            {
+                                return 0;
+                            }
+                            int count = 0;
+                            foreach (KeyValuePair<CalDavCalendar, IList<CalDavEventRecord>> pair in downloaded)
+                            {
+                                count += sync.ImportIntoOutlook(
+                                    _outlookApplication,
+                                    pair.Key,
+                                    pair.Value,
+                                    preferences.UseDefaultCalendarFolder);
+                            }
+                            return count;
+                        }).ConfigureAwait(false);
+
+                    DiagnosticsLogger.Log(
+                        LogCategories.Core,
+                        "CalDAV startup download sync completed (calendars="
+                        + selectedCalendars.Count
+                        + ", appointments="
+                        + imported
+                        + ").");
+
+                    if (preferences.Direction == CalDavSyncDirection.TwoWay)
+                    {
+                        DiagnosticsLogger.Log(
+                            LogCategories.Core,
+                            "CalDAV two-way upload phase is not enabled yet; startup run was Nextcloud to Outlook only.");
+                    }
                 }
                 catch (Exception ex)
                 {
                     DiagnosticsLogger.LogException(
                         LogCategories.Core,
-                        "CalDAV calendar setup failed.",
+                        "CalDAV calendar setup/startup sync failed.",
                         ex);
                 }
             });
@@ -453,12 +506,10 @@ namespace NcTalkOutlookAddIn
             LogCore("Add-in disconnected (removeMode=" + removeMode + ").");
         }
 
-        // IDTExtensibility2 requires this callback; runtime wiring happens in OnConnection
         public void OnAddInsUpdate(ref Array custom)
         {
         }
 
-        // IDTExtensibility2 requires this callback; startup work happens in OnConnection
         public void OnStartupComplete(ref Array custom)
         {
         }
@@ -468,7 +519,6 @@ namespace NcTalkOutlookAddIn
             TearDownAddInState("shutdown", false);
         }
 
-        // Outlook can call both shutdown callbacks, so teardown must stay idempotent
         private void TearDownAddInState(string origin, bool clearOutlookApplication)
         {
             UnhookApplication();
