@@ -308,6 +308,39 @@ namespace NcTalkOutlookAddIn
                             remoteEvents));
                     }
 
+                    bool recoveryFindings = await RunOnOutlookUiThreadAsync(
+                        () =>
+                        {
+                            if (_outlookApplication == null)
+                            {
+                                return false;
+                            }
+
+                            bool found = false;
+                            var recovery = new CalDavRecoveryScanService();
+                            foreach (KeyValuePair<CalDavCalendar, IList<CalDavEventRecord>> pair in downloaded)
+                            {
+                                CalDavRecoveryScanResult scan = recovery.Scan(
+                                    _outlookApplication,
+                                    pair.Key,
+                                    pair.Value,
+                                    preferences.UseDefaultCalendarFolder);
+                                if (scan.HasFindings)
+                                {
+                                    found = true;
+                                }
+                            }
+                            return found;
+                        }).ConfigureAwait(false);
+
+                    if (recoveryFindings)
+                    {
+                        DiagnosticsLogger.Log(
+                            LogCategories.Core,
+                            "CalDAV startup merge paused because recovery scan found duplicate candidates. No calendar items were deleted or modified by the recovery scan.");
+                        return;
+                    }
+
                     CalDavMergeResult mergeResult = await RunOnOutlookUiThreadAsync(
                         () =>
                         {
