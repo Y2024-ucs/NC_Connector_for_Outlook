@@ -439,6 +439,9 @@ namespace NcTalkOutlookAddIn
                                 total.Conflicts += one.Conflicts;
                                 total.SkippedRecurring += one.SkippedRecurring;
                                 total.SkippedMeetings += one.SkippedMeetings;
+                                total.DeletedFromOutlook += one.DeletedFromOutlook;
+                                total.DeletedFromNextcloud += one.DeletedFromNextcloud;
+                                total.DeletionsSkippedByGuard += one.DeletionsSkippedByGuard;
                                 total.Failures += one.Failures;
                             }
                             return total;
@@ -466,9 +469,15 @@ namespace NcTalkOutlookAddIn
                         + (mergeResult.SkippedRecurring + syncResult.SkippedRecurring)
                         + ", meetingsSkipped="
                         + (mergeResult.SkippedMeetings + syncResult.SkippedMeetings)
+                        + ", deletedFromOutlook="
+                        + syncResult.DeletedFromOutlook
+                        + ", deletedFromNextcloud="
+                        + syncResult.DeletedFromNextcloud
+                        + ", deletionGuardSkipped="
+                        + syncResult.DeletionsSkippedByGuard
                         + ", failures="
                         + (mergeResult.UploadFailures + syncResult.Failures)
-                        + ", deletions=0).");
+                        + ").");
                 }
                 catch (Exception ex)
                 {
