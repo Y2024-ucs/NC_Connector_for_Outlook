@@ -40,7 +40,6 @@
       <EmbedInteropTypes>true</EmbedInteropTypes>
     </Reference>
     <Reference Include="stdole, Version=7.0.3300.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" />
-    <Reference Include="Microsoft.CSharp" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
@@ -51,6 +50,7 @@
     <Reference Include="System.Security" />
     <Reference Include="System.Web" />
     <Reference Include="System.Web.Extensions" />
+    <Reference Include="Microsoft.CSharp" />
     <Reference Include="AngleSharp">
       <HintPath>vendor\htmlsanitizer\AngleSharp.dll</HintPath>
       <Private>True</Private>
@@ -179,6 +179,7 @@
     <Compile Include="Services\NcHttpClient.cs" />
     <Compile Include="Services\DavDiscoveryService.cs" />
     <Compile Include="Services\CardDavReadOnlySync.cs" />
+    <Compile Include="Services\CardDavSyncPreferences.cs" />
     <Compile Include="Services\NextcloudCapabilitiesService.cs" />
     <Compile Include="Services\NextcloudUserIdentityService.cs" />
     <Compile Include="Services\TalkService.cs" />
@@ -210,6 +211,7 @@
     <Compile Include="Services\PasswordPolicyService.cs" />
     <Compile Include="UI\SettingsForm.cs" />
     <Compile Include="UI\SettingsForm.General.cs" />
+    <Compile Include="UI\SettingsForm.CardDav.cs" />
     <Compile Include="UI\SettingsForm.Sharing.cs" />
     <Compile Include="UI\SettingsForm.Talk.cs" />
     <Compile Include="UI\SettingsForm.Signature.cs" />
@@ -218,6 +220,7 @@
     <Compile Include="UI\SettingsForm.Debug.cs" />
     <Compile Include="UI\SettingsForm.About.cs" />
     <Compile Include="UI\SettingsForm.Language.cs" />
+    <Compile Include="UI\CardDavFirstRunForm.cs" />
     <Compile Include="UI\SettingsTabControl.cs" />
     <Compile Include="UI\ScaledForm.cs" />
     <Compile Include="UI\TalkLinkForm.cs" />
