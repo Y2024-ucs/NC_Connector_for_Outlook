@@ -19,12 +19,14 @@ namespace NcTalkOutlookAddIn.Services
             Enabled = true;
             SyncCompanyDirectory = true;
             SyncPersonalContacts = true;
+            UseDefaultContactsFolder = false;
         }
 
         internal bool Configured { get; set; }
         internal bool Enabled { get; set; }
         internal bool SyncCompanyDirectory { get; set; }
         internal bool SyncPersonalContacts { get; set; }
+        internal bool UseDefaultContactsFolder { get; set; }
 
         internal static CardDavSyncPreferences Load()
         {
@@ -49,6 +51,7 @@ namespace NcTalkOutlookAddIn.Services
                 preferences.Enabled = ReadBool(root, "Enabled", true);
                 preferences.SyncCompanyDirectory = ReadBool(root, "SyncCompanyDirectory", true);
                 preferences.SyncPersonalContacts = ReadBool(root, "SyncPersonalContacts", true);
+                preferences.UseDefaultContactsFolder = ReadBool(root, "UseDefaultContactsFolder", false);
             }
             catch (Exception ex)
             {
@@ -69,6 +72,7 @@ namespace NcTalkOutlookAddIn.Services
                 AppendBool(document, root, "Enabled", Enabled);
                 AppendBool(document, root, "SyncCompanyDirectory", SyncCompanyDirectory);
                 AppendBool(document, root, "SyncPersonalContacts", SyncPersonalContacts);
+                AppendBool(document, root, "UseDefaultContactsFolder", UseDefaultContactsFolder);
 
                 var settings = new XmlWriterSettings
                 {
