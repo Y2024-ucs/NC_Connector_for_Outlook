@@ -34,6 +34,7 @@ namespace NcTalkOutlookAddIn.Services
         private const string HrefPropertyName = "NC-CalDAV-HREF";
         private const string ETagPropertyName = "NC-CalDAV-ETAG";
         private const string CalendarPropertyName = "NC-CalDAV-CALENDAR";
+        private const string LocalSnapshotPropertyName = "NC-CalDAV-LOCAL-SNAPSHOT";
 
         private readonly TalkServiceConfiguration _configuration;
 
@@ -129,7 +130,21 @@ namespace NcTalkOutlookAddIn.Services
                 calendar,
                 remote,
                 useDefaultCalendarFolder,
-                result);
+                result,
+                syncState);
+
+            try
+            {
+                syncState.Save();
+            }
+            catch (Exception ex)
+            {
+                result.UploadFailures++;
+                DiagnosticsLogger.LogException(
+                    LogCategories.Core,
+                    "Failed to persist CalDAV sync state after safe merge upload.",
+                    ex);
+            }
 
             DiagnosticsLogger.Log(
                 LogCategories.Core,
@@ -301,7 +316,8 @@ namespace NcTalkOutlookAddIn.Services
             CalDavCalendar calendar,
             IList<CalDavEventRecord> remoteEvents,
             bool useDefaultCalendarFolder,
-            CalDavMergeResult result)
+            CalDavMergeResult result,
+            CalDavSyncStateStore syncState)
         {
             Outlook.NameSpace session = null;
             Outlook.MAPIFolder defaultCalendar = null;
@@ -393,7 +409,12 @@ namespace NcTalkOutlookAddIn.Services
                         }
 
                         WriteSyncProperties(appointment, uid, href, etag, calendar.Href);
+                        WriteUserProperty(appointment, LocalSnapshotPropertyName, BuildOutlookSnapshot(appointment));
                         appointment.Save();
+                        if (syncState != null)
+                        {
+                            syncState.MarkItemSeenOnBothSides(calendar.Href, uid, href, etag);
+                        }
                         result.UploadedToNextcloud++;
                     }
                     catch (Exception ex)
@@ -501,6 +522,16 @@ namespace NcTalkOutlookAddIn.Services
             return builder.ToString();
         }
 
+        private static string BuildOutlookSnapshot(Outlook.AppointmentItem appointment)
+        {
+            return Normalize(appointment.Subject) + "|"
+                + Normalize(appointment.Location) + "|"
+                + Normalize(appointment.Body) + "|"
+                + NormalizeDateTime(appointment.Start, appointment.AllDayEvent) + "|"
+                + NormalizeDateTime(appointment.End, appointment.AllDayEvent) + "|"
+                + (appointment.AllDayEvent ? "1" : "0");
+        }
+
         private static string EscapeText(string value)
         {
             return (value ?? string.Empty)
@@ -551,7 +582,7 @@ namespace NcTalkOutlookAddIn.Services
 
         private static string Normalize(string value)
         {
-            return (value ?? string.Empty).Trim().ToUpperInvariant();
+            return (value ?? string.Empty).Trim().Replace("\r\n", "\n").ToUpperInvariant();
         }
 
         private static string ReadUserProperty(Outlook.AppointmentItem item, string name)
