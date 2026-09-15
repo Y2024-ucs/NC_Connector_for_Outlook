@@ -167,6 +167,7 @@ namespace NcTalkOutlookAddIn.Services
             target.BusinessAddressPostalCode = source.BusinessAddressPostalCode ?? string.Empty;
             target.BusinessAddressCountry = source.BusinessAddressCountry ?? string.Empty;
             target.Body = source.Notes ?? string.Empty;
+            CardDavVCardSupport.ApplyPhoto(target, source.Href);
 
             WriteUserProperty(target, UidPropertyName, source.Uid);
             WriteUserProperty(target, HrefPropertyName, source.Href);
