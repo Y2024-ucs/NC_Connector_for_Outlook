@@ -183,6 +183,7 @@
     <Compile Include="UI\SettingsForm.cs" />
     <Compile Include="UI\SettingsForm.General.cs" />
     <Compile Include="UI\SettingsForm.CardDav.cs" />
+    <Compile Include="UI\SettingsForm.CalDav.cs" />
     <Compile Include="UI\SettingsForm.Sharing.cs" />
     <Compile Include="UI\SettingsForm.Talk.cs" />
     <Compile Include="UI\SettingsForm.Signature.cs" />
