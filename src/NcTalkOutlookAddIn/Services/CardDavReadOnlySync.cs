@@ -42,6 +42,9 @@ namespace NcTalkOutlookAddIn.Services
         private const string HrefPropertyName = "NC-CardDAV-HREF";
         private const string ETagPropertyName = "NC-CardDAV-ETAG";
         private const string RootFolderName = "Nextcloud";
+        private const string CompanyFolderName = "Firmenverzeichnis";
+        private const string PersonalFolderName = "Persönliche Kontakte";
+        private const string GeneratedSystemAddressBookMarker = "z-server-generated--system";
 
         private static readonly XNamespace Dav = "DAV:";
         private static readonly XNamespace CardDav = "urn:ietf:params:xml:ns:carddav";
@@ -133,90 +136,112 @@ namespace NcTalkOutlookAddIn.Services
             Outlook.MAPIFolder defaultContacts = null;
             Outlook.MAPIFolder nextcloudFolder = null;
             Outlook.MAPIFolder instanceFolder = null;
+            Outlook.MAPIFolder companyFolder = null;
+            Outlook.MAPIFolder personalFolder = null;
             try
             {
                 session = outlookApplication.Session;
                 defaultContacts = session.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderContacts);
                 nextcloudFolder = EnsureSubFolder(defaultContacts, RootFolderName);
                 instanceFolder = EnsureSubFolder(nextcloudFolder, ResolveInstanceName());
+                companyFolder = EnsureSubFolder(instanceFolder, CompanyFolderName);
+                personalFolder = EnsureSubFolder(instanceFolder, PersonalFolderName);
 
-                string storeId = instanceFolder.StoreID;
-                Dictionary<string, string> existing = LoadExistingContactEntryIds(instanceFolder);
+                List<CardDavContactRecord> sourceContacts = (contacts ?? Enumerable.Empty<CardDavContactRecord>())
+                    .Where(c => c != null)
+                    .ToList();
+
                 int imported = 0;
-
-                foreach (CardDavContactRecord source in contacts ?? Enumerable.Empty<CardDavContactRecord>())
-                {
-                    if (source == null)
-                    {
-                        continue;
-                    }
-
-                    string key = BuildContactKey(source);
-                    Outlook.ContactItem target = null;
-                    Outlook.Items folderItems = null;
-                    try
-                    {
-                        string entryId;
-                        if (!string.IsNullOrWhiteSpace(key)
-                            && existing.TryGetValue(key, out entryId)
-                            && !string.IsNullOrWhiteSpace(entryId))
-                        {
-                            target = session.GetItemFromID(entryId, storeId) as Outlook.ContactItem;
-                        }
-
-                        if (target == null)
-                        {
-                            folderItems = instanceFolder.Items;
-                            target = folderItems.Add(Outlook.OlItemType.olContactItem)
-                                as Outlook.ContactItem;
-                        }
-                        if (target == null)
-                        {
-                            continue;
-                        }
-
-                        ApplyContact(target, source);
-                        target.Save();
-                        imported++;
-                    }
-                    finally
-                    {
-                        ComInteropScope.TryRelease(
-                            target,
-                            LogCategories.Core,
-                            "Failed to release CardDAV ContactItem.");
-                        ComInteropScope.TryRelease(
-                            folderItems,
-                            LogCategories.Core,
-                            "Failed to release CardDAV Items collection.");
-                    }
-                }
+                imported += ImportIntoFolder(
+                    session,
+                    companyFolder,
+                    sourceContacts.Where(IsSystemDirectoryContact));
+                imported += ImportIntoFolder(
+                    session,
+                    personalFolder,
+                    sourceContacts.Where(c => !IsSystemDirectoryContact(c)));
 
                 DiagnosticsLogger.Log(
                     LogCategories.Core,
-                    "CardDAV read-only sync imported/updated " + imported + " contacts into Outlook folder '"
-                    + RootFolderName + "/" + instanceFolder.Name + "'.");
+                    "CardDAV read-only sync imported/updated "
+                    + imported
+                    + " contacts into Outlook folder '"
+                    + RootFolderName + "/" + instanceFolder.Name
+                    + "' (company/personal separated).");
                 return imported;
             }
             finally
             {
-                ComInteropScope.TryRelease(
-                    instanceFolder,
-                    LogCategories.Core,
-                    "Failed to release CardDAV instance folder.");
-                ComInteropScope.TryRelease(
-                    nextcloudFolder,
-                    LogCategories.Core,
-                    "Failed to release CardDAV root folder.");
-                ComInteropScope.TryRelease(
-                    defaultContacts,
-                    LogCategories.Core,
-                    "Failed to release Outlook contacts folder.");
-                ComInteropScope.TryRelease(
-                    session,
-                    LogCategories.Core,
-                    "Failed to release Outlook session after CardDAV sync.");
+                ComInteropScope.TryRelease(personalFolder, LogCategories.Core, "Failed to release CardDAV personal folder.");
+                ComInteropScope.TryRelease(companyFolder, LogCategories.Core, "Failed to release CardDAV company folder.");
+                ComInteropScope.TryRelease(instanceFolder, LogCategories.Core, "Failed to release CardDAV instance folder.");
+                ComInteropScope.TryRelease(nextcloudFolder, LogCategories.Core, "Failed to release CardDAV root folder.");
+                ComInteropScope.TryRelease(defaultContacts, LogCategories.Core, "Failed to release Outlook contacts folder.");
+                ComInteropScope.TryRelease(session, LogCategories.Core, "Failed to release Outlook session after CardDAV sync.");
             }
+        }
+
+        private static int ImportIntoFolder(
+            Outlook.NameSpace session,
+            Outlook.MAPIFolder targetFolder,
+            IEnumerable<CardDavContactRecord> contacts)
+        {
+            if (session == null || targetFolder == null)
+            {
+                return 0;
+            }
+
+            string storeId = targetFolder.StoreID;
+            Dictionary<string, string> existing = LoadExistingContactEntryIds(targetFolder);
+            int imported = 0;
+
+            foreach (CardDavContactRecord source in contacts ?? Enumerable.Empty<CardDavContactRecord>())
+            {
+                string key = BuildContactKey(source);
+                Outlook.ContactItem target = null;
+                Outlook.Items folderItems = null;
+                try
+                {
+                    string entryId;
+                    if (!string.IsNullOrWhiteSpace(key)
+                        && existing.TryGetValue(key, out entryId)
+                        && !string.IsNullOrWhiteSpace(entryId))
+                    {
+                        target = session.GetItemFromID(entryId, storeId) as Outlook.ContactItem;
+                    }
+
+                    if (target == null)
+                    {
+                        folderItems = targetFolder.Items;
+                        target = folderItems.Add(Outlook.OlItemType.olContactItem)
+                            as Outlook.ContactItem;
+                    }
+                    if (target == null)
+                    {
+                        continue;
+                    }
+
+                    ApplyContact(target, source);
+                    target.Save();
+                    imported++;
+                }
+                finally
+                {
+                    ComInteropScope.TryRelease(target, LogCategories.Core, "Failed to release CardDAV ContactItem.");
+                    ComInteropScope.TryRelease(folderItems, LogCategories.Core, "Failed to release CardDAV Items collection.");
+                }
+            }
+
+            return imported;
+        }
+
+        private static bool IsSystemDirectoryContact(CardDavContactRecord contact)
+        {
+            return contact != null
+                && !string.IsNullOrWhiteSpace(contact.Href)
+                && contact.Href.IndexOf(
+                    GeneratedSystemAddressBookMarker,
+                    StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static Dictionary<string, string> LoadExistingContactEntryIds(Outlook.MAPIFolder folder)
@@ -254,27 +279,18 @@ namespace NcTalkOutlookAddIn.Services
                     {
                         if (contact != null)
                         {
-                            ComInteropScope.TryRelease(
-                                contact,
-                                LogCategories.Core,
-                                "Failed to release existing CardDAV ContactItem.");
+                            ComInteropScope.TryRelease(contact, LogCategories.Core, "Failed to release existing CardDAV ContactItem.");
                         }
                         else
                         {
-                            ComInteropScope.TryRelease(
-                                raw,
-                                LogCategories.Core,
-                                "Failed to release non-contact CardDAV folder item.");
+                            ComInteropScope.TryRelease(raw, LogCategories.Core, "Failed to release non-contact CardDAV folder item.");
                         }
                     }
                 }
             }
             finally
             {
-                ComInteropScope.TryRelease(
-                    items,
-                    LogCategories.Core,
-                    "Failed to release CardDAV contact items collection.");
+                ComInteropScope.TryRelease(items, LogCategories.Core, "Failed to release CardDAV contact items collection.");
             }
 
             return result;
@@ -340,21 +356,12 @@ namespace NcTalkOutlookAddIn.Services
             }
             finally
             {
-                ComInteropScope.TryRelease(
-                    property,
-                    LogCategories.Core,
-                    "Failed to release CardDAV contact user property.");
-                ComInteropScope.TryRelease(
-                    properties,
-                    LogCategories.Core,
-                    "Failed to release CardDAV contact user properties.");
+                ComInteropScope.TryRelease(property, LogCategories.Core, "Failed to release CardDAV contact user property.");
+                ComInteropScope.TryRelease(properties, LogCategories.Core, "Failed to release CardDAV contact user properties.");
             }
         }
 
-        private static void WriteUserProperty(
-            Outlook.ContactItem item,
-            string name,
-            string value)
+        private static void WriteUserProperty(Outlook.ContactItem item, string name, string value)
         {
             Outlook.UserProperties properties = null;
             Outlook.UserProperty property = null;
@@ -379,14 +386,8 @@ namespace NcTalkOutlookAddIn.Services
             }
             finally
             {
-                ComInteropScope.TryRelease(
-                    property,
-                    LogCategories.Core,
-                    "Failed to release CardDAV contact user property.");
-                ComInteropScope.TryRelease(
-                    properties,
-                    LogCategories.Core,
-                    "Failed to release CardDAV contact user properties.");
+                ComInteropScope.TryRelease(property, LogCategories.Core, "Failed to release CardDAV contact user property.");
+                ComInteropScope.TryRelease(properties, LogCategories.Core, "Failed to release CardDAV contact user properties.");
             }
         }
 
@@ -406,10 +407,7 @@ namespace NcTalkOutlookAddIn.Services
                     {
                         folder = folders[index];
                         if (folder != null
-                            && string.Equals(
-                                folder.Name,
-                                name,
-                                StringComparison.OrdinalIgnoreCase))
+                            && string.Equals(folder.Name, name, StringComparison.OrdinalIgnoreCase))
                         {
                             Outlook.MAPIFolder match = folder;
                             folder = null;
@@ -418,23 +416,15 @@ namespace NcTalkOutlookAddIn.Services
                     }
                     finally
                     {
-                        ComInteropScope.TryRelease(
-                            folder,
-                            LogCategories.Core,
-                            "Failed to release Outlook contact subfolder.");
+                        ComInteropScope.TryRelease(folder, LogCategories.Core, "Failed to release Outlook contact subfolder.");
                     }
                 }
 
-                return folders.Add(
-                    name,
-                    Outlook.OlDefaultFolders.olFolderContacts);
+                return folders.Add(name, Outlook.OlDefaultFolders.olFolderContacts);
             }
             finally
             {
-                ComInteropScope.TryRelease(
-                    folders,
-                    LogCategories.Core,
-                    "Failed to release Outlook contact folders collection.");
+                ComInteropScope.TryRelease(folders, LogCategories.Core, "Failed to release Outlook contact folders collection.");
             }
         }
 
@@ -442,18 +432,14 @@ namespace NcTalkOutlookAddIn.Services
         {
             try
             {
-                NextcloudCapabilitiesSnapshot snapshot =
-                    new NextcloudCapabilitiesService(_configuration)
-                        .GetSnapshot(false, false);
+                NextcloudCapabilitiesSnapshot snapshot = new NextcloudCapabilitiesService(_configuration)
+                    .GetSnapshot(false, false);
                 IDictionary<string, object> theming = NcJson.GetDictionary(
                     snapshot != null ? snapshot.Capabilities : null,
                     "theming");
                 string themedName = NcJson.GetTrimmedString(theming, "name");
                 if (!string.IsNullOrWhiteSpace(themedName)
-                    && !string.Equals(
-                        themedName,
-                        "Nextcloud",
-                        StringComparison.OrdinalIgnoreCase))
+                    && !string.Equals(themedName, "Nextcloud", StringComparison.OrdinalIgnoreCase))
                 {
                     return SanitizeFolderName(themedName);
                 }
@@ -467,10 +453,7 @@ namespace NcTalkOutlookAddIn.Services
             }
 
             Uri uri;
-            if (Uri.TryCreate(
-                    _configuration.GetNormalizedBaseUrl(),
-                    UriKind.Absolute,
-                    out uri)
+            if (Uri.TryCreate(_configuration.GetNormalizedBaseUrl(), UriKind.Absolute, out uri)
                 && !string.IsNullOrWhiteSpace(uri.Host))
             {
                 return SanitizeFolderName(uri.Host);
@@ -517,8 +500,7 @@ namespace NcTalkOutlookAddIn.Services
                 || (int)response.StatusCode < 200
                 || (int)response.StatusCode >= 300)
             {
-                throw new InvalidOperationException(
-                    "CardDAV request failed for " + url + ".");
+                throw new InvalidOperationException("CardDAV request failed for " + url + ".");
             }
             return XDocument.Parse(response.ResponseText ?? string.Empty);
         }
@@ -555,9 +537,7 @@ namespace NcTalkOutlookAddIn.Services
                         break;
                     case "ORG":
                         string[] organization = SplitVCardComponents(value);
-                        result.Company = organization.Length > 0
-                            ? organization[0]
-                            : string.Empty;
+                        result.Company = organization.Length > 0 ? organization[0] : string.Empty;
                         break;
                     case "TITLE":
                         result.JobTitle = value;
@@ -618,8 +598,7 @@ namespace NcTalkOutlookAddIn.Services
             var result = new List<string>();
             foreach (string line in source)
             {
-                if ((line.StartsWith(" ") || line.StartsWith("\t"))
-                    && result.Count > 0)
+                if ((line.StartsWith(" ") || line.StartsWith("\t")) && result.Count > 0)
                 {
                     result[result.Count - 1] += line.Substring(1);
                 }
