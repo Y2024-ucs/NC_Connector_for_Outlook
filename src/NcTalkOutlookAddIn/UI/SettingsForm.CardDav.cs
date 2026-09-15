@@ -19,6 +19,8 @@ namespace NcTalkOutlookAddIn.UI
         private readonly CheckBox _cardDavEnabledCheckBox = new CheckBox();
         private readonly CheckBox _cardDavCompanyCheckBox = new CheckBox();
         private readonly CheckBox _cardDavPersonalCheckBox = new CheckBox();
+        private readonly RadioButton _cardDavSeparateFoldersRadio = new RadioButton();
+        private readonly RadioButton _cardDavDefaultContactsRadio = new RadioButton();
         private readonly Button _cardDavSyncNowButton = new Button();
         private CardDavSyncPreferences _cardDavPreferences;
 
@@ -28,7 +30,7 @@ namespace NcTalkOutlookAddIn.UI
 
             _cardDavSyncGroup.Text = "Nextcloud-Kontakte";
             _cardDavSyncGroup.Location = new Point(18, 275);
-            _cardDavSyncGroup.Size = new Size(440, 170);
+            _cardDavSyncGroup.Size = new Size(440, 230);
             _cardDavSyncGroup.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             _generalTab.Controls.Add(_cardDavSyncGroup);
 
@@ -53,8 +55,28 @@ namespace NcTalkOutlookAddIn.UI
             _cardDavPersonalCheckBox.CheckedChanged += delegate { UpdateCardDavSettingsState(); };
             _cardDavSyncGroup.Controls.Add(_cardDavPersonalCheckBox);
 
+            var targetLabel = new Label
+            {
+                Text = "Ziel in Outlook:",
+                AutoSize = true,
+                Location = new Point(30, 112)
+            };
+            _cardDavSyncGroup.Controls.Add(targetLabel);
+
+            _cardDavSeparateFoldersRadio.Text = "Eigene Nextcloud-Kontaktordner";
+            _cardDavSeparateFoldersRadio.AutoSize = true;
+            _cardDavSeparateFoldersRadio.Location = new Point(45, 136);
+            _cardDavSeparateFoldersRadio.Checked = !_cardDavPreferences.UseDefaultContactsFolder;
+            _cardDavSyncGroup.Controls.Add(_cardDavSeparateFoldersRadio);
+
+            _cardDavDefaultContactsRadio.Text = "Allgemeine Outlook-Kontakte (Nur dieser Computer)";
+            _cardDavDefaultContactsRadio.AutoSize = true;
+            _cardDavDefaultContactsRadio.Location = new Point(45, 160);
+            _cardDavDefaultContactsRadio.Checked = _cardDavPreferences.UseDefaultContactsFolder;
+            _cardDavSyncGroup.Controls.Add(_cardDavDefaultContactsRadio);
+
             _cardDavSyncNowButton.Text = "Jetzt synchronisieren";
-            _cardDavSyncNowButton.Location = new Point(30, 108);
+            _cardDavSyncNowButton.Location = new Point(30, 187);
             _cardDavSyncNowButton.Size = new Size(170, 28);
             _cardDavSyncNowButton.Click += OnCardDavSyncNowClick;
             _cardDavSyncGroup.Controls.Add(_cardDavSyncNowButton);
@@ -63,7 +85,7 @@ namespace NcTalkOutlookAddIn.UI
             {
                 Text = "Nur lesend: Nextcloud → Outlook · Hintergrundaktualisierung alle 15 Minuten",
                 AutoSize = true,
-                Location = new Point(30, 142)
+                Location = new Point(215, 194)
             };
             _cardDavSyncGroup.Controls.Add(hint);
 
@@ -77,6 +99,8 @@ namespace NcTalkOutlookAddIn.UI
             bool hasSelection = _cardDavCompanyCheckBox.Checked || _cardDavPersonalCheckBox.Checked;
             _cardDavCompanyCheckBox.Enabled = enabled;
             _cardDavPersonalCheckBox.Enabled = enabled;
+            _cardDavSeparateFoldersRadio.Enabled = enabled;
+            _cardDavDefaultContactsRadio.Enabled = enabled;
             _cardDavSyncNowButton.Enabled = enabled && hasSelection && !_isBusy;
         }
 
@@ -132,7 +156,9 @@ namespace NcTalkOutlookAddIn.UI
                     return result;
                 });
 
-                int count = sync.ImportIntoOutlook(_outlookApplication, contacts);
+                int count = _cardDavDefaultContactsRadio.Checked
+                    ? CardDavDefaultContactsImporter.Import(_outlookApplication, contacts)
+                    : sync.ImportIntoOutlook(_outlookApplication, contacts);
                 SetStatus("Nextcloud-Kontakte synchronisiert: " + count + " Einträge.", false);
             }
             catch (Exception ex)
@@ -160,6 +186,7 @@ namespace NcTalkOutlookAddIn.UI
                 _cardDavPreferences.Enabled = _cardDavEnabledCheckBox.Checked;
                 _cardDavPreferences.SyncCompanyDirectory = _cardDavCompanyCheckBox.Checked;
                 _cardDavPreferences.SyncPersonalContacts = _cardDavPersonalCheckBox.Checked;
+                _cardDavPreferences.UseDefaultContactsFolder = _cardDavDefaultContactsRadio.Checked;
                 _cardDavPreferences.Save();
             }
             catch (Exception ex)
