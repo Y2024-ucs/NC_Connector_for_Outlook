@@ -15,10 +15,11 @@ namespace NcTalkOutlookAddIn.Settings
         internal const int MaxIfbPort = 49151;
         internal const string DefaultFileLinkBasePath = "NC Connector";
         internal const int DefaultSharingAttachmentsOfferAboveMb = 20;
+        internal const string DefaultServerUrl = "https://vpn.ibp-optimierung.de/nextcloud";
 
         public AddinSettings()
         {
-            ServerUrl = string.Empty;
+            ServerUrl = DefaultServerUrl;
             Username = string.Empty;
             AppPassword = string.Empty;
             AuthMode = AuthenticationMode.LoginFlow;
