@@ -299,6 +299,9 @@ namespace NcTalkOutlookAddIn.UI
                     syncTotal.Conflicts += oneSync.Conflicts;
                     syncTotal.SkippedRecurring += oneSync.SkippedRecurring;
                     syncTotal.SkippedMeetings += oneSync.SkippedMeetings;
+                    syncTotal.DeletedFromOutlook += oneSync.DeletedFromOutlook;
+                    syncTotal.DeletedFromNextcloud += oneSync.DeletedFromNextcloud;
+                    syncTotal.DeletionsSkippedByGuard += oneSync.DeletionsSkippedByGuard;
                     syncTotal.Failures += oneSync.Failures;
                 }
 
@@ -312,8 +315,11 @@ namespace NcTalkOutlookAddIn.UI
                     + ", localUpdates=" + syncTotal.OutlookToRemote
                     + ", baselines=" + syncTotal.BaselinesEstablished
                     + ", conflicts=" + syncTotal.Conflicts
+                    + ", deletedFromOutlook=" + syncTotal.DeletedFromOutlook
+                    + ", deletedFromNextcloud=" + syncTotal.DeletedFromNextcloud
+                    + ", deletionGuardSkipped=" + syncTotal.DeletionsSkippedByGuard
                     + ", failures=" + (mergeTotal.UploadFailures + syncTotal.Failures)
-                    + ", deletions=0).");
+                    + ").");
 
                 SetStatus(
                     "Synchronisierung fertig: "
@@ -321,6 +327,9 @@ namespace NcTalkOutlookAddIn.UI
                     + mergeTotal.UploadedToNextcloud + " hochgeladen, "
                     + syncTotal.RemoteToOutlook + " aus Nextcloud aktualisiert, "
                     + syncTotal.OutlookToRemote + " nach Nextcloud aktualisiert, "
+                    + syncTotal.DeletedFromOutlook + " in Outlook gelöscht, "
+                    + syncTotal.DeletedFromNextcloud + " in Nextcloud gelöscht, "
+                    + syncTotal.DeletionsSkippedByGuard + " Löschungen durch Schutz blockiert, "
                     + syncTotal.Conflicts + " Konflikte.",
                     mergeTotal.UploadFailures + syncTotal.Failures > 0);
             }
