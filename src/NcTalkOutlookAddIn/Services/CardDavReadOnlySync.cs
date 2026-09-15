@@ -112,6 +112,8 @@ namespace NcTalkOutlookAddIn.Services
                 throw new ArgumentNullException("outlookApplication");
             }
 
+            CardDavBackgroundSyncManager.EnsureStarted(_configuration, outlookApplication);
+
             CardDavSyncPreferences preferences = CardDavSyncPreferences.Load();
             if (preferences.UseDefaultContactsFolder)
             {
