@@ -15,7 +15,6 @@ namespace NcTalkOutlookAddIn.Services
     internal static class CardDavVCardSupport
     {
         private const long MaximumPhotoBytes = 5L * 1024L * 1024L;
-        private const string GeneratedSystemAddressBookMarker = "z-server-generated--system";
 
         private static readonly ConcurrentDictionary<string, byte[]> Photos =
             new ConcurrentDictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
@@ -77,6 +76,7 @@ namespace NcTalkOutlookAddIn.Services
 
             string uid = ExtractPropertyValue(rawVCard, "UID");
             string email = ExtractPropertyValue(rawVCard, "EMAIL");
+            string fullName = ExtractPropertyValue(rawVCard, "FN");
             string photoValue;
             byte[] photo = TryExtractEmbeddedPhoto(rawVCard, out photoValue);
             string source = string.Empty;
@@ -105,9 +105,10 @@ namespace NcTalkOutlookAddIn.Services
                 }
             }
 
-            if (photo == null
-                && IsSystemDirectoryHref(href)
-                && configuration != null)
+            // A Nextcloud avatar may exist even when the CardDAV vCard has no PHOTO field.
+            // Try this for all contacts, not only z-server-generated--system entries. Personal
+            // address books can contain cloud users as regular contacts as well.
+            if (photo == null && configuration != null)
             {
                 string avatarIdentity;
                 photo = TryDownloadAvatar(uid, email, configuration, out avatarIdentity);
@@ -130,11 +131,15 @@ namespace NcTalkOutlookAddIn.Services
                     + source
                     + ", uid="
                     + SafeLogValue(uid)
+                    + ", email="
+                    + SafeLogValue(email)
+                    + ", name="
+                    + SafeLogValue(fullName)
                     + ", bytes="
                     + photo.Length
                     + ").");
             }
-            else if (IsSystemDirectoryHref(href))
+            else
             {
                 DiagnosticsLogger.Log(
                     LogCategories.Core,
@@ -142,6 +147,8 @@ namespace NcTalkOutlookAddIn.Services
                     + SafeLogValue(uid)
                     + ", email="
                     + SafeLogValue(email)
+                    + ", name="
+                    + SafeLogValue(fullName)
                     + ", hasPhotoField="
                     + (!string.IsNullOrWhiteSpace(photoValue))
                     + ").");
@@ -312,6 +319,8 @@ namespace NcTalkOutlookAddIn.Services
                 string escaped = Uri.EscapeDataString(identity);
                 string[] urls =
                 {
+                    baseUrl.TrimEnd('/') + "/index.php/avatar/" + escaped + "/512",
+                    baseUrl.TrimEnd('/') + "/avatar/" + escaped + "/512",
                     baseUrl.TrimEnd('/') + "/index.php/avatar/" + escaped + "/256",
                     baseUrl.TrimEnd('/') + "/avatar/" + escaped + "/256"
                 };
@@ -445,14 +454,6 @@ namespace NcTalkOutlookAddIn.Services
                 return value;
             }
             return string.Empty;
-        }
-
-        private static bool IsSystemDirectoryHref(string href)
-        {
-            return !string.IsNullOrWhiteSpace(href)
-                && href.IndexOf(
-                    GeneratedSystemAddressBookMarker,
-                    StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static void AddIdentity(ICollection<string> identities, string value)
