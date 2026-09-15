@@ -81,35 +81,9 @@ namespace NcTalkOutlookAddIn
 
         private void StartUpdateCheckIfDue()
         {
-            if (_currentSettings == null || _settingsStorage == null)
-            {
-                return;
-            }
-
-            bool hadInstallId = !string.IsNullOrWhiteSpace(_currentSettings.UpdateInstallId);
-            UpdateCheckService.EnsureInstallId(_currentSettings);
-            if (!hadInstallId)
-            {
-                _settingsStorage.Save(_currentSettings);
-            }
-
-            AddinSettings updateSettings = _currentSettings.Clone();
-            Task.Run(async () =>
-            {
-                try
-                {
-                    UpdateCheckResult result = await _updateCheckService.CheckAsync(updateSettings, false).ConfigureAwait(false);
-                    StoreUpdateCheckSettings(updateSettings);
-                    if (UpdateCheckService.ShouldNotify(updateSettings, result))
-                    {
-                        PostUpdateNotification(result);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    DiagnosticsLogger.LogException(LogCategories.Core, "Update check failed.", ex);
-                }
-            });
+            DiagnosticsLogger.Log(
+                LogCategories.Core,
+                "Upstream update check disabled for IBP fork.");
         }
 
         private void StartCardDavContactSync()
