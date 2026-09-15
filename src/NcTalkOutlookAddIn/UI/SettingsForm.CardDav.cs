@@ -91,6 +91,7 @@ namespace NcTalkOutlookAddIn.UI
 
             FormClosed += OnCardDavSettingsFormClosed;
             UpdateCardDavSettingsState();
+            InitializeCalDavSettingsSection();
         }
 
         private void UpdateCardDavSettingsState()
