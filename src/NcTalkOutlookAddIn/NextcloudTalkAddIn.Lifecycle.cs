@@ -164,6 +164,8 @@ namespace NcTalkOutlookAddIn
 
             bool syncCompanyDirectory = preferences.SyncCompanyDirectory;
             bool syncPersonalContacts = preferences.SyncPersonalContacts;
+            Dictionary<string, string> knownEtags =
+                CardDavReadOnlySync.LoadKnownEtagsFromOutlook(_outlookApplication);
 
             Task.Run(async () =>
             {
@@ -184,7 +186,7 @@ namespace NcTalkOutlookAddIn
                         }
 
                         selectedAddressBooks++;
-                        contacts.AddRange(sync.DownloadContacts(addressBook));
+                        contacts.AddRange(sync.DownloadContacts(addressBook, knownEtags));
                     }
 
                     int count = await RunOnOutlookUiThreadAsync(
@@ -195,7 +197,7 @@ namespace NcTalkOutlookAddIn
                         LogCategories.Core,
                         "CardDAV read-only startup sync completed (addressBooks="
                         + selectedAddressBooks
-                        + ", contacts="
+                        + ", changedContacts="
                         + count
                         + ").");
                 }
