@@ -17,9 +17,9 @@ namespace NcTalkOutlookAddIn.Services
         {
             Configured = false;
             Enabled = true;
-            SyncCompanyDirectory = true;
+            SyncCompanyDirectory = false;
             SyncPersonalContacts = true;
-            UseDefaultContactsFolder = false;
+            UseDefaultContactsFolder = true;
         }
 
         internal bool Configured { get; set; }
@@ -49,9 +49,9 @@ namespace NcTalkOutlookAddIn.Services
 
                 preferences.Configured = ReadBool(root, "Configured", false);
                 preferences.Enabled = ReadBool(root, "Enabled", true);
-                preferences.SyncCompanyDirectory = ReadBool(root, "SyncCompanyDirectory", true);
+                preferences.SyncCompanyDirectory = ReadBool(root, "SyncCompanyDirectory", false);
                 preferences.SyncPersonalContacts = ReadBool(root, "SyncPersonalContacts", true);
-                preferences.UseDefaultContactsFolder = ReadBool(root, "UseDefaultContactsFolder", false);
+                preferences.UseDefaultContactsFolder = ReadBool(root, "UseDefaultContactsFolder", true);
             }
             catch (Exception ex)
             {
