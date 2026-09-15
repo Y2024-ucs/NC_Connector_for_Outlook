@@ -93,11 +93,13 @@ namespace NcTalkOutlookAddIn.Services
                     continue;
                 }
 
+                vcard = CardDavVCardSupport.Normalize(vcard);
                 CardDavContactRecord contact = ParseVCard(vcard);
                 contact.Href = ResolveUri(
                     addressBook.Href,
                     (string)responseElement.Element(Dav + "href"));
                 contact.ETag = ((string)prop.Element(Dav + "getetag") ?? string.Empty).Trim();
+                CardDavVCardSupport.CachePhoto(contact.Href, vcard);
                 contacts.Add(contact);
             }
             return contacts;
@@ -296,6 +298,7 @@ namespace NcTalkOutlookAddIn.Services
             target.BusinessAddressPostalCode = source.BusinessAddressPostalCode ?? string.Empty;
             target.BusinessAddressCountry = source.BusinessAddressCountry ?? string.Empty;
             target.Body = source.Notes ?? string.Empty;
+            CardDavVCardSupport.ApplyPhoto(target, source.Href);
 
             WriteUserProperty(target, UidPropertyName, source.Uid);
             WriteUserProperty(target, HrefPropertyName, source.Href);
