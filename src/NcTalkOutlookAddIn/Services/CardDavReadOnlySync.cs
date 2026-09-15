@@ -41,9 +41,8 @@ namespace NcTalkOutlookAddIn.Services
         private const string UidPropertyName = "NC-CardDAV-UID";
         private const string HrefPropertyName = "NC-CardDAV-HREF";
         private const string ETagPropertyName = "NC-CardDAV-ETAG";
-        private const string RootFolderName = "Nextcloud";
-        private const string CompanyFolderName = "Firmenverzeichnis";
-        private const string PersonalFolderName = "Persönliche Kontakte";
+        private const string CompanyFolderSuffix = " - Firmenverzeichnis";
+        private const string PersonalFolderSuffix = " - Persönliche Kontakte";
         private const string GeneratedSystemAddressBookMarker = "z-server-generated--system";
 
         private static readonly XNamespace Dav = "DAV:";
@@ -60,28 +59,6 @@ namespace NcTalkOutlookAddIn.Services
             _configuration = configuration;
         }
 
-        internal int Synchronize(Outlook.Application outlookApplication)
-        {
-            if (outlookApplication == null)
-            {
-                throw new ArgumentNullException("outlookApplication");
-            }
-            if (!_configuration.IsComplete())
-            {
-                throw new InvalidOperationException("Nextcloud configuration is incomplete.");
-            }
-
-            IList<CardDavAddressBook> addressBooks = new DavDiscoveryService(_configuration)
-                .DiscoverAddressBooks();
-            var contacts = new List<CardDavContactRecord>();
-            foreach (CardDavAddressBook addressBook in addressBooks)
-            {
-                contacts.AddRange(DownloadContacts(addressBook));
-            }
-
-            return ImportIntoOutlook(outlookApplication, contacts);
-        }
-
         internal IList<CardDavContactRecord> DownloadContacts(CardDavAddressBook addressBook)
         {
             if (addressBook == null || string.IsNullOrWhiteSpace(addressBook.Href))
@@ -90,14 +67,13 @@ namespace NcTalkOutlookAddIn.Services
             }
 
             string body = "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
-                        + "<card:addressbook-query xmlns:d=\"DAV:\" xmlns:card=\"urn:ietf:params:xml:ns:carddav\">"
-                        + "<d:prop><d:getetag/><card:address-data content-type=\"text/vcard\"/></d:prop>"
-                        + "<card:filter><card:prop-filter name=\"FN\"/></card:filter>"
-                        + "</card:addressbook-query>";
+                + "<card:addressbook-query xmlns:d=\"DAV:\" xmlns:card=\"urn:ietf:params:xml:ns:carddav\">"
+                + "<d:prop><d:getetag/><card:address-data content-type=\"text/vcard\"/></d:prop>"
+                + "<card:filter><card:prop-filter name=\"FN\"/></card:filter>"
+                + "</card:addressbook-query>";
 
             XDocument document = SendDavRequest(addressBook.Href, "REPORT", "1", body);
             var contacts = new List<CardDavContactRecord>();
-
             foreach (XElement responseElement in document.Descendants(Dav + "response"))
             {
                 XElement prop = responseElement
@@ -123,7 +99,6 @@ namespace NcTalkOutlookAddIn.Services
                 contact.ETag = ((string)prop.Element(Dav + "getetag") ?? string.Empty).Trim();
                 contacts.Add(contact);
             }
-
             return contacts;
         }
 
@@ -136,50 +111,60 @@ namespace NcTalkOutlookAddIn.Services
                 throw new ArgumentNullException("outlookApplication");
             }
 
+            List<CardDavContactRecord> sourceContacts = (contacts ?? Enumerable.Empty<CardDavContactRecord>())
+                .Where(c => c != null)
+                .ToList();
+            List<CardDavContactRecord> companyContacts = sourceContacts
+                .Where(IsSystemDirectoryContact)
+                .ToList();
+            List<CardDavContactRecord> personalContacts = sourceContacts
+                .Where(c => !IsSystemDirectoryContact(c))
+                .ToList();
+
             Outlook.NameSpace session = null;
             Outlook.MAPIFolder defaultContacts = null;
-            Outlook.MAPIFolder nextcloudFolder = null;
-            Outlook.MAPIFolder instanceFolder = null;
             Outlook.MAPIFolder companyFolder = null;
             Outlook.MAPIFolder personalFolder = null;
             try
             {
                 session = outlookApplication.Session;
                 defaultContacts = session.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderContacts);
-                nextcloudFolder = EnsureSubFolder(defaultContacts, RootFolderName);
-                instanceFolder = EnsureSubFolder(nextcloudFolder, ResolveInstanceName());
-                companyFolder = EnsureSubFolder(instanceFolder, CompanyFolderName);
-                personalFolder = EnsureSubFolder(instanceFolder, PersonalFolderName);
-
-                List<CardDavContactRecord> sourceContacts = (contacts ?? Enumerable.Empty<CardDavContactRecord>())
-                    .Where(c => c != null)
-                    .ToList();
-
+                string instanceName = ResolveInstanceName();
                 int imported = 0;
-                imported += ImportIntoFolder(
-                    session,
-                    companyFolder,
-                    sourceContacts.Where(IsSystemDirectoryContact));
-                imported += ImportIntoFolder(
-                    session,
-                    personalFolder,
-                    sourceContacts.Where(c => !IsSystemDirectoryContact(c)));
+
+                if (companyContacts.Count > 0)
+                {
+                    companyFolder = EnsureSubFolder(
+                        defaultContacts,
+                        instanceName + CompanyFolderSuffix);
+                    imported += ImportIntoFolder(session, companyFolder, companyContacts);
+                }
+
+                if (personalContacts.Count > 0)
+                {
+                    personalFolder = EnsureSubFolder(
+                        defaultContacts,
+                        instanceName + PersonalFolderSuffix);
+                    imported += ImportIntoFolder(session, personalFolder, personalContacts);
+                }
 
                 DiagnosticsLogger.Log(
                     LogCategories.Core,
                     "CardDAV read-only sync imported/updated "
                     + imported
-                    + " contacts into Outlook folder '"
-                    + RootFolderName + "/" + instanceFolder.Name
-                    + "' (company/personal separated).");
+                    + " contacts (instance="
+                    + instanceName
+                    + ", company="
+                    + companyContacts.Count
+                    + ", personal="
+                    + personalContacts.Count
+                    + ").");
                 return imported;
             }
             finally
             {
                 ComInteropScope.TryRelease(personalFolder, LogCategories.Core, "Failed to release CardDAV personal folder.");
                 ComInteropScope.TryRelease(companyFolder, LogCategories.Core, "Failed to release CardDAV company folder.");
-                ComInteropScope.TryRelease(instanceFolder, LogCategories.Core, "Failed to release CardDAV instance folder.");
-                ComInteropScope.TryRelease(nextcloudFolder, LogCategories.Core, "Failed to release CardDAV root folder.");
                 ComInteropScope.TryRelease(defaultContacts, LogCategories.Core, "Failed to release Outlook contacts folder.");
                 ComInteropScope.TryRelease(session, LogCategories.Core, "Failed to release Outlook session after CardDAV sync.");
             }
@@ -190,16 +175,11 @@ namespace NcTalkOutlookAddIn.Services
             Outlook.MAPIFolder targetFolder,
             IEnumerable<CardDavContactRecord> contacts)
         {
-            if (session == null || targetFolder == null)
-            {
-                return 0;
-            }
-
             string storeId = targetFolder.StoreID;
             Dictionary<string, string> existing = LoadExistingContactEntryIds(targetFolder);
             int imported = 0;
 
-            foreach (CardDavContactRecord source in contacts ?? Enumerable.Empty<CardDavContactRecord>())
+            foreach (CardDavContactRecord source in contacts)
             {
                 string key = BuildContactKey(source);
                 Outlook.ContactItem target = null;
@@ -235,17 +215,7 @@ namespace NcTalkOutlookAddIn.Services
                     ComInteropScope.TryRelease(folderItems, LogCategories.Core, "Failed to release CardDAV Items collection.");
                 }
             }
-
             return imported;
-        }
-
-        private static bool IsSystemDirectoryContact(CardDavContactRecord contact)
-        {
-            return contact != null
-                && !string.IsNullOrWhiteSpace(contact.Href)
-                && contact.Href.IndexOf(
-                    GeneratedSystemAddressBookMarker,
-                    StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static Dictionary<string, string> LoadExistingContactEntryIds(Outlook.MAPIFolder folder)
@@ -269,9 +239,9 @@ namespace NcTalkOutlookAddIn.Services
                             continue;
                         }
 
-                        string uid = ReadUserProperty(contact, UidPropertyName);
-                        string href = ReadUserProperty(contact, HrefPropertyName);
-                        string key = BuildContactKey(uid, href);
+                        string key = BuildContactKey(
+                            ReadUserProperty(contact, UidPropertyName),
+                            ReadUserProperty(contact, HrefPropertyName));
                         if (!string.IsNullOrWhiteSpace(key)
                             && !result.ContainsKey(key)
                             && !string.IsNullOrWhiteSpace(contact.EntryID))
@@ -296,7 +266,6 @@ namespace NcTalkOutlookAddIn.Services
             {
                 ComInteropScope.TryRelease(items, LogCategories.Core, "Failed to release CardDAV contact items collection.");
             }
-
             return result;
         }
 
@@ -324,13 +293,20 @@ namespace NcTalkOutlookAddIn.Services
             WriteUserProperty(target, ETagPropertyName, source.ETag);
         }
 
+        private static bool IsSystemDirectoryContact(CardDavContactRecord contact)
+        {
+            return contact != null
+                && !string.IsNullOrWhiteSpace(contact.Href)
+                && contact.Href.IndexOf(
+                    GeneratedSystemAddressBookMarker,
+                    StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
         private static string BuildContactKey(CardDavContactRecord contact)
         {
-            if (contact == null)
-            {
-                return string.Empty;
-            }
-            return BuildContactKey(contact.Uid, contact.Href);
+            return contact == null
+                ? string.Empty
+                : BuildContactKey(contact.Uid, contact.Href);
         }
 
         private static string BuildContactKey(string uid, string href)
@@ -376,7 +352,6 @@ namespace NcTalkOutlookAddIn.Services
                 {
                     return;
                 }
-
                 property = properties.Find(name, true);
                 if (property == null)
                 {
@@ -395,9 +370,7 @@ namespace NcTalkOutlookAddIn.Services
             }
         }
 
-        private static Outlook.MAPIFolder EnsureSubFolder(
-            Outlook.MAPIFolder parent,
-            string name)
+        private static Outlook.MAPIFolder EnsureSubFolder(Outlook.MAPIFolder parent, string name)
         {
             Outlook.Folders folders = null;
             try
@@ -423,7 +396,6 @@ namespace NcTalkOutlookAddIn.Services
                         ComInteropScope.TryRelease(folder, LogCategories.Core, "Failed to release Outlook contact subfolder.");
                     }
                 }
-
                 return folders.Add(name, Outlook.OlDefaultFolders.olFolderContacts);
             }
             finally
@@ -462,7 +434,7 @@ namespace NcTalkOutlookAddIn.Services
             {
                 return SanitizeFolderName(uri.Host);
             }
-            return RootFolderName;
+            return "Nextcloud";
         }
 
         private static string SanitizeFolderName(string value)
@@ -472,14 +444,10 @@ namespace NcTalkOutlookAddIn.Services
             {
                 result = result.Replace(c, '-');
             }
-            return string.IsNullOrWhiteSpace(result) ? RootFolderName : result;
+            return string.IsNullOrWhiteSpace(result) ? "Nextcloud" : result;
         }
 
-        private XDocument SendDavRequest(
-            string url,
-            string method,
-            string depth,
-            string body)
+        private XDocument SendDavRequest(string url, string method, string depth, string body)
         {
             var client = new NcHttpClient(_configuration);
             var headers = new Dictionary<string, string>();
@@ -528,12 +496,8 @@ namespace NcTalkOutlookAddIn.Services
 
                 switch (name)
                 {
-                    case "UID":
-                        result.Uid = value;
-                        break;
-                    case "FN":
-                        result.FullName = value;
-                        break;
+                    case "UID": result.Uid = value; break;
+                    case "FN": result.FullName = value; break;
                     case "N":
                         string[] n = SplitVCardComponents(value);
                         result.LastName = n.Length > 0 ? n[0] : string.Empty;
@@ -543,32 +507,15 @@ namespace NcTalkOutlookAddIn.Services
                         string[] organization = SplitVCardComponents(value);
                         result.Company = organization.Length > 0 ? organization[0] : string.Empty;
                         break;
-                    case "TITLE":
-                        result.JobTitle = value;
-                        break;
+                    case "TITLE": result.JobTitle = value; break;
                     case "EMAIL":
-                        if (string.IsNullOrWhiteSpace(result.Email1))
-                        {
-                            result.Email1 = value;
-                        }
-                        else if (string.IsNullOrWhiteSpace(result.Email2))
-                        {
-                            result.Email2 = value;
-                        }
+                        if (string.IsNullOrWhiteSpace(result.Email1)) result.Email1 = value;
+                        else if (string.IsNullOrWhiteSpace(result.Email2)) result.Email2 = value;
                         break;
                     case "TEL":
-                        if (upperLeft.Contains("CELL") || upperLeft.Contains("MOBILE"))
-                        {
-                            result.MobilePhone = value;
-                        }
-                        else if (upperLeft.Contains("HOME"))
-                        {
-                            result.HomePhone = value;
-                        }
-                        else if (string.IsNullOrWhiteSpace(result.BusinessPhone))
-                        {
-                            result.BusinessPhone = value;
-                        }
+                        if (upperLeft.Contains("CELL") || upperLeft.Contains("MOBILE")) result.MobilePhone = value;
+                        else if (upperLeft.Contains("HOME")) result.HomePhone = value;
+                        else if (string.IsNullOrWhiteSpace(result.BusinessPhone)) result.BusinessPhone = value;
                         break;
                     case "ADR":
                         string[] address = SplitVCardComponents(value);
@@ -578,9 +525,7 @@ namespace NcTalkOutlookAddIn.Services
                         if (address.Length > 5) result.BusinessAddressPostalCode = address[5];
                         if (address.Length > 6) result.BusinessAddressCountry = address[6];
                         break;
-                    case "NOTE":
-                        result.Notes = value;
-                        break;
+                    case "NOTE": result.Notes = value; break;
                 }
             }
 
