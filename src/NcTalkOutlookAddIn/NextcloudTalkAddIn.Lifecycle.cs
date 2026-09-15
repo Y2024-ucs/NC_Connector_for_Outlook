@@ -290,66 +290,75 @@ namespace NcTalkOutlookAddIn
                         + preferences.IntervalMinutes
                         + ").");
 
-                    if (!preferences.SyncOnStartup)
+                    if (!preferences.SyncOnStartup || selectedCalendars.Count == 0)
                     {
-                        return;
-                    }
-                    if (preferences.Direction == CalDavSyncDirection.OutlookToNextcloud)
-                    {
-                        DiagnosticsLogger.Log(
-                            LogCategories.Core,
-                            "CalDAV startup download skipped because sync direction is OutlookToNextcloud.");
                         return;
                     }
 
-                    var sync = new CalDavEventSyncService(configuration);
+                    var downloader = new CalDavEventSyncService(configuration);
                     var downloaded = new List<KeyValuePair<CalDavCalendar, IList<CalDavEventRecord>>>();
                     foreach (CalDavCalendar calendar in selectedCalendars)
                     {
+                        IList<CalDavEventRecord> remoteEvents =
+                            preferences.Direction == CalDavSyncDirection.OutlookToNextcloud
+                                ? new List<CalDavEventRecord>()
+                                : downloader.DownloadEvents(calendar);
                         downloaded.Add(new KeyValuePair<CalDavCalendar, IList<CalDavEventRecord>>(
                             calendar,
-                            sync.DownloadEvents(calendar)));
+                            remoteEvents));
                     }
 
-                    int imported = await RunOnOutlookUiThreadAsync(
+                    CalDavMergeResult mergeResult = await RunOnOutlookUiThreadAsync(
                         () =>
                         {
+                            var total = new CalDavMergeResult();
                             if (_outlookApplication == null)
                             {
-                                return 0;
+                                return total;
                             }
-                            int count = 0;
+
+                            var merge = new CalDavSafeMergeService(configuration);
                             foreach (KeyValuePair<CalDavCalendar, IList<CalDavEventRecord>> pair in downloaded)
                             {
-                                count += sync.ImportIntoOutlook(
+                                CalDavMergeResult one = merge.Merge(
                                     _outlookApplication,
                                     pair.Key,
                                     pair.Value,
-                                    preferences.UseDefaultCalendarFolder);
+                                    preferences.UseDefaultCalendarFolder,
+                                    preferences.Direction);
+                                total.ImportedToOutlook += one.ImportedToOutlook;
+                                total.UploadedToNextcloud += one.UploadedToNextcloud;
+                                total.MatchedExisting += one.MatchedExisting;
+                                total.SkippedRecurring += one.SkippedRecurring;
+                                total.SkippedMeetings += one.SkippedMeetings;
+                                total.UploadFailures += one.UploadFailures;
                             }
-                            return count;
+                            return total;
                         }).ConfigureAwait(false);
 
                     DiagnosticsLogger.Log(
                         LogCategories.Core,
-                        "CalDAV startup download sync completed (calendars="
+                        "CalDAV startup safe merge completed (calendars="
                         + selectedCalendars.Count
-                        + ", appointments="
-                        + imported
-                        + ").");
-
-                    if (preferences.Direction == CalDavSyncDirection.TwoWay)
-                    {
-                        DiagnosticsLogger.Log(
-                            LogCategories.Core,
-                            "CalDAV two-way upload phase is not enabled yet; startup run was Nextcloud to Outlook only.");
-                    }
+                        + ", imported="
+                        + mergeResult.ImportedToOutlook
+                        + ", uploaded="
+                        + mergeResult.UploadedToNextcloud
+                        + ", matched="
+                        + mergeResult.MatchedExisting
+                        + ", recurringSkipped="
+                        + mergeResult.SkippedRecurring
+                        + ", meetingsSkipped="
+                        + mergeResult.SkippedMeetings
+                        + ", uploadFailures="
+                        + mergeResult.UploadFailures
+                        + ", deletions=0).");
                 }
                 catch (Exception ex)
                 {
                     DiagnosticsLogger.LogException(
                         LogCategories.Core,
-                        "CalDAV calendar setup/startup sync failed.",
+                        "CalDAV calendar setup/startup merge failed.",
                         ex);
                 }
             });
