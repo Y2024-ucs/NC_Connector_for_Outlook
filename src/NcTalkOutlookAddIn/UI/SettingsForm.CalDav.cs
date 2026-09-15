@@ -20,6 +20,7 @@ namespace NcTalkOutlookAddIn.UI
         private readonly CheckBox _calDavEnabledCheckBox = new CheckBox();
         private readonly CheckedListBox _calDavCalendarList = new CheckedListBox();
         private readonly Button _calDavRefreshButton = new Button();
+        private readonly Button _calDavSyncNowButton = new Button();
         private readonly RadioButton _calDavTwoWayRadio = new RadioButton();
         private readonly RadioButton _calDavNextcloudToOutlookRadio = new RadioButton();
         private readonly RadioButton _calDavOutlookToNextcloudRadio = new RadioButton();
@@ -111,10 +112,16 @@ namespace NcTalkOutlookAddIn.UI
 
             _calDavSyncGroup.Controls.Add(new Label
             {
-                Text = "Hintergrundaktualisierung: alle 15 Minuten",
+                Text = "Automatisch: alle 15 Minuten",
                 AutoSize = true,
-                Location = new Point(30, 389)
+                Location = new Point(30, 390)
             });
+
+            _calDavSyncNowButton.Text = "Jetzt synchronisieren";
+            _calDavSyncNowButton.Location = new Point(235, 382);
+            _calDavSyncNowButton.Size = new Size(190, 28);
+            _calDavSyncNowButton.Click += OnCalDavSyncNowClick;
+            _calDavSyncGroup.Controls.Add(_calDavSyncNowButton);
 
             PopulateSavedCalDavCalendarSelection();
             FormClosed += OnCalDavSettingsFormClosed;
@@ -190,6 +197,145 @@ namespace NcTalkOutlookAddIn.UI
             }
         }
 
+        private async void OnCalDavSyncNowClick(object sender, EventArgs e)
+        {
+            if (_isBusy)
+            {
+                return;
+            }
+
+            var configuration = new TalkServiceConfiguration(
+                _serverUrlTextBox.Text.Trim(),
+                _usernameTextBox.Text.Trim(),
+                _appPasswordTextBox.Text ?? string.Empty);
+            if (!configuration.IsComplete())
+            {
+                SetStatus("Nextcloud-Zugangsdaten sind unvollständig.", true);
+                return;
+            }
+            if (_outlookApplication == null)
+            {
+                SetStatus("Outlook-Anwendung ist nicht verfügbar.", true);
+                return;
+            }
+
+            List<string> selectedHrefs = GetSelectedCalDavHrefs();
+            if (selectedHrefs.Count == 0)
+            {
+                selectedHrefs = new List<string>(_calDavPreferences.SelectedCalendarHrefs);
+            }
+            if (selectedHrefs.Count == 0)
+            {
+                SetStatus("Kein Nextcloud-Kalender ausgewählt.", true);
+                return;
+            }
+
+            CalDavSyncDirection direction = _calDavNextcloudToOutlookRadio.Checked
+                ? CalDavSyncDirection.NextcloudToOutlook
+                : (_calDavOutlookToNextcloudRadio.Checked
+                    ? CalDavSyncDirection.OutlookToNextcloud
+                    : CalDavSyncDirection.TwoWay);
+            bool useDefaultCalendar = _calDavDefaultCalendarRadio.Checked;
+
+            SetBusy(true);
+            UpdateCalDavSettingsState();
+            SetStatus("Kalender werden jetzt synchronisiert ...", false);
+            try
+            {
+                IList<CalDavCalendar> calendars = await Task.Run(() =>
+                    new DavDiscoveryService(configuration).DiscoverCalendars());
+                var selectedCalendars = calendars
+                    .Where(c => selectedHrefs.Any(h => string.Equals(h, c.Href, StringComparison.OrdinalIgnoreCase)))
+                    .ToList();
+                if (selectedCalendars.Count == 0)
+                {
+                    SetStatus("Ausgewählte Nextcloud-Kalender wurden nicht gefunden.", true);
+                    return;
+                }
+
+                var downloaded = await Task.Run(() =>
+                {
+                    var downloader = new CalDavEventSyncService(configuration);
+                    var list = new List<KeyValuePair<CalDavCalendar, IList<CalDavEventRecord>>>();
+                    foreach (CalDavCalendar calendar in selectedCalendars)
+                    {
+                        IList<CalDavEventRecord> events = direction == CalDavSyncDirection.OutlookToNextcloud
+                            ? new List<CalDavEventRecord>()
+                            : downloader.DownloadEvents(calendar);
+                        list.Add(new KeyValuePair<CalDavCalendar, IList<CalDavEventRecord>>(calendar, events));
+                    }
+                    return list;
+                });
+
+                var mergeTotal = new CalDavMergeResult();
+                var syncTotal = new CalDavBidirectionalSyncResult();
+                var merge = new CalDavSafeMergeService(configuration);
+                var sync = new CalDavBidirectionalSyncService(configuration);
+
+                foreach (KeyValuePair<CalDavCalendar, IList<CalDavEventRecord>> pair in downloaded)
+                {
+                    CalDavMergeResult oneMerge = merge.Merge(
+                        _outlookApplication,
+                        pair.Key,
+                        pair.Value,
+                        useDefaultCalendar,
+                        direction);
+                    mergeTotal.ImportedToOutlook += oneMerge.ImportedToOutlook;
+                    mergeTotal.UploadedToNextcloud += oneMerge.UploadedToNextcloud;
+                    mergeTotal.MatchedExisting += oneMerge.MatchedExisting;
+                    mergeTotal.SkippedRecurring += oneMerge.SkippedRecurring;
+                    mergeTotal.SkippedMeetings += oneMerge.SkippedMeetings;
+                    mergeTotal.UploadFailures += oneMerge.UploadFailures;
+
+                    CalDavBidirectionalSyncResult oneSync = sync.SyncLinkedEvents(
+                        _outlookApplication,
+                        pair.Key,
+                        pair.Value,
+                        useDefaultCalendar,
+                        direction);
+                    syncTotal.RemoteToOutlook += oneSync.RemoteToOutlook;
+                    syncTotal.OutlookToRemote += oneSync.OutlookToRemote;
+                    syncTotal.BaselinesEstablished += oneSync.BaselinesEstablished;
+                    syncTotal.Conflicts += oneSync.Conflicts;
+                    syncTotal.SkippedRecurring += oneSync.SkippedRecurring;
+                    syncTotal.SkippedMeetings += oneSync.SkippedMeetings;
+                    syncTotal.Failures += oneSync.Failures;
+                }
+
+                DiagnosticsLogger.Log(
+                    LogCategories.Core,
+                    "CalDAV manual synchronization completed (calendars=" + selectedCalendars.Count
+                    + ", imported=" + mergeTotal.ImportedToOutlook
+                    + ", uploaded=" + mergeTotal.UploadedToNextcloud
+                    + ", matched=" + mergeTotal.MatchedExisting
+                    + ", remoteUpdates=" + syncTotal.RemoteToOutlook
+                    + ", localUpdates=" + syncTotal.OutlookToRemote
+                    + ", baselines=" + syncTotal.BaselinesEstablished
+                    + ", conflicts=" + syncTotal.Conflicts
+                    + ", failures=" + (mergeTotal.UploadFailures + syncTotal.Failures)
+                    + ", deletions=0).");
+
+                SetStatus(
+                    "Synchronisierung fertig: "
+                    + mergeTotal.ImportedToOutlook + " importiert, "
+                    + mergeTotal.UploadedToNextcloud + " hochgeladen, "
+                    + syncTotal.RemoteToOutlook + " aus Nextcloud aktualisiert, "
+                    + syncTotal.OutlookToRemote + " nach Nextcloud aktualisiert, "
+                    + syncTotal.Conflicts + " Konflikte.",
+                    mergeTotal.UploadFailures + syncTotal.Failures > 0);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsLogger.LogException(LogCategories.Core, "CalDAV manual synchronization failed.", ex);
+                SetStatus("Kalendersynchronisierung fehlgeschlagen: " + ex.Message, true);
+            }
+            finally
+            {
+                SetBusy(false);
+                UpdateCalDavSettingsState();
+            }
+        }
+
         private List<string> GetSelectedCalDavHrefs()
         {
             var result = new List<string>();
@@ -220,6 +366,7 @@ namespace NcTalkOutlookAddIn.UI
             bool enabled = _calDavEnabledCheckBox.Checked;
             _calDavCalendarList.Enabled = enabled;
             _calDavRefreshButton.Enabled = enabled && !_isBusy;
+            _calDavSyncNowButton.Enabled = enabled && !_isBusy;
             _calDavTwoWayRadio.Enabled = enabled;
             _calDavNextcloudToOutlookRadio.Enabled = enabled;
             _calDavOutlookToNextcloudRadio.Enabled = enabled;
