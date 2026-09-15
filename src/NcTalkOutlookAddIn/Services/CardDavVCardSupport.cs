@@ -12,6 +12,8 @@ namespace NcTalkOutlookAddIn.Services
 {
     internal static class CardDavVCardSupport
     {
+        private const long MaximumPhotoBytes = 5L * 1024L * 1024L;
+
         private static readonly ConcurrentDictionary<string, byte[]> Photos =
             new ConcurrentDictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
 
@@ -60,14 +62,25 @@ namespace NcTalkOutlookAddIn.Services
             return builder.ToString();
         }
 
-        internal static void CachePhoto(string href, string rawVCard)
+        internal static void CachePhoto(
+            string href,
+            string rawVCard,
+            TalkServiceConfiguration configuration)
         {
             if (string.IsNullOrWhiteSpace(href) || string.IsNullOrWhiteSpace(rawVCard))
             {
                 return;
             }
 
-            byte[] photo = TryExtractPhoto(rawVCard);
+            string photoValue;
+            byte[] photo = TryExtractEmbeddedPhoto(rawVCard, out photoValue);
+            if ((photo == null || photo.Length == 0)
+                && !string.IsNullOrWhiteSpace(photoValue)
+                && configuration != null)
+            {
+                photo = TryDownloadPhoto(photoValue, configuration);
+            }
+
             if (photo != null && photo.Length > 0)
             {
                 Photos[href] = photo;
@@ -118,8 +131,9 @@ namespace NcTalkOutlookAddIn.Services
             }
         }
 
-        private static byte[] TryExtractPhoto(string rawVCard)
+        private static byte[] TryExtractEmbeddedPhoto(string rawVCard, out string photoValue)
         {
+            photoValue = string.Empty;
             string normalized = rawVCard.Replace("\r\n", "\n").Replace("\r", "\n");
             string[] lines = normalized.Split('\n');
             var logical = new StringBuilder();
@@ -162,7 +176,8 @@ namespace NcTalkOutlookAddIn.Services
             }
 
             string value = logical.ToString().Trim();
-            if (value.Length == 0 || value.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            photoValue = value;
+            if (value.Length == 0 || LooksLikePhotoUri(value))
             {
                 return null;
             }
@@ -183,6 +198,97 @@ namespace NcTalkOutlookAddIn.Services
             {
                 return null;
             }
+        }
+
+        private static byte[] TryDownloadPhoto(
+            string photoValue,
+            TalkServiceConfiguration configuration)
+        {
+            try
+            {
+                string url = ResolvePhotoUrl(photoValue, configuration);
+                if (string.IsNullOrWhiteSpace(url))
+                {
+                    return null;
+                }
+
+                var response = new NcHttpClient(configuration).Send(new NcHttpRequestOptions
+                {
+                    Method = "GET",
+                    Url = url,
+                    Accept = "image/*, */*",
+                    IncludeOcsApiHeader = false,
+                    ParseJson = false,
+                    ReadResponseAsBytes = true,
+                    MaximumResponseBytes = MaximumPhotoBytes,
+                    TimeoutMs = 30000
+                });
+
+                if (!response.HasHttpResponse
+                    || (int)response.StatusCode < 200
+                    || (int)response.StatusCode >= 300
+                    || response.ResponseBytes == null
+                    || response.ResponseBytes.Length == 0)
+                {
+                    return null;
+                }
+
+                return response.ResponseBytes;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string ResolvePhotoUrl(
+            string value,
+            TalkServiceConfiguration configuration)
+        {
+            string trimmed = (value ?? string.Empty).Trim();
+            if (!LooksLikePhotoUri(trimmed))
+            {
+                return string.Empty;
+            }
+
+            Uri absolute;
+            if (Uri.TryCreate(trimmed, UriKind.Absolute, out absolute))
+            {
+                if (string.Equals(absolute.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(absolute.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+                {
+                    return absolute.AbsoluteUri;
+                }
+                return string.Empty;
+            }
+
+            string baseUrl = configuration != null
+                ? configuration.GetNormalizedBaseUrl()
+                : string.Empty;
+            Uri baseUri;
+            if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out baseUri))
+            {
+                return string.Empty;
+            }
+
+            Uri resolved;
+            return Uri.TryCreate(baseUri, trimmed, out resolved)
+                ? resolved.AbsoluteUri
+                : string.Empty;
+        }
+
+        private static bool LooksLikePhotoUri(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
+            return value.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                || value.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                || value.StartsWith("/", StringComparison.Ordinal)
+                || value.StartsWith("./", StringComparison.Ordinal)
+                || value.StartsWith("../", StringComparison.Ordinal);
         }
 
         private static string DetectImageExtension(byte[] bytes)
