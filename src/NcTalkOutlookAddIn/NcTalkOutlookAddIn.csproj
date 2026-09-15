@@ -151,6 +151,8 @@
     <Compile Include="Services\CardDavSyncPreferences.cs" />
     <Compile Include="Services\CardDavVCardSupport.cs" />
     <Compile Include="Services\CalDavSyncPreferences.cs" />
+    <Compile Include="Services\CalDavSyncStateStore.cs" />
+    <Compile Include="Services\CalDavSafeMergeService.cs" />
     <Compile Include="Services\NextcloudCapabilitiesService.cs" />
     <Compile Include="Services\NextcloudUserIdentityService.cs" />
     <Compile Include="Services\TalkService.cs" />
