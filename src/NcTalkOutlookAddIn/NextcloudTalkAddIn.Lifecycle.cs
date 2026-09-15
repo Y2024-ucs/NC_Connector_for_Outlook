@@ -3,6 +3,7 @@
 // See LICENSE.txt for details.
 
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Reflection;
 using System.Threading;
@@ -55,6 +56,7 @@ namespace NcTalkOutlookAddIn
             EnsureInspectorHook();
             ApplyIfbSettings();
             StartUpdateCheckIfDue();
+            StartCardDavContactSync();
         }
 
         private void InitializeOutlookUiSynchronizationContext()
@@ -105,6 +107,62 @@ namespace NcTalkOutlookAddIn
                 catch (Exception ex)
                 {
                     DiagnosticsLogger.LogException(LogCategories.Core, "Update check failed.", ex);
+                }
+            });
+        }
+
+        private void StartCardDavContactSync()
+        {
+            if (_currentSettings == null
+                || _outlookApplication == null
+                || _uiSynchronizationContext == null)
+            {
+                return;
+            }
+
+            var configuration = new TalkServiceConfiguration(
+                _currentSettings.ServerUrl,
+                _currentSettings.Username,
+                _currentSettings.AppPassword);
+            if (!configuration.IsComplete())
+            {
+                DiagnosticsLogger.Log(
+                    LogCategories.Core,
+                    "CardDAV read-only sync skipped because Nextcloud credentials are incomplete.");
+                return;
+            }
+
+            Task.Run(async () =>
+            {
+                try
+                {
+                    var sync = new CardDavReadOnlySync(configuration);
+                    IList<CardDavAddressBook> addressBooks =
+                        new DavDiscoveryService(configuration).DiscoverAddressBooks();
+                    var contacts = new List<CardDavContactRecord>();
+                    foreach (CardDavAddressBook addressBook in addressBooks)
+                    {
+                        contacts.AddRange(sync.DownloadContacts(addressBook));
+                    }
+
+                    int count = await RunOnOutlookUiThreadAsync(
+                        () => _outlookApplication != null
+                            ? sync.ImportIntoOutlook(_outlookApplication, contacts)
+                            : 0).ConfigureAwait(false);
+                    DiagnosticsLogger.Log(
+                        LogCategories.Core,
+                        "CardDAV read-only startup sync completed (addressBooks="
+                        + addressBooks.Count
+                        + ", contacts="
+                        + count
+                        + ").");
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticsLogger.LogException(
+                        LogCategories.Core,
+                        "CardDAV read-only startup sync failed.",
+                        ex);
                 }
             });
         }
