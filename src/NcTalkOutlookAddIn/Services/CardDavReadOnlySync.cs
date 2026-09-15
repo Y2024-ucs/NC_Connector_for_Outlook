@@ -48,6 +48,9 @@ namespace NcTalkOutlookAddIn.Services
 
         private static readonly XNamespace Dav = "DAV:";
         private static readonly XNamespace CardDav = "urn:ietf:params:xml:ns:carddav";
+        private static readonly object KnownEtagsSyncRoot = new object();
+        private static readonly Dictionary<string, string> KnownEtags =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         private readonly TalkServiceConfiguration _configuration;
 
@@ -62,6 +65,18 @@ namespace NcTalkOutlookAddIn.Services
 
         internal IList<CardDavContactRecord> DownloadContacts(CardDavAddressBook addressBook)
         {
+            Dictionary<string, string> snapshot;
+            lock (KnownEtagsSyncRoot)
+            {
+                snapshot = new Dictionary<string, string>(KnownEtags, StringComparer.OrdinalIgnoreCase);
+            }
+            return DownloadContacts(addressBook, snapshot);
+        }
+
+        internal IList<CardDavContactRecord> DownloadContacts(
+            CardDavAddressBook addressBook,
+            IDictionary<string, string> knownEtags)
+        {
             if (addressBook == null || string.IsNullOrWhiteSpace(addressBook.Href))
             {
                 throw new ArgumentException("A CardDAV address book is required.", "addressBook");
@@ -75,6 +90,9 @@ namespace NcTalkOutlookAddIn.Services
 
             XDocument document = SendDavRequest(addressBook.Href, "REPORT", "1", body);
             var contacts = new List<CardDavContactRecord>();
+            int remoteCount = 0;
+            int unchangedCount = 0;
+
             foreach (XElement responseElement in document.Descendants(Dav + "response"))
             {
                 XElement prop = responseElement
@@ -87,6 +105,27 @@ namespace NcTalkOutlookAddIn.Services
                     continue;
                 }
 
+                string href = ResolveUri(
+                    addressBook.Href,
+                    (string)responseElement.Element(Dav + "href"));
+                string etag = ((string)prop.Element(Dav + "getetag") ?? string.Empty).Trim();
+                remoteCount++;
+
+                string knownEtag;
+                if (!string.IsNullOrWhiteSpace(href)
+                    && !string.IsNullOrWhiteSpace(etag)
+                    && knownEtags != null
+                    && knownEtags.TryGetValue(href, out knownEtag)
+                    && string.Equals(
+                        NormalizeEtag(knownEtag),
+                        NormalizeEtag(etag),
+                        StringComparison.Ordinal))
+                {
+                    RememberKnownEtag(href, etag);
+                    unchangedCount++;
+                    continue;
+                }
+
                 string vcard = (string)prop.Element(CardDav + "address-data");
                 if (string.IsNullOrWhiteSpace(vcard))
                 {
@@ -95,14 +134,152 @@ namespace NcTalkOutlookAddIn.Services
 
                 vcard = CardDavVCardSupport.Normalize(vcard);
                 CardDavContactRecord contact = ParseVCard(vcard);
-                contact.Href = ResolveUri(
-                    addressBook.Href,
-                    (string)responseElement.Element(Dav + "href"));
-                contact.ETag = ((string)prop.Element(Dav + "getetag") ?? string.Empty).Trim();
+                contact.Href = href;
+                contact.ETag = etag;
                 CardDavVCardSupport.CachePhoto(contact.Href, vcard, _configuration);
                 contacts.Add(contact);
+                RememberKnownEtag(href, etag);
             }
+
+            DiagnosticsLogger.Log(
+                LogCategories.Core,
+                "CardDAV change scan completed (addressBook="
+                + (addressBook.DisplayName ?? string.Empty)
+                + ", remote=" + remoteCount
+                + ", changed=" + contacts.Count
+                + ", unchanged=" + unchangedCount
+                + ").");
             return contacts;
+        }
+
+        internal static Dictionary<string, string> LoadKnownEtagsFromOutlook(
+            Outlook.Application outlookApplication)
+        {
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (outlookApplication == null)
+            {
+                return result;
+            }
+
+            Outlook.NameSpace session = null;
+            Outlook.MAPIFolder defaultContacts = null;
+            Outlook.Folders folders = null;
+            try
+            {
+                session = outlookApplication.Session;
+                defaultContacts = session.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderContacts);
+                CollectKnownEtagsFromFolder(defaultContacts, result);
+
+                folders = defaultContacts.Folders;
+                int count = folders.Count;
+                for (int index = 1; index <= count; index++)
+                {
+                    Outlook.MAPIFolder folder = null;
+                    try
+                    {
+                        folder = folders[index];
+                        if (folder != null)
+                        {
+                            CollectKnownEtagsFromFolder(folder, result);
+                        }
+                    }
+                    finally
+                    {
+                        ComInteropScope.TryRelease(folder, LogCategories.Core, "Failed to release CardDAV contacts subfolder during ETag scan.");
+                    }
+                }
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(folders, LogCategories.Core, "Failed to release CardDAV contacts subfolders during ETag scan.");
+                ComInteropScope.TryRelease(defaultContacts, LogCategories.Core, "Failed to release default contacts folder during CardDAV ETag scan.");
+                ComInteropScope.TryRelease(session, LogCategories.Core, "Failed to release Outlook session after CardDAV ETag scan.");
+            }
+
+            lock (KnownEtagsSyncRoot)
+            {
+                KnownEtags.Clear();
+                foreach (KeyValuePair<string, string> pair in result)
+                {
+                    KnownEtags[pair.Key] = pair.Value;
+                }
+            }
+
+            DiagnosticsLogger.Log(
+                LogCategories.Core,
+                "CardDAV local ETag cache initialized (contacts=" + result.Count + ").");
+            return result;
+        }
+
+        private static void CollectKnownEtagsFromFolder(
+            Outlook.MAPIFolder folder,
+            IDictionary<string, string> result)
+        {
+            if (folder == null || result == null)
+            {
+                return;
+            }
+
+            Outlook.Items items = null;
+            try
+            {
+                items = folder.Items;
+                int count = items.Count;
+                for (int index = 1; index <= count; index++)
+                {
+                    object raw = null;
+                    Outlook.ContactItem contact = null;
+                    try
+                    {
+                        raw = items[index];
+                        contact = raw as Outlook.ContactItem;
+                        if (contact == null)
+                        {
+                            continue;
+                        }
+
+                        string href = ReadUserProperty(contact, HrefPropertyName);
+                        string etag = ReadUserProperty(contact, ETagPropertyName);
+                        if (!string.IsNullOrWhiteSpace(href)
+                            && !string.IsNullOrWhiteSpace(etag))
+                        {
+                            result[href.Trim()] = etag.Trim();
+                        }
+                    }
+                    finally
+                    {
+                        if (contact != null)
+                        {
+                            ComInteropScope.TryRelease(contact, LogCategories.Core, "Failed to release CardDAV contact during ETag scan.");
+                        }
+                        else
+                        {
+                            ComInteropScope.TryRelease(raw, LogCategories.Core, "Failed to release non-contact item during CardDAV ETag scan.");
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(items, LogCategories.Core, "Failed to release CardDAV contact items during ETag scan.");
+            }
+        }
+
+        private static void RememberKnownEtag(string href, string etag)
+        {
+            if (string.IsNullOrWhiteSpace(href) || string.IsNullOrWhiteSpace(etag))
+            {
+                return;
+            }
+            lock (KnownEtagsSyncRoot)
+            {
+                KnownEtags[href.Trim()] = etag.Trim();
+            }
+        }
+
+        private static string NormalizeEtag(string value)
+        {
+            return (value ?? string.Empty).Trim();
         }
 
         internal int ImportIntoOutlook(
@@ -163,7 +340,7 @@ namespace NcTalkOutlookAddIn.Services
                     LogCategories.Core,
                     "CardDAV read-only sync imported/updated "
                     + imported
-                    + " contacts (instance="
+                    + " changed contacts (instance="
                     + instanceName
                     + ", company="
                     + companyContacts.Count
@@ -212,6 +389,16 @@ namespace NcTalkOutlookAddIn.Services
                             as Outlook.ContactItem;
                     }
                     if (target == null)
+                    {
+                        continue;
+                    }
+
+                    string currentEtag = ReadUserProperty(target, ETagPropertyName);
+                    if (!string.IsNullOrWhiteSpace(source.ETag)
+                        && string.Equals(
+                            NormalizeEtag(currentEtag),
+                            NormalizeEtag(source.ETag),
+                            StringComparison.Ordinal))
                     {
                         continue;
                     }
