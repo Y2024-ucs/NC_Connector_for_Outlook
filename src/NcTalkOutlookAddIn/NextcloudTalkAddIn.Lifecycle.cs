@@ -58,6 +58,7 @@ namespace NcTalkOutlookAddIn
             ApplyIfbSettings();
             StartUpdateCheckIfDue();
             StartCardDavContactSync();
+            StartCalDavCalendarBootstrap();
         }
 
         private void InitializeOutlookUiSynchronizationContext()
@@ -204,6 +205,98 @@ namespace NcTalkOutlookAddIn
                     DiagnosticsLogger.LogException(
                         LogCategories.Core,
                         "CardDAV read-only startup sync failed.",
+                        ex);
+                }
+            });
+        }
+
+        private void StartCalDavCalendarBootstrap()
+        {
+            if (_currentSettings == null
+                || _outlookApplication == null
+                || _uiSynchronizationContext == null)
+            {
+                return;
+            }
+
+            var configuration = new TalkServiceConfiguration(
+                _currentSettings.ServerUrl,
+                _currentSettings.Username,
+                _currentSettings.AppPassword);
+            if (!configuration.IsComplete())
+            {
+                DiagnosticsLogger.Log(
+                    LogCategories.Core,
+                    "CalDAV calendar setup skipped because Nextcloud credentials are incomplete.");
+                return;
+            }
+
+            Task.Run(async () =>
+            {
+                try
+                {
+                    IList<CalDavCalendar> calendars =
+                        new DavDiscoveryService(configuration).DiscoverCalendars();
+                    CalDavSyncPreferences preferences = CalDavSyncPreferences.Load();
+
+                    if (!preferences.Configured)
+                    {
+                        await RunOnOutlookUiThreadAsync(
+                            () =>
+                            {
+                                using (var selectionForm = new CalDavFirstRunForm(calendars, preferences))
+                                {
+                                    DialogResult result = selectionForm.ShowDialog();
+                                    selectionForm.ApplyTo(preferences, result == DialogResult.OK);
+                                }
+                                preferences.Save();
+                            }).ConfigureAwait(false);
+                    }
+
+                    if (!preferences.Enabled)
+                    {
+                        DiagnosticsLogger.Log(LogCategories.Core, "CalDAV calendar sync disabled by user settings.");
+                        return;
+                    }
+
+                    int selectedCount = 0;
+                    int readOnlySelectedCount = 0;
+                    foreach (CalDavCalendar calendar in calendars)
+                    {
+                        if (!preferences.IsCalendarSelected(calendar.Href))
+                        {
+                            continue;
+                        }
+                        selectedCount++;
+                        if (calendar.ReadOnly)
+                        {
+                            readOnlySelectedCount++;
+                        }
+                    }
+
+                    DiagnosticsLogger.Log(
+                        LogCategories.Core,
+                        "CalDAV calendar configuration ready (available="
+                        + calendars.Count
+                        + ", selected="
+                        + selectedCount
+                        + ", readOnlySelected="
+                        + readOnlySelectedCount
+                        + ", direction="
+                        + preferences.Direction
+                        + ", target="
+                        + (preferences.UseDefaultCalendarFolder ? "default" : "separate")
+                        + ", startup="
+                        + preferences.SyncOnStartup
+                        + ", intervalMinutes="
+                        + preferences.IntervalMinutes
+                        + ").");
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticsLogger.LogException(
+                        LogCategories.Core,
+                        "CalDAV calendar setup failed.",
                         ex);
                 }
             });
