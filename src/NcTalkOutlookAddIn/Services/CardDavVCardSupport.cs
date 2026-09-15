@@ -4,8 +4,10 @@
 
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using NcTalkOutlookAddIn.Utilities;
 using Outlook = Microsoft.Office.Interop.Outlook;
 
 namespace NcTalkOutlookAddIn.Services
@@ -13,6 +15,7 @@ namespace NcTalkOutlookAddIn.Services
     internal static class CardDavVCardSupport
     {
         private const long MaximumPhotoBytes = 5L * 1024L * 1024L;
+        private const string GeneratedSystemAddressBookMarker = "z-server-generated--system";
 
         private static readonly ConcurrentDictionary<string, byte[]> Photos =
             new ConcurrentDictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
@@ -72,18 +75,76 @@ namespace NcTalkOutlookAddIn.Services
                 return;
             }
 
+            string uid = ExtractPropertyValue(rawVCard, "UID");
+            string email = ExtractPropertyValue(rawVCard, "EMAIL");
             string photoValue;
             byte[] photo = TryExtractEmbeddedPhoto(rawVCard, out photoValue);
-            if ((photo == null || photo.Length == 0)
+            string source = string.Empty;
+
+            if (IsSupportedImage(photo))
+            {
+                source = "embedded";
+            }
+            else
+            {
+                photo = null;
+            }
+
+            if (photo == null
                 && !string.IsNullOrWhiteSpace(photoValue)
                 && configuration != null)
             {
                 photo = TryDownloadPhoto(photoValue, configuration);
+                if (IsSupportedImage(photo))
+                {
+                    source = "photo-uri";
+                }
+                else
+                {
+                    photo = null;
+                }
+            }
+
+            if (photo == null
+                && IsSystemDirectoryHref(href)
+                && configuration != null)
+            {
+                string avatarIdentity;
+                photo = TryDownloadAvatar(uid, email, configuration, out avatarIdentity);
+                if (IsSupportedImage(photo))
+                {
+                    source = "nextcloud-avatar:" + avatarIdentity;
+                }
+                else
+                {
+                    photo = null;
+                }
             }
 
             if (photo != null && photo.Length > 0)
             {
                 Photos[href] = photo;
+                DiagnosticsLogger.Log(
+                    LogCategories.Core,
+                    "CardDAV contact photo cached (source="
+                    + source
+                    + ", uid="
+                    + SafeLogValue(uid)
+                    + ", bytes="
+                    + photo.Length
+                    + ").");
+            }
+            else if (IsSystemDirectoryHref(href))
+            {
+                DiagnosticsLogger.Log(
+                    LogCategories.Core,
+                    "CardDAV contact photo unavailable (uid="
+                    + SafeLogValue(uid)
+                    + ", email="
+                    + SafeLogValue(email)
+                    + ", hasPhotoField="
+                    + (!string.IsNullOrWhiteSpace(photoValue))
+                    + ").");
             }
         }
 
@@ -109,9 +170,12 @@ namespace NcTalkOutlookAddIn.Services
                 File.WriteAllBytes(tempPath, photo);
                 target.AddPicture(tempPath);
             }
-            catch
+            catch (Exception ex)
             {
-                // A broken or unsupported image must not abort the contact sync.
+                DiagnosticsLogger.LogException(
+                    LogCategories.Core,
+                    "Failed to apply CardDAV contact photo in Outlook.",
+                    ex);
             }
             finally
             {
@@ -207,12 +271,77 @@ namespace NcTalkOutlookAddIn.Services
             try
             {
                 string url = ResolvePhotoUrl(photoValue, configuration);
-                if (string.IsNullOrWhiteSpace(url))
-                {
-                    return null;
-                }
+                return DownloadImage(url, configuration);
+            }
+            catch
+            {
+                return null;
+            }
+        }
 
-                var response = new NcHttpClient(configuration).Send(new NcHttpRequestOptions
+        private static byte[] TryDownloadAvatar(
+            string uid,
+            string email,
+            TalkServiceConfiguration configuration,
+            out string matchedIdentity)
+        {
+            matchedIdentity = string.Empty;
+            string baseUrl = configuration != null
+                ? configuration.GetNormalizedBaseUrl()
+                : string.Empty;
+            if (string.IsNullOrWhiteSpace(baseUrl))
+            {
+                return null;
+            }
+
+            var identities = new List<string>();
+            AddIdentity(identities, uid);
+            if (!string.IsNullOrWhiteSpace(email))
+            {
+                string trimmedEmail = email.Trim();
+                int at = trimmedEmail.IndexOf('@');
+                if (at > 0)
+                {
+                    AddIdentity(identities, trimmedEmail.Substring(0, at));
+                }
+                AddIdentity(identities, trimmedEmail);
+            }
+
+            foreach (string identity in identities)
+            {
+                string escaped = Uri.EscapeDataString(identity);
+                string[] urls =
+                {
+                    baseUrl.TrimEnd('/') + "/index.php/avatar/" + escaped + "/256",
+                    baseUrl.TrimEnd('/') + "/avatar/" + escaped + "/256"
+                };
+
+                foreach (string url in urls)
+                {
+                    byte[] image = DownloadImage(url, configuration);
+                    if (IsSupportedImage(image))
+                    {
+                        matchedIdentity = identity;
+                        return image;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private static byte[] DownloadImage(
+            string url,
+            TalkServiceConfiguration configuration)
+        {
+            if (string.IsNullOrWhiteSpace(url) || configuration == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                NcHttpResponse response = new NcHttpClient(configuration).Send(new NcHttpRequestOptions
                 {
                     Method = "GET",
                     Url = url,
@@ -266,15 +395,81 @@ namespace NcTalkOutlookAddIn.Services
                 ? configuration.GetNormalizedBaseUrl()
                 : string.Empty;
             Uri baseUri;
-            if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out baseUri))
+            if (!Uri.TryCreate(baseUrl.TrimEnd('/') + "/", UriKind.Absolute, out baseUri))
             {
                 return string.Empty;
             }
 
             Uri resolved;
-            return Uri.TryCreate(baseUri, trimmed, out resolved)
+            return Uri.TryCreate(baseUri, trimmed.TrimStart('/'), out resolved)
                 ? resolved.AbsoluteUri
                 : string.Empty;
+        }
+
+        private static string ExtractPropertyValue(string rawVCard, string propertyName)
+        {
+            if (string.IsNullOrWhiteSpace(rawVCard) || string.IsNullOrWhiteSpace(propertyName))
+            {
+                return string.Empty;
+            }
+
+            string normalized = rawVCard.Replace("\r\n", "\n").Replace("\r", "\n");
+            string[] lines = normalized.Split('\n');
+            foreach (string sourceLine in lines)
+            {
+                string line = sourceLine ?? string.Empty;
+                int colon = line.IndexOf(':');
+                if (colon <= 0)
+                {
+                    continue;
+                }
+
+                string left = line.Substring(0, colon);
+                string name = left.Split(';')[0];
+                int dot = name.LastIndexOf('.');
+                if (dot >= 0 && dot + 1 < name.Length)
+                {
+                    name = name.Substring(dot + 1);
+                }
+                if (!string.Equals(name, propertyName, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string value = line.Substring(colon + 1).Trim();
+                if (string.Equals(propertyName, "EMAIL", StringComparison.OrdinalIgnoreCase)
+                    && value.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase))
+                {
+                    value = value.Substring(7);
+                }
+                return value;
+            }
+            return string.Empty;
+        }
+
+        private static bool IsSystemDirectoryHref(string href)
+        {
+            return !string.IsNullOrWhiteSpace(href)
+                && href.IndexOf(
+                    GeneratedSystemAddressBookMarker,
+                    StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static void AddIdentity(ICollection<string> identities, string value)
+        {
+            string candidate = (value ?? string.Empty).Trim();
+            if (candidate.Length == 0)
+            {
+                return;
+            }
+            foreach (string existing in identities)
+            {
+                if (string.Equals(existing, candidate, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+            }
+            identities.Add(candidate);
         }
 
         private static bool LooksLikePhotoUri(string value)
@@ -289,6 +484,30 @@ namespace NcTalkOutlookAddIn.Services
                 || value.StartsWith("/", StringComparison.Ordinal)
                 || value.StartsWith("./", StringComparison.Ordinal)
                 || value.StartsWith("../", StringComparison.Ordinal);
+        }
+
+        private static bool IsSupportedImage(byte[] bytes)
+        {
+            if (bytes == null || bytes.Length < 2)
+            {
+                return false;
+            }
+
+            if (bytes[0] == 0xFF && bytes[1] == 0xD8)
+            {
+                return true;
+            }
+            if (bytes.Length >= 8
+                && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47)
+            {
+                return true;
+            }
+            if (bytes.Length >= 6
+                && bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46)
+            {
+                return true;
+            }
+            return bytes[0] == 0x42 && bytes[1] == 0x4D;
         }
 
         private static string DetectImageExtension(byte[] bytes)
@@ -309,6 +528,11 @@ namespace NcTalkOutlookAddIn.Services
                 return ".bmp";
             }
             return ".jpg";
+        }
+
+        private static string SafeLogValue(string value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? "<empty>" : value.Trim();
         }
     }
 }
