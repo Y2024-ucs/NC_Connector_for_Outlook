@@ -39,6 +39,13 @@ namespace NcTalkOutlookAddIn.Services
 
     internal sealed class CardDavReadOnlySync
     {
+        private sealed class RemoteContactVersion
+        {
+            internal string RequestHref { get; set; }
+            internal string Href { get; set; }
+            internal string ETag { get; set; }
+        }
+
         private const string UidPropertyName = "NC-CardDAV-UID";
         private const string HrefPropertyName = "NC-CardDAV-HREF";
         private const string ETagPropertyName = "NC-CardDAV-ETAG";
@@ -82,17 +89,64 @@ namespace NcTalkOutlookAddIn.Services
                 throw new ArgumentException("A CardDAV address book is required.", "addressBook");
             }
 
+            IList<RemoteContactVersion> remoteVersions = DownloadContactVersions(addressBook);
+            var changedVersions = new List<RemoteContactVersion>();
+            int unchangedCount = 0;
+
+            foreach (RemoteContactVersion version in remoteVersions)
+            {
+                string knownEtag;
+                if (!string.IsNullOrWhiteSpace(version.Href)
+                    && !string.IsNullOrWhiteSpace(version.ETag)
+                    && knownEtags != null
+                    && knownEtags.TryGetValue(version.Href, out knownEtag)
+                    && string.Equals(
+                        NormalizeEtag(knownEtag),
+                        NormalizeEtag(version.ETag),
+                        StringComparison.Ordinal))
+                {
+                    RememberKnownEtag(version.Href, version.ETag);
+                    unchangedCount++;
+                    continue;
+                }
+                changedVersions.Add(version);
+            }
+
+            if (changedVersions.Count == 0)
+            {
+                DiagnosticsLogger.Log(
+                    LogCategories.Core,
+                    "CardDAV change scan completed (addressBook="
+                    + (addressBook.DisplayName ?? string.Empty)
+                    + ", remote=" + remoteVersions.Count
+                    + ", changed=0, unchanged=" + unchangedCount
+                    + ", payloadFetched=0). ");
+                return new List<CardDavContactRecord>();
+            }
+
+            IList<CardDavContactRecord> contacts = DownloadContactPayloads(addressBook, changedVersions);
+            DiagnosticsLogger.Log(
+                LogCategories.Core,
+                "CardDAV change scan completed (addressBook="
+                + (addressBook.DisplayName ?? string.Empty)
+                + ", remote=" + remoteVersions.Count
+                + ", changed=" + changedVersions.Count
+                + ", unchanged=" + unchangedCount
+                + ", payloadFetched=" + contacts.Count
+                + ").");
+            return contacts;
+        }
+
+        private IList<RemoteContactVersion> DownloadContactVersions(CardDavAddressBook addressBook)
+        {
             string body = "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
                 + "<card:addressbook-query xmlns:d=\"DAV:\" xmlns:card=\"urn:ietf:params:xml:ns:carddav\">"
-                + "<d:prop><d:getetag/><card:address-data content-type=\"text/vcard\"/></d:prop>"
+                + "<d:prop><d:getetag/></d:prop>"
                 + "<card:filter/>"
                 + "</card:addressbook-query>";
 
             XDocument document = SendDavRequest(addressBook.Href, "REPORT", "1", body);
-            var contacts = new List<CardDavContactRecord>();
-            int remoteCount = 0;
-            int unchangedCount = 0;
-
+            var result = new List<RemoteContactVersion>();
             foreach (XElement responseElement in document.Descendants(Dav + "response"))
             {
                 XElement prop = responseElement
@@ -105,27 +159,60 @@ namespace NcTalkOutlookAddIn.Services
                     continue;
                 }
 
-                string href = ResolveUri(
-                    addressBook.Href,
-                    (string)responseElement.Element(Dav + "href"));
-                string etag = ((string)prop.Element(Dav + "getetag") ?? string.Empty).Trim();
-                remoteCount++;
-
-                string knownEtag;
-                if (!string.IsNullOrWhiteSpace(href)
-                    && !string.IsNullOrWhiteSpace(etag)
-                    && knownEtags != null
-                    && knownEtags.TryGetValue(href, out knownEtag)
-                    && string.Equals(
-                        NormalizeEtag(knownEtag),
-                        NormalizeEtag(etag),
-                        StringComparison.Ordinal))
+                string requestHref = ((string)responseElement.Element(Dav + "href") ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(requestHref))
                 {
-                    RememberKnownEtag(href, etag);
-                    unchangedCount++;
                     continue;
                 }
 
+                result.Add(new RemoteContactVersion
+                {
+                    RequestHref = requestHref,
+                    Href = ResolveUri(addressBook.Href, requestHref),
+                    ETag = ((string)prop.Element(Dav + "getetag") ?? string.Empty).Trim()
+                });
+            }
+            return result;
+        }
+
+        private IList<CardDavContactRecord> DownloadContactPayloads(
+            CardDavAddressBook addressBook,
+            IList<RemoteContactVersion> changedVersions)
+        {
+            if (changedVersions == null || changedVersions.Count == 0)
+            {
+                return new List<CardDavContactRecord>();
+            }
+
+            var body = new StringBuilder();
+            body.Append("<?xml version=\"1.0\" encoding=\"utf-8\"?>");
+            body.Append("<card:addressbook-multiget xmlns:d=\"DAV:\" xmlns:card=\"urn:ietf:params:xml:ns:carddav\">");
+            body.Append("<d:prop><d:getetag/><card:address-data content-type=\"text/vcard\"/></d:prop>");
+            foreach (RemoteContactVersion version in changedVersions)
+            {
+                body.Append("<d:href>");
+                body.Append(EscapeXml(version.RequestHref));
+                body.Append("</d:href>");
+            }
+            body.Append("</card:addressbook-multiget>");
+
+            XDocument document = SendDavRequest(addressBook.Href, "REPORT", "1", body.ToString());
+            var contacts = new List<CardDavContactRecord>();
+            foreach (XElement responseElement in document.Descendants(Dav + "response"))
+            {
+                XElement prop = responseElement
+                    .Elements(Dav + "propstat")
+                    .Where(p => IsSuccessfulStatus((string)p.Element(Dav + "status")))
+                    .Select(p => p.Element(Dav + "prop"))
+                    .FirstOrDefault(p => p != null);
+                if (prop == null)
+                {
+                    continue;
+                }
+
+                string requestHref = ((string)responseElement.Element(Dav + "href") ?? string.Empty).Trim();
+                string href = ResolveUri(addressBook.Href, requestHref);
+                string etag = ((string)prop.Element(Dav + "getetag") ?? string.Empty).Trim();
                 string vcard = (string)prop.Element(CardDav + "address-data");
                 if (string.IsNullOrWhiteSpace(vcard))
                 {
@@ -140,16 +227,17 @@ namespace NcTalkOutlookAddIn.Services
                 contacts.Add(contact);
                 RememberKnownEtag(href, etag);
             }
-
-            DiagnosticsLogger.Log(
-                LogCategories.Core,
-                "CardDAV change scan completed (addressBook="
-                + (addressBook.DisplayName ?? string.Empty)
-                + ", remote=" + remoteCount
-                + ", changed=" + contacts.Count
-                + ", unchanged=" + unchangedCount
-                + ").");
             return contacts;
+        }
+
+        private static string EscapeXml(string value)
+        {
+            return (value ?? string.Empty)
+                .Replace("&", "&amp;")
+                .Replace("<", "&lt;")
+                .Replace(">", "&gt;")
+                .Replace("\"", "&quot;")
+                .Replace("'", "&apos;");
         }
 
         internal static Dictionary<string, string> LoadKnownEtagsFromOutlook(
