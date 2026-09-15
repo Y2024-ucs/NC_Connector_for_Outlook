@@ -135,6 +135,23 @@ namespace NcTalkOutlookAddIn.Services
 
                         if (string.IsNullOrWhiteSpace(storedSnapshot))
                         {
+                            // The very first per-item baseline must never silently choose one side.
+                            // Only establish it when Outlook and the actual CalDAV payload already
+                            // represent the same visible event. A difference is an initial conflict
+                            // and remains untouched until the user resolves both sides to the same
+                            // content (or a later conflict UI explicitly chooses a winner).
+                            string remoteSnapshot = BuildRemoteSnapshot(remote);
+                            if (!string.Equals(localSnapshot, remoteSnapshot, StringComparison.Ordinal))
+                            {
+                                result.Conflicts++;
+                                DiagnosticsLogger.Log(
+                                    LogCategories.Core,
+                                    "CalDAV initial baseline conflict kept unchanged (calendar=" + Safe(calendar.DisplayName)
+                                    + ", uid=" + Safe(uid)
+                                    + ", reason=initial-local-remote-difference).");
+                                continue;
+                            }
+
                             WriteUserProperty(appointment, LocalSnapshotPropertyName, localSnapshot);
                             WriteUserProperty(appointment, ETagPropertyName, remoteEtag);
                             appointment.Save();
@@ -480,6 +497,22 @@ namespace NcTalkOutlookAddIn.Services
                 + NormalizeDateTime(appointment.Start, appointment.AllDayEvent) + "|"
                 + NormalizeDateTime(appointment.End, appointment.AllDayEvent) + "|"
                 + (appointment.AllDayEvent ? "1" : "0");
+        }
+
+        private static string BuildRemoteSnapshot(CalDavEventRecord item)
+        {
+            if (item == null)
+            {
+                return string.Empty;
+            }
+
+            DateTime end = item.End > item.Start ? item.End : item.Start.AddMinutes(30);
+            return Normalize(item.Subject) + "|"
+                + Normalize(item.Location) + "|"
+                + Normalize(item.Description) + "|"
+                + NormalizeDateTime(item.Start, item.AllDay) + "|"
+                + NormalizeDateTime(end, item.AllDay) + "|"
+                + (item.AllDay ? "1" : "0");
         }
 
         private static Dictionary<string, CalDavEventRecord> BuildRemoteByUid(IList<CalDavEventRecord> remoteEvents)
