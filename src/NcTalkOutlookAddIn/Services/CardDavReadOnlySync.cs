@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using System.Xml.Linq;
 using NcTalkOutlookAddIn.Models;
 using NcTalkOutlookAddIn.Utilities;
@@ -490,9 +491,9 @@ namespace NcTalkOutlookAddIn.Services
                 }
 
                 string left = line.Substring(0, colon);
-                string value = DecodeVCardText(line.Substring(colon + 1));
-                string name = left.Split(';')[0].ToUpperInvariant();
                 string upperLeft = left.ToUpperInvariant();
+                string value = DecodeVCardValue(left, line.Substring(colon + 1));
+                string name = left.Split(';')[0].ToUpperInvariant();
 
                 switch (name)
                 {
@@ -547,7 +548,12 @@ namespace NcTalkOutlookAddIn.Services
             var result = new List<string>();
             foreach (string line in source)
             {
-                if ((line.StartsWith(" ") || line.StartsWith("\t")) && result.Count > 0)
+                if (result.Count > 0 && result[result.Count - 1].EndsWith("=", StringComparison.Ordinal))
+                {
+                    string previous = result[result.Count - 1];
+                    result[result.Count - 1] = previous.Substring(0, previous.Length - 1) + line;
+                }
+                else if ((line.StartsWith(" ") || line.StartsWith("\t")) && result.Count > 0)
                 {
                     result[result.Count - 1] += line.Substring(1);
                 }
@@ -559,10 +565,64 @@ namespace NcTalkOutlookAddIn.Services
             return result;
         }
 
+        private static string DecodeVCardValue(string fieldDefinition, string value)
+        {
+            string decoded = value ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(fieldDefinition)
+                && fieldDefinition.IndexOf("QUOTED-PRINTABLE", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                decoded = DecodeQuotedPrintableUtf8(decoded);
+            }
+            return DecodeVCardText(decoded);
+        }
+
+        private static string DecodeQuotedPrintableUtf8(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return string.Empty;
+            }
+
+            var bytes = new List<byte>();
+            for (int i = 0; i < value.Length; i++)
+            {
+                char c = value[i];
+                if (c == '=' && i + 2 < value.Length)
+                {
+                    int high = HexValue(value[i + 1]);
+                    int low = HexValue(value[i + 2]);
+                    if (high >= 0 && low >= 0)
+                    {
+                        bytes.Add((byte)((high << 4) | low));
+                        i += 2;
+                        continue;
+                    }
+                }
+
+                if (c <= 0x7F)
+                {
+                    bytes.Add((byte)c);
+                }
+                else
+                {
+                    bytes.AddRange(Encoding.UTF8.GetBytes(new[] { c }));
+                }
+            }
+            return Encoding.UTF8.GetString(bytes.ToArray());
+        }
+
+        private static int HexValue(char c)
+        {
+            if (c >= '0' && c <= '9') return c - '0';
+            if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+            if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+            return -1;
+        }
+
         private static string[] SplitVCardComponents(string value)
         {
             var parts = new List<string>();
-            var current = new System.Text.StringBuilder();
+            var current = new StringBuilder();
             bool escaped = false;
             foreach (char c in value ?? string.Empty)
             {
