@@ -17,7 +17,6 @@ namespace NcTalkOutlookAddIn.Services
     {
         private static readonly XNamespace Dav = "DAV:";
         private static readonly XNamespace CardDav = "urn:ietf:params:xml:ns:carddav";
-        private const string GeneratedSystemAddressBookMarker = "z-server-generated--system";
 
         private readonly TalkServiceConfiguration _configuration;
 
@@ -103,10 +102,6 @@ namespace NcTalkOutlookAddIn.Services
 
                 string href = (string)responseElement.Element(Dav + "href") ?? string.Empty;
                 Uri resolved = ResolveDavUri(home, href);
-                if (IsGeneratedSystemAddressBook(resolved))
-                {
-                    continue;
-                }
 
                 result.Add(new CardDavAddressBook
                 {
@@ -169,14 +164,6 @@ namespace NcTalkOutlookAddIn.Services
         {
             XElement resourceType = prop.Element(Dav + "resourcetype");
             return resourceType != null && resourceType.Elements(CardDav + "addressbook").Any();
-        }
-
-        private static bool IsGeneratedSystemAddressBook(Uri uri)
-        {
-            return uri != null
-                && uri.AbsolutePath.IndexOf(
-                    GeneratedSystemAddressBookMarker,
-                    StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static bool IsSuccessfulStatus(string status)
