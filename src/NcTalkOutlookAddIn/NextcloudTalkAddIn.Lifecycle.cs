@@ -308,6 +308,46 @@ namespace NcTalkOutlookAddIn
                             remoteEvents));
                     }
 
+                    int repaired = await RunOnOutlookUiThreadAsync(
+                        () =>
+                        {
+                            if (_outlookApplication == null)
+                            {
+                                return 0;
+                            }
+                            int changed = 0;
+                            var guardedRepair = new CalDavBidirectionalSyncService(configuration);
+                            foreach (KeyValuePair<CalDavCalendar, IList<CalDavEventRecord>> pair in downloaded)
+                            {
+                                CalDavBidirectionalSyncResult one = guardedRepair.RepairGeneratedDuplicates(
+                                    _outlookApplication,
+                                    pair.Key,
+                                    pair.Value,
+                                    preferences.UseDefaultCalendarFolder);
+                                changed += one.RecoveryRemoteRemoved;
+                            }
+                            return changed;
+                        }).ConfigureAwait(false);
+
+                    if (repaired > 0)
+                    {
+                        DiagnosticsLogger.Log(
+                            LogCategories.Core,
+                            "CalDAV recovery repair changed " + repaired.ToString(CultureInfo.InvariantCulture)
+                            + " remote connector-generated items; refreshing calendar snapshot before sync.");
+                        downloaded.Clear();
+                        foreach (CalDavCalendar calendar in selectedCalendars)
+                        {
+                            IList<CalDavEventRecord> remoteEvents =
+                                preferences.Direction == CalDavSyncDirection.OutlookToNextcloud
+                                    ? new List<CalDavEventRecord>()
+                                    : downloader.DownloadEvents(calendar);
+                            downloaded.Add(new KeyValuePair<CalDavCalendar, IList<CalDavEventRecord>>(
+                                calendar,
+                                remoteEvents));
+                        }
+                    }
+
                     bool recoveryFindings = await RunOnOutlookUiThreadAsync(
                         () =>
                         {
@@ -325,7 +365,13 @@ namespace NcTalkOutlookAddIn
                                     pair.Key,
                                     pair.Value,
                                     preferences.UseDefaultCalendarFolder);
-                                if (scan.HasFindings)
+
+                                // Only actual recovery work blocks synchronization. Different legitimate
+                                // DAV UIDs with an identical visible fingerprint are diagnostic findings,
+                                // not a reason to stop normal synchronization.
+                                if (scan.OutlookSafeRemoveCandidates > 0
+                                    || scan.NextcloudSafeRemoveCandidates > 0
+                                    || scan.NextcloudAmbiguousGroups > 0)
                                 {
                                     found = true;
                                 }
@@ -337,7 +383,7 @@ namespace NcTalkOutlookAddIn
                     {
                         DiagnosticsLogger.Log(
                             LogCategories.Core,
-                            "CalDAV startup merge paused because recovery scan found duplicate candidates. No calendar items were deleted or modified by the recovery scan.");
+                            "CalDAV startup merge paused because actionable recovery candidates remain. No normal calendar sync was started.");
                         return;
                     }
 
@@ -369,9 +415,38 @@ namespace NcTalkOutlookAddIn
                             return total;
                         }).ConfigureAwait(false);
 
+                    CalDavBidirectionalSyncResult syncResult = await RunOnOutlookUiThreadAsync(
+                        () =>
+                        {
+                            var total = new CalDavBidirectionalSyncResult();
+                            if (_outlookApplication == null)
+                            {
+                                return total;
+                            }
+
+                            var sync = new CalDavBidirectionalSyncService(configuration);
+                            foreach (KeyValuePair<CalDavCalendar, IList<CalDavEventRecord>> pair in downloaded)
+                            {
+                                CalDavBidirectionalSyncResult one = sync.SyncLinkedEvents(
+                                    _outlookApplication,
+                                    pair.Key,
+                                    pair.Value,
+                                    preferences.UseDefaultCalendarFolder,
+                                    preferences.Direction);
+                                total.RemoteToOutlook += one.RemoteToOutlook;
+                                total.OutlookToRemote += one.OutlookToRemote;
+                                total.BaselinesEstablished += one.BaselinesEstablished;
+                                total.Conflicts += one.Conflicts;
+                                total.SkippedRecurring += one.SkippedRecurring;
+                                total.SkippedMeetings += one.SkippedMeetings;
+                                total.Failures += one.Failures;
+                            }
+                            return total;
+                        }).ConfigureAwait(false);
+
                     DiagnosticsLogger.Log(
                         LogCategories.Core,
-                        "CalDAV startup safe merge completed (calendars="
+                        "CalDAV startup synchronization completed (calendars="
                         + selectedCalendars.Count
                         + ", imported="
                         + mergeResult.ImportedToOutlook
@@ -379,19 +454,27 @@ namespace NcTalkOutlookAddIn
                         + mergeResult.UploadedToNextcloud
                         + ", matched="
                         + mergeResult.MatchedExisting
+                        + ", remoteUpdates="
+                        + syncResult.RemoteToOutlook
+                        + ", localUpdates="
+                        + syncResult.OutlookToRemote
+                        + ", baselines="
+                        + syncResult.BaselinesEstablished
+                        + ", conflicts="
+                        + syncResult.Conflicts
                         + ", recurringSkipped="
-                        + mergeResult.SkippedRecurring
+                        + (mergeResult.SkippedRecurring + syncResult.SkippedRecurring)
                         + ", meetingsSkipped="
-                        + mergeResult.SkippedMeetings
-                        + ", uploadFailures="
-                        + mergeResult.UploadFailures
+                        + (mergeResult.SkippedMeetings + syncResult.SkippedMeetings)
+                        + ", failures="
+                        + (mergeResult.UploadFailures + syncResult.Failures)
                         + ", deletions=0).");
                 }
                 catch (Exception ex)
                 {
                     DiagnosticsLogger.LogException(
                         LogCategories.Core,
-                        "CalDAV calendar setup/startup merge failed.",
+                        "CalDAV calendar setup/startup synchronization failed.",
                         ex);
                 }
             });
