@@ -18,7 +18,7 @@ namespace NcTalkOutlookAddIn.Services
         private static Timer _timer;
         private static TalkServiceConfiguration _configuration;
         private static Outlook.Application _outlookApplication;
-        private static SynchronizationContext _uiContext;
+        private static OutlookUiSynchronizationContext _uiContext;
         private static int _running;
 
         internal static void EnsureStarted(
@@ -30,14 +30,14 @@ namespace NcTalkOutlookAddIn.Services
                 return;
             }
 
-            SynchronizationContext currentContext = SynchronizationContext.Current;
             lock (SyncRoot)
             {
                 _configuration = configuration;
                 _outlookApplication = outlookApplication;
-                if (currentContext != null)
+
+                if (_uiContext == null)
                 {
-                    _uiContext = currentContext;
+                    _uiContext = new OutlookUiSynchronizationContext();
                 }
 
                 if (_timer != null)
@@ -65,12 +65,13 @@ namespace NcTalkOutlookAddIn.Services
                 if (!preferences.Enabled
                     || (!preferences.SyncCompanyDirectory && !preferences.SyncPersonalContacts))
                 {
+                    Interlocked.Exchange(ref _running, 0);
                     return;
                 }
 
                 TalkServiceConfiguration configuration;
                 Outlook.Application outlookApplication;
-                SynchronizationContext uiContext;
+                OutlookUiSynchronizationContext uiContext;
                 lock (SyncRoot)
                 {
                     configuration = _configuration;
@@ -83,6 +84,7 @@ namespace NcTalkOutlookAddIn.Services
                     || outlookApplication == null
                     || uiContext == null)
                 {
+                    Interlocked.Exchange(ref _running, 0);
                     return;
                 }
 
