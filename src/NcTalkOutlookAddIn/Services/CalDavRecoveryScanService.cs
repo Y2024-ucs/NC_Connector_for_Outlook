@@ -8,6 +8,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using NcTalkOutlookAddIn.Models;
 using NcTalkOutlookAddIn.Settings;
 using NcTalkOutlookAddIn.Utilities;
@@ -117,6 +118,7 @@ namespace NcTalkOutlookAddIn.Services
                 }
             }
 
+            int ambiguousIndex = 0;
             foreach (List<CalDavEventRecord> group in groups.Values)
             {
                 if (group.Count < 2)
@@ -139,6 +141,8 @@ namespace NcTalkOutlookAddIn.Services
                 else
                 {
                     result.NextcloudAmbiguousGroups++;
+                    ambiguousIndex++;
+                    LogNextcloudAmbiguousGroup(ambiguousIndex, group, generated, original);
                 }
             }
         }
@@ -203,7 +207,20 @@ namespace NcTalkOutlookAddIn.Services
                             list = new List<OutlookScanItem>();
                             groups[fingerprint] = list;
                         }
-                        list.Add(new OutlookScanItem { Uid = uid ?? string.Empty, Linked = linked });
+                        list.Add(new OutlookScanItem
+                        {
+                            Subject = appointment.Subject ?? string.Empty,
+                            Location = appointment.Location ?? string.Empty,
+                            Start = appointment.Start,
+                            End = appointment.End,
+                            AllDay = appointment.AllDayEvent,
+                            Recurring = appointment.IsRecurring,
+                            Meeting = appointment.MeetingStatus != Outlook.OlMeetingStatus.olNonMeeting,
+                            Uid = uid ?? string.Empty,
+                            Href = ReadUserProperty(appointment, HrefPropertyName),
+                            ETag = ReadUserProperty(appointment, ETagPropertyName),
+                            Linked = linked
+                        });
                     }
                     catch (Exception ex)
                     {
@@ -222,8 +239,10 @@ namespace NcTalkOutlookAddIn.Services
                     }
                 }
 
-                foreach (List<OutlookScanItem> group in groups.Values)
+                int ambiguousIndex = 0;
+                foreach (KeyValuePair<string, List<OutlookScanItem>> pair in groups)
                 {
+                    List<OutlookScanItem> group = pair.Value;
                     if (group.Count < 2 || !group.Any(v => v.Linked))
                     {
                         continue;
@@ -247,6 +266,8 @@ namespace NcTalkOutlookAddIn.Services
                     else
                     {
                         result.OutlookAmbiguousGroups++;
+                        ambiguousIndex++;
+                        LogOutlookAmbiguousGroup(ambiguousIndex, pair.Key, group, linkedCount, unlinkedCount);
                     }
                 }
             }
@@ -257,6 +278,88 @@ namespace NcTalkOutlookAddIn.Services
                 ComInteropScope.TryRelease(defaultCalendar, LogCategories.Core, "Failed to release CalDAV recovery default folder.");
                 ComInteropScope.TryRelease(session, LogCategories.Core, "Failed to release Outlook session after CalDAV recovery scan.");
             }
+        }
+
+        private static void LogOutlookAmbiguousGroup(
+            int index,
+            string fingerprint,
+            IList<OutlookScanItem> group,
+            int linkedCount,
+            int unlinkedCount)
+        {
+            var builder = new StringBuilder();
+            builder.Append("CalDAV recovery detail OUTLOOK ambiguous #")
+                .Append(index.ToString(CultureInfo.InvariantCulture))
+                .Append(" (count=").Append(group.Count.ToString(CultureInfo.InvariantCulture))
+                .Append(", linked=").Append(linkedCount.ToString(CultureInfo.InvariantCulture))
+                .Append(", unlinked=").Append(unlinkedCount.ToString(CultureInfo.InvariantCulture))
+                .Append(", fingerprint=").Append(Safe(fingerprint)).Append(", items=");
+
+            for (int i = 0; i < group.Count; i++)
+            {
+                OutlookScanItem item = group[i];
+                if (i > 0)
+                {
+                    builder.Append(" || ");
+                }
+                builder.Append("[").Append(i + 1)
+                    .Append(": subject=").Append(Safe(item.Subject))
+                    .Append(", location=").Append(Safe(item.Location))
+                    .Append(", start=").Append(item.Start.ToString("o", CultureInfo.InvariantCulture))
+                    .Append(", end=").Append(item.End.ToString("o", CultureInfo.InvariantCulture))
+                    .Append(", allDay=").Append(item.AllDay)
+                    .Append(", recurring=").Append(item.Recurring)
+                    .Append(", meeting=").Append(item.Meeting)
+                    .Append(", linked=").Append(item.Linked)
+                    .Append(", uid=").Append(Safe(item.Uid))
+                    .Append(", href=").Append(Safe(item.Href))
+                    .Append(", etag=").Append(Safe(item.ETag))
+                    .Append("]");
+            }
+            builder.Append(").");
+            DiagnosticsLogger.Log(LogCategories.Core, builder.ToString());
+        }
+
+        private static void LogNextcloudAmbiguousGroup(
+            int index,
+            IList<CalDavEventRecord> group,
+            int generated,
+            int original)
+        {
+            var builder = new StringBuilder();
+            CalDavEventRecord first = group.FirstOrDefault(v => v != null);
+            builder.Append("CalDAV recovery detail NEXTCLOUD ambiguous #")
+                .Append(index.ToString(CultureInfo.InvariantCulture))
+                .Append(" (count=").Append(group.Count.ToString(CultureInfo.InvariantCulture))
+                .Append(", generated=").Append(generated.ToString(CultureInfo.InvariantCulture))
+                .Append(", original=").Append(original.ToString(CultureInfo.InvariantCulture));
+            if (first != null)
+            {
+                builder.Append(", subject=").Append(Safe(first.Subject))
+                    .Append(", location=").Append(Safe(first.Location))
+                    .Append(", start=").Append(first.Start.ToString("o", CultureInfo.InvariantCulture))
+                    .Append(", end=").Append(first.End.ToString("o", CultureInfo.InvariantCulture))
+                    .Append(", allDay=").Append(first.AllDay);
+            }
+            builder.Append(", items=");
+
+            for (int i = 0; i < group.Count; i++)
+            {
+                CalDavEventRecord item = group[i];
+                if (i > 0)
+                {
+                    builder.Append(" || ");
+                }
+                builder.Append("[").Append(i + 1)
+                    .Append(": generated=").Append(IsConnectorGeneratedUid(item))
+                    .Append(", uid=").Append(Safe(item != null ? item.Uid : string.Empty))
+                    .Append(", href=").Append(Safe(item != null ? item.Href : string.Empty))
+                    .Append(", etag=").Append(Safe(item != null ? item.ETag : string.Empty))
+                    .Append(", recurring=").Append(item != null && item.Recurring)
+                    .Append("]");
+            }
+            builder.Append(").");
+            DiagnosticsLogger.Log(LogCategories.Core, builder.ToString());
         }
 
         private static CalDavRecoveryCleanupResult RunCleanup(
@@ -937,7 +1040,16 @@ namespace NcTalkOutlookAddIn.Services
 
         private sealed class OutlookScanItem
         {
+            internal string Subject { get; set; }
+            internal string Location { get; set; }
+            internal DateTime Start { get; set; }
+            internal DateTime End { get; set; }
+            internal bool AllDay { get; set; }
+            internal bool Recurring { get; set; }
+            internal bool Meeting { get; set; }
             internal string Uid { get; set; }
+            internal string Href { get; set; }
+            internal string ETag { get; set; }
             internal bool Linked { get; set; }
         }
 
