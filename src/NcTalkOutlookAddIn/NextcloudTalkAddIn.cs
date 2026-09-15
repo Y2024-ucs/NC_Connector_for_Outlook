@@ -137,7 +137,7 @@ namespace NcTalkOutlookAddIn
                     @"<customUI xmlns='http://schemas.microsoft.com/office/2009/07/customui' onLoad='OnRibbonLoad'>
   <ribbon>
     <tabs>
-      <tab id='NcTalkExplorerTab' label='{0}' insertAfterMso='TabMail'>
+      <tab id='NcTalkExplorerTab' label='{0}'>
         <group id='NcTalkExplorerGroup' label='{1}'>
           <button id='NcTalkSettingsExplorerButton'
                   label='{2}'
