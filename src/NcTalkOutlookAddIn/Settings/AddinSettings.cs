@@ -105,7 +105,12 @@ namespace NcTalkOutlookAddIn.Settings
 
         public bool TransportTlsEnable13 { get; set; }
 
-        public bool UpdateNotifyEnabled { get; set; }
+        // IBP fork: official upstream update notifications are intentionally disabled.
+        public bool UpdateNotifyEnabled
+        {
+            get { return false; }
+            set { }
+        }
 
         public string UpdateInstallId { get; set; }
 
@@ -147,8 +152,6 @@ namespace NcTalkOutlookAddIn.Settings
         public int SharingDefaultExpireDays { get; set; }
 
         public bool SharingAttachmentsAlwaysConnector { get; set; }
-
-        public bool SharingAttachmentsOfferAboveEnabled { get; set; }
 
         public int SharingAttachmentsOfferAboveMb { get; set; }
 
