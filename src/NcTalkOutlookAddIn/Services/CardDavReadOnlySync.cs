@@ -112,6 +112,12 @@ namespace NcTalkOutlookAddIn.Services
                 throw new ArgumentNullException("outlookApplication");
             }
 
+            CardDavSyncPreferences preferences = CardDavSyncPreferences.Load();
+            if (preferences.UseDefaultContactsFolder)
+            {
+                return CardDavDefaultContactsImporter.Import(outlookApplication, contacts);
+            }
+
             List<CardDavContactRecord> sourceContacts = (contacts ?? Enumerable.Empty<CardDavContactRecord>())
                 .Where(c => c != null)
                 .ToList();
