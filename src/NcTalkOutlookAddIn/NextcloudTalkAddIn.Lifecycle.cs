@@ -14,6 +14,7 @@ using Microsoft.Office.Core;
 using NcTalkOutlookAddIn.Models;
 using NcTalkOutlookAddIn.Services;
 using NcTalkOutlookAddIn.Settings;
+using NcTalkOutlookAddIn.UI;
 using NcTalkOutlookAddIn.Utilities;
 using Outlook = Microsoft.Office.Interop.Outlook;
 
@@ -132,6 +133,38 @@ namespace NcTalkOutlookAddIn
                 return;
             }
 
+            CardDavSyncPreferences preferences = CardDavSyncPreferences.Load();
+            if (!preferences.Configured)
+            {
+                try
+                {
+                    using (var selectionForm = new CardDavFirstRunForm(preferences))
+                    {
+                        DialogResult result = selectionForm.ShowDialog();
+                        selectionForm.ApplyTo(preferences, result == DialogResult.OK);
+                    }
+                    preferences.Save();
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticsLogger.LogException(
+                        LogCategories.Core,
+                        "CardDAV first-run selection failed.",
+                        ex);
+                    return;
+                }
+            }
+
+            if (!preferences.Enabled
+                || (!preferences.SyncCompanyDirectory && !preferences.SyncPersonalContacts))
+            {
+                DiagnosticsLogger.Log(LogCategories.Core, "CardDAV read-only sync disabled by user settings.");
+                return;
+            }
+
+            bool syncCompanyDirectory = preferences.SyncCompanyDirectory;
+            bool syncPersonalContacts = preferences.SyncPersonalContacts;
+
             Task.Run(async () =>
             {
                 try
@@ -140,8 +173,17 @@ namespace NcTalkOutlookAddIn
                     IList<CardDavAddressBook> addressBooks =
                         new DavDiscoveryService(configuration).DiscoverAddressBooks();
                     var contacts = new List<CardDavContactRecord>();
+                    int selectedAddressBooks = 0;
                     foreach (CardDavAddressBook addressBook in addressBooks)
                     {
+                        bool systemAddressBook = IsSystemCardDavAddressBook(addressBook);
+                        if ((systemAddressBook && !syncCompanyDirectory)
+                            || (!systemAddressBook && !syncPersonalContacts))
+                        {
+                            continue;
+                        }
+
+                        selectedAddressBooks++;
                         contacts.AddRange(sync.DownloadContacts(addressBook));
                     }
 
@@ -152,7 +194,7 @@ namespace NcTalkOutlookAddIn
                     DiagnosticsLogger.Log(
                         LogCategories.Core,
                         "CardDAV read-only startup sync completed (addressBooks="
-                        + addressBooks.Count
+                        + selectedAddressBooks
                         + ", contacts="
                         + count
                         + ").");
@@ -165,6 +207,15 @@ namespace NcTalkOutlookAddIn
                         ex);
                 }
             });
+        }
+
+        private static bool IsSystemCardDavAddressBook(CardDavAddressBook addressBook)
+        {
+            return addressBook != null
+                && !string.IsNullOrWhiteSpace(addressBook.Href)
+                && addressBook.Href.IndexOf(
+                    "z-server-generated--system",
+                    StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private void StoreUpdateCheckSettings(AddinSettings updateSettings)
