@@ -99,7 +99,7 @@ namespace NcTalkOutlookAddIn.Services
                     addressBook.Href,
                     (string)responseElement.Element(Dav + "href"));
                 contact.ETag = ((string)prop.Element(Dav + "getetag") ?? string.Empty).Trim();
-                CardDavVCardSupport.CachePhoto(contact.Href, vcard);
+                CardDavVCardSupport.CachePhoto(contact.Href, vcard, _configuration);
                 contacts.Add(contact);
             }
             return contacts;
@@ -298,11 +298,11 @@ namespace NcTalkOutlookAddIn.Services
             target.BusinessAddressPostalCode = source.BusinessAddressPostalCode ?? string.Empty;
             target.BusinessAddressCountry = source.BusinessAddressCountry ?? string.Empty;
             target.Body = source.Notes ?? string.Empty;
-            CardDavVCardSupport.ApplyPhoto(target, source.Href);
 
             WriteUserProperty(target, UidPropertyName, source.Uid);
             WriteUserProperty(target, HrefPropertyName, source.Href);
             WriteUserProperty(target, ETagPropertyName, source.ETag);
+            CardDavVCardSupport.ApplyPhoto(target, source.Href);
         }
 
         private static bool IsSystemDirectoryContact(CardDavContactRecord contact)
