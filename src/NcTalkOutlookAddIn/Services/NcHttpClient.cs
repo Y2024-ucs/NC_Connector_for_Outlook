@@ -35,6 +35,12 @@ namespace NcTalkOutlookAddIn.Services
         internal string Method { get; set; }
         internal string Url { get; set; }
         internal string Payload { get; set; }
+        // Compatibility alias for DAV callers that use Body terminology.
+        internal string Body
+        {
+            get { return Payload; }
+            set { Payload = value; }
+        }
         internal byte[] PayloadBytes { get; set; }
         internal Action<Stream> BodyWriter { get; set; }
         internal long ContentLength { get; set; }
@@ -392,4 +398,3 @@ namespace NcTalkOutlookAddIn.Services
         }
     }
 }
-
