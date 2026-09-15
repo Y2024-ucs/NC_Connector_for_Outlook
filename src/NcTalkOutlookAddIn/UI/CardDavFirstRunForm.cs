@@ -14,6 +14,8 @@ namespace NcTalkOutlookAddIn.UI
         private readonly CheckBox _enabledCheckBox = new CheckBox();
         private readonly CheckBox _companyCheckBox = new CheckBox();
         private readonly CheckBox _personalCheckBox = new CheckBox();
+        private readonly RadioButton _separateFoldersRadio = new RadioButton();
+        private readonly RadioButton _defaultContactsRadio = new RadioButton();
 
         internal CardDavFirstRunForm(CardDavSyncPreferences preferences)
         {
@@ -22,7 +24,7 @@ namespace NcTalkOutlookAddIn.UI
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
-            ClientSize = new Size(520, 250);
+            ClientSize = new Size(560, 340);
             Icon = BrandingAssets.GetAppIcon(32);
 
             var title = new Label
@@ -31,7 +33,7 @@ namespace NcTalkOutlookAddIn.UI
                 AutoSize = false,
                 Font = new Font(Font, FontStyle.Bold),
                 Location = new Point(20, 20),
-                Size = new Size(480, 36)
+                Size = new Size(520, 36)
             };
             Controls.Add(title);
 
@@ -40,7 +42,7 @@ namespace NcTalkOutlookAddIn.UI
                 Text = "Die Synchronisation ist nur lesend: Nextcloud → Outlook. Änderungen in Outlook werden nicht zurückgeschrieben.",
                 AutoSize = false,
                 Location = new Point(20, 58),
-                Size = new Size(480, 44)
+                Size = new Size(520, 44)
             };
             Controls.Add(hint);
 
@@ -63,11 +65,32 @@ namespace NcTalkOutlookAddIn.UI
             _personalCheckBox.Checked = preferences == null || preferences.SyncPersonalContacts;
             Controls.Add(_personalCheckBox);
 
+            var targetLabel = new Label
+            {
+                Text = "Ziel in Outlook:",
+                AutoSize = true,
+                Font = new Font(Font, FontStyle.Bold),
+                Location = new Point(20, 205)
+            };
+            Controls.Add(targetLabel);
+
+            _separateFoldersRadio.Text = "Eigene Nextcloud-Kontaktordner verwenden";
+            _separateFoldersRadio.AutoSize = true;
+            _separateFoldersRadio.Location = new Point(42, 230);
+            _separateFoldersRadio.Checked = preferences == null || !preferences.UseDefaultContactsFolder;
+            Controls.Add(_separateFoldersRadio);
+
+            _defaultContactsRadio.Text = "In allgemeine Outlook-Kontakte schreiben (Kontakte - Nur dieser Computer)";
+            _defaultContactsRadio.AutoSize = true;
+            _defaultContactsRadio.Location = new Point(42, 258);
+            _defaultContactsRadio.Checked = preferences != null && preferences.UseDefaultContactsFolder;
+            Controls.Add(_defaultContactsRadio);
+
             var okButton = new Button
             {
                 Text = "Übernehmen",
                 DialogResult = DialogResult.OK,
-                Location = new Point(280, 205),
+                Location = new Point(320, 295),
                 Size = new Size(105, 30)
             };
             Controls.Add(okButton);
@@ -76,7 +99,7 @@ namespace NcTalkOutlookAddIn.UI
             {
                 Text = "Nicht synchronisieren",
                 DialogResult = DialogResult.Cancel,
-                Location = new Point(395, 205),
+                Location = new Point(435, 295),
                 Size = new Size(105, 30)
             };
             Controls.Add(cancelButton);
@@ -104,12 +127,16 @@ namespace NcTalkOutlookAddIn.UI
             preferences.Enabled = _enabledCheckBox.Checked;
             preferences.SyncCompanyDirectory = _companyCheckBox.Checked;
             preferences.SyncPersonalContacts = _personalCheckBox.Checked;
+            preferences.UseDefaultContactsFolder = _defaultContactsRadio.Checked;
         }
 
         private void UpdateState()
         {
-            _companyCheckBox.Enabled = _enabledCheckBox.Checked;
-            _personalCheckBox.Enabled = _enabledCheckBox.Checked;
+            bool enabled = _enabledCheckBox.Checked;
+            _companyCheckBox.Enabled = enabled;
+            _personalCheckBox.Enabled = enabled;
+            _separateFoldersRadio.Enabled = enabled;
+            _defaultContactsRadio.Enabled = enabled;
         }
     }
 }
