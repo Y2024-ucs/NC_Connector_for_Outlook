@@ -270,32 +270,12 @@ namespace NcTalkOutlookAddIn.Services
 
             Outlook.NameSpace session = null;
             Outlook.MAPIFolder defaultContacts = null;
-            Outlook.Folders folders = null;
             int groupCount = 0;
             try
             {
                 session = outlookApplication.Session;
                 defaultContacts = session.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderContacts);
-                groupCount += ReconcileFolder(session, defaultContacts, categoriesByHref);
-
-                folders = defaultContacts.Folders;
-                int count = folders != null ? folders.Count : 0;
-                for (int index = 1; index <= count; index++)
-                {
-                    Outlook.MAPIFolder folder = null;
-                    try
-                    {
-                        folder = folders[index];
-                        if (folder != null)
-                        {
-                            groupCount += ReconcileFolder(session, folder, categoriesByHref);
-                        }
-                    }
-                    finally
-                    {
-                        ComInteropScope.TryRelease(folder, LogCategories.Core, "Failed to release CardDAV group contact subfolder.");
-                    }
-                }
+                groupCount = ReconcileFolder(session, defaultContacts, categoriesByHref);
 
                 DiagnosticsLogger.Log(
                     LogCategories.Core,
@@ -304,7 +284,6 @@ namespace NcTalkOutlookAddIn.Services
             }
             finally
             {
-                ComInteropScope.TryRelease(folders, LogCategories.Core, "Failed to release CardDAV group contact subfolders.");
                 ComInteropScope.TryRelease(defaultContacts, LogCategories.Core, "Failed to release default contacts folder after CardDAV group sync.");
                 ComInteropScope.TryRelease(session, LogCategories.Core, "Failed to release Outlook session after CardDAV group sync.");
             }
