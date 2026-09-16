@@ -164,6 +164,11 @@ namespace NcTalkOutlookAddIn.UI
                 return;
             }
 
+            if (!CardDavBackgroundSyncManager.TryBeginSync())
+            {
+                SetStatus("Die Kontaktsynchronisation läuft bereits.", false);
+                return;
+            }
             SetBusy(true);
             UpdateCardDavSettingsState();
             SetStatus("Nextcloud-Kontakte werden auf Änderungen geprüft ...", false);
@@ -192,10 +197,9 @@ namespace NcTalkOutlookAddIn.UI
                     return result;
                 });
 
-                int count = _cardDavDefaultContactsRadio.Checked
-                    ? CardDavDefaultContactsImporter.Import(_outlookApplication, contacts)
-                    : sync.ImportIntoOutlook(_outlookApplication, contacts);
-                SetStatus("Nextcloud-Kontakte synchronisiert: " + count + " geändert/neu.", false);
+                int count = sync.ImportIntoOutlook(_outlookApplication, contacts,
+                    _cardDavDefaultContactsRadio.Checked);
+                SetStatus("Nextcloud-Kontakte synchronisiert: " + count + " geändert/neu, " + sync.DeletedCount + " gelöscht.", false);
             }
             catch (Exception ex)
             {
@@ -204,6 +208,7 @@ namespace NcTalkOutlookAddIn.UI
             }
             finally
             {
+                CardDavBackgroundSyncManager.EndSync();
                 SetBusy(false);
                 UpdateCardDavSettingsState();
             }
