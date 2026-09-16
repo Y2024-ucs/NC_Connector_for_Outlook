@@ -511,7 +511,7 @@ namespace NcTalkOutlookAddIn.Services
                         continue;
                     }
 
-                    list.DLName = pair.Key;
+                    list.DLName = pair.Key + " (Verteiler)";
                     WriteGroupProperty(list, ManagedGroupPropertyName, "1");
                     WriteGroupProperty(list, ManagedGroupNamePropertyName, pair.Key);
 
