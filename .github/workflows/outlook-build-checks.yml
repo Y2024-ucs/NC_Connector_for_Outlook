@@ -274,6 +274,16 @@ jobs:
         shell: pwsh
         run: .\tools\ci\Invoke-OutlookFileLinkTransferTests.ps1
 
+  carddav-tests:
+    name: CardDAV deletion safety
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Run CardDAV safety tests
+        shell: pwsh
+        run: .\tools\ci\Invoke-OutlookCardDavTests.ps1
+
   addin-build:
     name: Add-in builds
     runs-on: windows-latest

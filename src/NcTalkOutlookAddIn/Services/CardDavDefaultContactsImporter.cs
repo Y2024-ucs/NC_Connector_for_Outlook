@@ -83,6 +83,7 @@ namespace NcTalkOutlookAddIn.Services
 
                     ApplyContact(target, source);
                     target.Save();
+                    CardDavReadOnlySync.RememberKnownEtag(source.Href, source.ETag);
                     imported++;
                 }
                 finally
@@ -247,6 +248,16 @@ namespace NcTalkOutlookAddIn.Services
         private static OutlookUiSynchronizationContext _uiContext;
         private static int _running;
 
+        internal static bool TryBeginSync()
+        {
+            return Interlocked.CompareExchange(ref _running, 1, 0) == 0;
+        }
+
+        internal static void EndSync()
+        {
+            Interlocked.Exchange(ref _running, 0);
+        }
+
         internal static void EnsureStarted(
             TalkServiceConfiguration configuration,
             Outlook.Application outlookApplication)
@@ -278,7 +289,7 @@ namespace NcTalkOutlookAddIn.Services
 
         private static void OnTimer(object state)
         {
-            if (Interlocked.CompareExchange(ref _running, 1, 0) != 0)
+            if (!TryBeginSync())
             {
                 return;
             }
