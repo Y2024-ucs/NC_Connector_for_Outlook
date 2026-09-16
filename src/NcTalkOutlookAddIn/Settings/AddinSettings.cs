@@ -55,7 +55,7 @@ namespace NcTalkOutlookAddIn.Settings
             SharingDefaultPasswordDeliveryMode = SharePasswordDeliveryMode.Plain;
             SharingDefaultExpireDays = 7;
             SharingAttachmentsAlwaysConnector = false;
-            SharingAttachmentsOfferAboveEnabled = true;
+            SharingAttachmentsOfferAboveEnabled = false;
             SharingAttachmentsOfferAboveMb = DefaultSharingAttachmentsOfferAboveMb;
             SharingAttachmentLinkTarget = null;
             ShareBlockLang = "default";
