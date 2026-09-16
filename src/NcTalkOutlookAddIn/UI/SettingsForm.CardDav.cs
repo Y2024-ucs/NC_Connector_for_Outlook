@@ -28,10 +28,29 @@ namespace NcTalkOutlookAddIn.UI
         protected override void OnLoad(EventArgs e)
         {
             base.OnLoad(e);
+
             if (_cardDavPreferences == null)
             {
                 InitializeCardDavSettingsSection();
             }
+
+            // Keep the dedicated contacts tab visible even if another settings initialization step
+            // has rebuilt or reordered the TabPages collection after InitializeGeneralTab().
+            if (!_tabControl.TabPages.Contains(_cardDavTab))
+            {
+                int insertIndex = Math.Min(1, _tabControl.TabPages.Count);
+                _tabControl.TabPages.Insert(insertIndex, _cardDavTab);
+            }
+
+            var tabNames = new List<string>();
+            foreach (TabPage page in _tabControl.TabPages)
+            {
+                tabNames.Add(page != null ? page.Text : string.Empty);
+            }
+            DiagnosticsLogger.Log(
+                LogCategories.Core,
+                "Settings tabs initialized (count=" + _tabControl.TabPages.Count
+                + ", tabs=" + string.Join(" | ", tabNames.ToArray()) + ").");
         }
 
         private void InitializeCardDavSettingsSection()
