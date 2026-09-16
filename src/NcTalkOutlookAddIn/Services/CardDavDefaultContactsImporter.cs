@@ -246,6 +246,8 @@ namespace NcTalkOutlookAddIn.Services
         private const string ManagedGroupPropertyName = "NC-CardDAV-GROUP";
         private const string ManagedGroupNamePropertyName = "NC-CardDAV-GROUP-NAME";
         private const string GeneratedSystemAddressBookMarker = "z-server-generated--system";
+        private const string PublicStringsBase = "http://schemas.microsoft.com/mapi/string/{00020329-0000-0000-C000-000000000046}/";
+        private const string ManagedGroupSnapshotProperty = PublicStringsBase + "NC-CardDAV-GROUP-SNAPSHOT";
         private static readonly XNamespace Dav = "DAV:";
         private static readonly XNamespace CardDav = "urn:ietf:params:xml:ns:carddav";
 
@@ -474,9 +476,23 @@ namespace NcTalkOutlookAddIn.Services
             IDictionary<string, List<string>> categoriesByHref)
         {
             Dictionary<string, List<GroupMember>> groups = LoadManagedContactGroups(folder, categoriesByHref);
+            string signature = BuildGroupSignature(groups);
+            string previousSignature = ReadFolderProperty(folder, ManagedGroupSnapshotProperty);
+            int existingManagedGroups = CountManagedGroups(folder);
+            if (!string.IsNullOrWhiteSpace(previousSignature)
+                && string.Equals(signature, previousSignature, StringComparison.Ordinal)
+                && existingManagedGroups == groups.Count)
+            {
+                DiagnosticsLogger.Log(
+                    LogCategories.Core,
+                    "CardDAV distribution lists unchanged (groups=" + existingManagedGroups + ").");
+                return existingManagedGroups;
+            }
+
             DeleteManagedGroups(folder);
 
             int created = 0;
+            bool complete = true;
             foreach (KeyValuePair<string, List<GroupMember>> pair in groups)
             {
                 Outlook.Items items = null;
@@ -487,6 +503,7 @@ namespace NcTalkOutlookAddIn.Services
                     list = items.Add(Outlook.OlItemType.olDistributionListItem) as Outlook.DistListItem;
                     if (list == null)
                     {
+                        complete = false;
                         continue;
                     }
 
@@ -505,12 +522,14 @@ namespace NcTalkOutlookAddIn.Services
                                 : member.DisplayName;
                             if (string.IsNullOrWhiteSpace(address))
                             {
+                                complete = false;
                                 continue;
                             }
 
                             recipient = session.CreateRecipient(address);
                             if (recipient == null || !recipient.Resolve())
                             {
+                                complete = false;
                                 DiagnosticsLogger.Log(
                                     LogCategories.Core,
                                     "CardDAV group member unresolved (group=" + pair.Key
@@ -534,6 +553,7 @@ namespace NcTalkOutlookAddIn.Services
                     }
                     else
                     {
+                        complete = false;
                         list.Delete();
                     }
                 }
@@ -543,7 +563,86 @@ namespace NcTalkOutlookAddIn.Services
                     ComInteropScope.TryRelease(items, LogCategories.Core, "Failed to release CardDAV distribution list items collection.");
                 }
             }
+
+            WriteFolderProperty(folder, ManagedGroupSnapshotProperty, complete ? signature : string.Empty);
             return created;
+        }
+
+        private static string BuildGroupSignature(IDictionary<string, List<GroupMember>> groups)
+        {
+            var lines = new List<string>();
+            foreach (KeyValuePair<string, List<GroupMember>> pair in groups)
+            {
+                var members = new List<string>();
+                foreach (GroupMember member in pair.Value)
+                {
+                    string key = !string.IsNullOrWhiteSpace(member.EmailAddress)
+                        ? member.EmailAddress.Trim().ToLowerInvariant()
+                        : (member.DisplayName ?? string.Empty).Trim().ToLowerInvariant();
+                    members.Add(key);
+                }
+                members.Sort(StringComparer.Ordinal);
+                lines.Add(pair.Key.Trim().ToLowerInvariant() + "|" + string.Join(",", members.ToArray()));
+            }
+            lines.Sort(StringComparer.Ordinal);
+            return StableHash(string.Join("\n", lines.ToArray()));
+        }
+
+        private static string StableHash(string value)
+        {
+            unchecked
+            {
+                ulong hash = 14695981039346656037UL;
+                byte[] bytes = Encoding.UTF8.GetBytes(value ?? string.Empty);
+                for (int index = 0; index < bytes.Length; index++)
+                {
+                    hash ^= bytes[index];
+                    hash *= 1099511628211UL;
+                }
+                return hash.ToString("X16");
+            }
+        }
+
+        private static int CountManagedGroups(Outlook.MAPIFolder folder)
+        {
+            int count = 0;
+            Outlook.Items items = null;
+            try
+            {
+                items = folder.Items;
+                int itemCount = items != null ? items.Count : 0;
+                for (int index = 1; index <= itemCount; index++)
+                {
+                    object raw = null;
+                    Outlook.DistListItem list = null;
+                    try
+                    {
+                        raw = items[index];
+                        list = raw as Outlook.DistListItem;
+                        if (list != null
+                            && string.Equals(ReadGroupProperty(list, ManagedGroupPropertyName), "1", StringComparison.Ordinal))
+                        {
+                            count++;
+                        }
+                    }
+                    finally
+                    {
+                        if (list != null)
+                        {
+                            ComInteropScope.TryRelease(list, LogCategories.Core, "Failed to release managed CardDAV distribution list during count.");
+                        }
+                        else
+                        {
+                            ComInteropScope.TryRelease(raw, LogCategories.Core, "Failed to release non-distribution-list during managed group count.");
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(items, LogCategories.Core, "Failed to release CardDAV items collection during managed group count.");
+            }
+            return count;
         }
 
         private static Dictionary<string, List<GroupMember>> LoadManagedContactGroups(
@@ -710,6 +809,43 @@ namespace NcTalkOutlookAddIn.Services
             {
                 ComInteropScope.TryRelease(property, LogCategories.Core, "Failed to release CardDAV group marker property after write.");
                 ComInteropScope.TryRelease(properties, LogCategories.Core, "Failed to release CardDAV group marker properties after write.");
+            }
+        }
+
+        private static string ReadFolderProperty(Outlook.MAPIFolder folder, string schemaName)
+        {
+            Outlook.PropertyAccessor accessor = null;
+            try
+            {
+                accessor = folder != null ? folder.PropertyAccessor : null;
+                if (accessor == null)
+                {
+                    return string.Empty;
+                }
+                object value = accessor.GetProperty(schemaName);
+                return value != null ? Convert.ToString(value) ?? string.Empty : string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(accessor, LogCategories.Core, "Failed to release CardDAV group snapshot property accessor.");
+            }
+        }
+
+        private static void WriteFolderProperty(Outlook.MAPIFolder folder, string schemaName, string value)
+        {
+            Outlook.PropertyAccessor accessor = null;
+            try
+            {
+                accessor = folder.PropertyAccessor;
+                accessor.SetProperty(schemaName, value ?? string.Empty);
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(accessor, LogCategories.Core, "Failed to release CardDAV group snapshot property accessor after write.");
             }
         }
 
