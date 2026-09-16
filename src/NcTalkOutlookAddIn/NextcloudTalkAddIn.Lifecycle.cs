@@ -181,11 +181,17 @@ namespace NcTalkOutlookAddIn
                         _outlookApplication,
                         syncedAddressBooks,
                         preferences);
+                    int groupFolders = CardDavContactFolderSync.Reconcile(
+                        configuration,
+                        _outlookApplication,
+                        syncedAddressBooks,
+                        preferences);
                     DiagnosticsLogger.Log(LogCategories.Core, "CardDAV sync completed (changedContacts="
-                        + count + ", deleted=" + sync.DeletedCount + ", groups=" + groups + ").");
+                        + count + ", deleted=" + sync.DeletedCount + ", groups=" + groups
+                        + ", groupFolders=" + groupFolders + ").");
                     if (userInitiated) MessageBox.Show("Nextcloud-Kontakte synchronisiert: " + count
                         + " geändert/neu, " + sync.DeletedCount + " gelöscht, " + groups
-                        + " Gruppen aktualisiert.", "Kontakte synchronisieren");
+                        + " Gruppen und " + groupFolders + " Gruppenordner aktualisiert.", "Kontakte synchronisieren");
                 }).ConfigureAwait(false);
             }
             catch (Exception ex)
