@@ -156,10 +156,12 @@ namespace NcTalkOutlookAddIn
                 Dictionary<string, string> knownEtags =
                     CardDavReadOnlySync.LoadKnownEtagsFromOutlook(_outlookApplication);
                 var sync = new CardDavReadOnlySync(configuration);
+                IList<CardDavAddressBook> syncedAddressBooks = null;
                 List<CardDavContactRecord> contacts = await Task.Run(() =>
                 {
                     IList<CardDavAddressBook> addressBooks =
                         new DavDiscoveryService(configuration).DiscoverAddressBooks();
+                    syncedAddressBooks = addressBooks;
                     var result = new List<CardDavContactRecord>();
                     foreach (CardDavAddressBook addressBook in addressBooks)
                     {
@@ -174,10 +176,16 @@ namespace NcTalkOutlookAddIn
                 {
                     if (_outlookApplication == null) return;
                     int count = sync.ImportIntoOutlook(_outlookApplication, contacts);
+                    int groups = CardDavContactGroupSync.Reconcile(
+                        configuration,
+                        _outlookApplication,
+                        syncedAddressBooks,
+                        preferences);
                     DiagnosticsLogger.Log(LogCategories.Core, "CardDAV sync completed (changedContacts="
-                        + count + ", deleted=" + sync.DeletedCount + ").");
+                        + count + ", deleted=" + sync.DeletedCount + ", groups=" + groups + ").");
                     if (userInitiated) MessageBox.Show("Nextcloud-Kontakte synchronisiert: " + count
-                        + " geändert/neu, " + sync.DeletedCount + " gelöscht.", "Kontakte synchronisieren");
+                        + " geändert/neu, " + sync.DeletedCount + " gelöscht, " + groups
+                        + " Gruppen aktualisiert.", "Kontakte synchronisieren");
                 }).ConfigureAwait(false);
             }
             catch (Exception ex)
