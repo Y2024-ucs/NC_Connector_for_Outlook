@@ -985,8 +985,14 @@ namespace NcTalkOutlookAddIn.Services
                                 outlookApplication,
                                 addressBooks,
                                 preferences);
+                            int groupFolders = CardDavContactFolderSync.Reconcile(
+                                configuration,
+                                outlookApplication,
+                                addressBooks,
+                                preferences);
                             DiagnosticsLogger.Log(LogCategories.Core, "CardDAV background sync completed (contacts=" + count
-                                + ", deleted=" + sync.DeletedCount + ", groups=" + groups + ").");
+                                + ", deleted=" + sync.DeletedCount + ", groups=" + groups
+                                + ", groupFolders=" + groupFolders + ").");
                         }
                         catch (Exception ex)
                         {
