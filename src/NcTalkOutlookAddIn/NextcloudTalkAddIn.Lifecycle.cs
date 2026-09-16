@@ -80,38 +80,20 @@ namespace NcTalkOutlookAddIn
 
         private void StartUpdateCheckIfDue()
         {
-            if (_currentSettings == null || _settingsStorage == null)
-            {
-                return;
-            }
-
-            bool hadInstallId = !string.IsNullOrWhiteSpace(_currentSettings.UpdateInstallId);
-            UpdateCheckService.EnsureInstallId(_currentSettings);
-            if (!hadInstallId)
-            {
-                _settingsStorage.Save(_currentSettings);
-            }
-
-            AddinSettings updateSettings = _currentSettings.Clone();
-            Task.Run(async () =>
-            {
-                try
-                {
-                    UpdateCheckResult result = await _updateCheckService.CheckAsync(updateSettings, false).ConfigureAwait(false);
-                    StoreUpdateCheckSettings(updateSettings);
-                    if (UpdateCheckService.ShouldNotify(updateSettings, result))
-                    {
-                        PostUpdateNotification(result);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    DiagnosticsLogger.LogException(LogCategories.Core, "Update check failed.", ex);
-                }
-            });
+            DiagnosticsLogger.Log(
+                LogCategories.Core,
+                "Upstream update check disabled for IBP fork.");
         }
 
-        private void StartCardDavContactSync()
+        private void StartCardDavContactSync(bool userInitiated = false)
+        {
+            RunCardDavContactSyncAsync(userInitiated).ContinueWith(
+                task => DiagnosticsLogger.LogException(LogCategories.Core,
+                    "CardDAV sync launch failed.", task.Exception),
+                CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+        }
+
+        private async Task RunCardDavContactSyncAsync(bool userInitiated)
         {
             if (_currentSettings == null
                 || _outlookApplication == null
@@ -129,6 +111,7 @@ namespace NcTalkOutlookAddIn
                 DiagnosticsLogger.Log(
                     LogCategories.Core,
                     "CardDAV read-only sync skipped because Nextcloud credentials are incomplete.");
+                if (userInitiated) MessageBox.Show("Bitte zuerst die Nextcloud-Zugangsdaten in den Einstellungen ergänzen.", "Kontakte synchronisieren");
                 return;
             }
 
@@ -158,54 +141,57 @@ namespace NcTalkOutlookAddIn
                 || (!preferences.SyncCompanyDirectory && !preferences.SyncPersonalContacts))
             {
                 DiagnosticsLogger.Log(LogCategories.Core, "CardDAV read-only sync disabled by user settings.");
+                if (userInitiated) MessageBox.Show("Bitte die Kontaktsynchronisation und einen Kontaktbereich in den Einstellungen aktivieren.", "Kontakte synchronisieren");
                 return;
             }
 
-            bool syncCompanyDirectory = preferences.SyncCompanyDirectory;
-            bool syncPersonalContacts = preferences.SyncPersonalContacts;
-
-            Task.Run(async () =>
+            if (!CardDavBackgroundSyncManager.TryBeginSync())
             {
-                try
+                if (userInitiated) MessageBox.Show("Die Kontaktsynchronisation läuft bereits.", "Kontakte synchronisieren");
+                return;
+            }
+            try
+            {
+                Dictionary<string, string> knownEtags =
+                    CardDavReadOnlySync.LoadKnownEtagsFromOutlook(_outlookApplication);
+                var sync = new CardDavReadOnlySync(configuration);
+                List<CardDavContactRecord> contacts = await Task.Run(() =>
                 {
-                    var sync = new CardDavReadOnlySync(configuration);
                     IList<CardDavAddressBook> addressBooks =
                         new DavDiscoveryService(configuration).DiscoverAddressBooks();
-                    var contacts = new List<CardDavContactRecord>();
-                    int selectedAddressBooks = 0;
+                    var result = new List<CardDavContactRecord>();
                     foreach (CardDavAddressBook addressBook in addressBooks)
                     {
                         bool systemAddressBook = IsSystemCardDavAddressBook(addressBook);
-                        if ((systemAddressBook && !syncCompanyDirectory)
-                            || (!systemAddressBook && !syncPersonalContacts))
-                        {
-                            continue;
-                        }
-
-                        selectedAddressBooks++;
-                        contacts.AddRange(sync.DownloadContacts(addressBook));
+                        if ((systemAddressBook && !preferences.SyncCompanyDirectory)
+                            || (!systemAddressBook && !preferences.SyncPersonalContacts)) continue;
+                        result.AddRange(sync.DownloadContacts(addressBook, knownEtags));
                     }
-
-                    int count = await RunOnOutlookUiThreadAsync(
-                        () => _outlookApplication != null
-                            ? sync.ImportIntoOutlook(_outlookApplication, contacts)
-                            : 0).ConfigureAwait(false);
-                    DiagnosticsLogger.Log(
-                        LogCategories.Core,
-                        "CardDAV read-only startup sync completed (addressBooks="
-                        + selectedAddressBooks
-                        + ", contacts="
-                        + count
-                        + ").");
-                }
-                catch (Exception ex)
+                    return result;
+                }).ConfigureAwait(false);
+                await RunOnOutlookUiThreadAsync(() =>
                 {
-                    DiagnosticsLogger.LogException(
-                        LogCategories.Core,
-                        "CardDAV read-only startup sync failed.",
-                        ex);
+                    if (_outlookApplication == null) return;
+                    int count = sync.ImportIntoOutlook(_outlookApplication, contacts);
+                    DiagnosticsLogger.Log(LogCategories.Core, "CardDAV sync completed (changedContacts="
+                        + count + ", deleted=" + sync.DeletedCount + ").");
+                    if (userInitiated) MessageBox.Show("Nextcloud-Kontakte synchronisiert: " + count
+                        + " geändert/neu, " + sync.DeletedCount + " gelöscht.", "Kontakte synchronisieren");
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsLogger.LogException(LogCategories.Core, "CardDAV sync failed.", ex);
+                if (userInitiated && _uiSynchronizationContext != null)
+                {
+                    _uiSynchronizationContext.Post(_ => MessageBox.Show("Kontaktsynchronisation fehlgeschlagen: "
+                        + ex.Message, "Kontakte synchronisieren"), null);
                 }
-            });
+            }
+            finally
+            {
+                CardDavBackgroundSyncManager.EndSync();
+            }
         }
 
         private void StartCalDavCalendarBootstrap()
@@ -689,6 +675,7 @@ namespace NcTalkOutlookAddIn
             }
 
             _ribbonUi = null;
+            _ribbonUis.Clear();
             OutlookUiSynchronizationContext uiSynchronizationContext = _uiSynchronizationContext;
             _uiSynchronizationContext = null;
             if (uiSynchronizationContext != null)

@@ -147,6 +147,7 @@
     <Compile Include="Services\NcHttpClient.cs" />
     <Compile Include="Services\DavDiscoveryService.cs" />
     <Compile Include="Services\CardDavReadOnlySync.cs" />
+    <Compile Include="Services\CardDavRemoteSnapshot.cs" />
     <Compile Include="Services\CardDavDefaultContactsImporter.cs" />
     <Compile Include="Services\CardDavSyncPreferences.cs" />
     <Compile Include="Services\CardDavVCardSupport.cs" />

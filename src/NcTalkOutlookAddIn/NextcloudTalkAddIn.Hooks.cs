@@ -180,6 +180,11 @@ namespace NcTalkOutlookAddIn
                     ex);
             }
 
+            try { explorerEvents.FolderSwitch += RefreshCardDavRibbon; }
+            catch (Exception ex)
+            {
+                DiagnosticsLogger.LogException(LogCategories.Core, "Failed to hook Explorer.FolderSwitch.", ex);
+            }
             _hookedExplorerEvents[explorerKey] = explorerEvents;
             _inlineResponseHandlers[explorerKey] = inlineResponseHandler;
             _inlineResponseCloseHandlers[explorerKey] = inlineResponseCloseHandler;
@@ -202,6 +207,11 @@ namespace NcTalkOutlookAddIn
         {
             foreach (var pair in _hookedExplorerEvents)
             {
+                try { pair.Value.FolderSwitch -= RefreshCardDavRibbon; }
+                catch (Exception ex)
+                {
+                    DiagnosticsLogger.LogException(LogCategories.Core, "Failed to unhook Explorer.FolderSwitch.", ex);
+                }
                 Outlook.ExplorerEvents_10_InlineResponseEventHandler inlineResponseHandler;
                 if (_inlineResponseHandlers.TryGetValue(pair.Key, out inlineResponseHandler))
                 {

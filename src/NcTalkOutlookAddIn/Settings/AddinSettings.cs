@@ -15,10 +15,11 @@ namespace NcTalkOutlookAddIn.Settings
         internal const int MaxIfbPort = 49151;
         internal const string DefaultFileLinkBasePath = "NC Connector";
         internal const int DefaultSharingAttachmentsOfferAboveMb = 20;
+        internal const string DefaultServerUrl = "https://vpn.ibp-optimierung.de/nextcloud";
 
         public AddinSettings()
         {
-            ServerUrl = string.Empty;
+            ServerUrl = DefaultServerUrl;
             Username = string.Empty;
             AppPassword = string.Empty;
             AuthMode = AuthenticationMode.LoginFlow;
@@ -104,7 +105,12 @@ namespace NcTalkOutlookAddIn.Settings
 
         public bool TransportTlsEnable13 { get; set; }
 
-        public bool UpdateNotifyEnabled { get; set; }
+        // IBP fork: official upstream update notifications are intentionally disabled.
+        public bool UpdateNotifyEnabled
+        {
+            get { return false; }
+            set { }
+        }
 
         public string UpdateInstallId { get; set; }
 
@@ -127,7 +133,6 @@ namespace NcTalkOutlookAddIn.Settings
         public string UpdateLastNotifiedDateUtc { get; set; }
 
         public string FileLinkBasePath { get; set; }
-
 
         public string SharingDefaultShareName { get; set; }
 

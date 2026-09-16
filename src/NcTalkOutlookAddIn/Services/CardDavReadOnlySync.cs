@@ -39,6 +39,13 @@ namespace NcTalkOutlookAddIn.Services
 
     internal sealed class CardDavReadOnlySync
     {
+        private sealed class RemoteContactVersion
+        {
+            internal string RequestHref { get; set; }
+            internal string Href { get; set; }
+            internal string ETag { get; set; }
+        }
+
         private const string UidPropertyName = "NC-CardDAV-UID";
         private const string HrefPropertyName = "NC-CardDAV-HREF";
         private const string ETagPropertyName = "NC-CardDAV-ETAG";
@@ -48,8 +55,13 @@ namespace NcTalkOutlookAddIn.Services
 
         private static readonly XNamespace Dav = "DAV:";
         private static readonly XNamespace CardDav = "urn:ietf:params:xml:ns:carddav";
+        private static readonly object KnownEtagsSyncRoot = new object();
+        private static readonly Dictionary<string, string> KnownEtags =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         private readonly TalkServiceConfiguration _configuration;
+        private readonly List<CardDavRemoteSnapshot> _completedSnapshots = new List<CardDavRemoteSnapshot>();
+        internal int DeletedCount { get; private set; }
 
         internal CardDavReadOnlySync(TalkServiceConfiguration configuration)
         {
@@ -62,18 +74,115 @@ namespace NcTalkOutlookAddIn.Services
 
         internal IList<CardDavContactRecord> DownloadContacts(CardDavAddressBook addressBook)
         {
+            Dictionary<string, string> snapshot;
+            lock (KnownEtagsSyncRoot)
+            {
+                snapshot = new Dictionary<string, string>(KnownEtags, StringComparer.OrdinalIgnoreCase);
+            }
+            return DownloadContacts(addressBook, snapshot);
+        }
+
+        internal IList<CardDavContactRecord> DownloadContacts(
+            CardDavAddressBook addressBook,
+            IDictionary<string, string> knownEtags)
+        {
             if (addressBook == null || string.IsNullOrWhiteSpace(addressBook.Href))
             {
                 throw new ArgumentException("A CardDAV address book is required.", "addressBook");
             }
 
+            CardDavRemoteSnapshot snapshot = DownloadContactVersions(addressBook);
+            IList<RemoteContactVersion> remoteVersions = snapshot.Versions.Select(pair => new RemoteContactVersion
+            {
+                RequestHref = pair.Key,
+                Href = pair.Key,
+                ETag = pair.Value
+            }).ToList();
+            var changedVersions = new List<RemoteContactVersion>();
+            int unchangedCount = 0;
+
+            foreach (RemoteContactVersion version in remoteVersions)
+            {
+                string knownEtag;
+                if (!string.IsNullOrWhiteSpace(version.Href)
+                    && !string.IsNullOrWhiteSpace(version.ETag)
+                    && knownEtags != null
+                    && knownEtags.TryGetValue(version.Href, out knownEtag)
+                    && string.Equals(
+                        NormalizeEtag(knownEtag),
+                        NormalizeEtag(version.ETag),
+                        StringComparison.Ordinal))
+                {
+                    RememberKnownEtag(version.Href, version.ETag);
+                    unchangedCount++;
+                    continue;
+                }
+                changedVersions.Add(version);
+            }
+
+            if (changedVersions.Count == 0)
+            {
+                _completedSnapshots.Add(snapshot);
+                DiagnosticsLogger.Log(
+                    LogCategories.Core,
+                    "CardDAV change scan completed (addressBook="
+                    + (addressBook.DisplayName ?? string.Empty)
+                    + ", remote=" + remoteVersions.Count
+                    + ", changed=0, unchanged=" + unchangedCount
+                    + ", payloadFetched=0). ");
+                return new List<CardDavContactRecord>();
+            }
+
+            IList<CardDavContactRecord> contacts = DownloadContactPayloads(addressBook, changedVersions);
+            var expected = new HashSet<string>(changedVersions.Select(v => v.Href), StringComparer.Ordinal);
+            if (contacts.Count != expected.Count || contacts.Any(c => !expected.Remove(c.Href)) || expected.Count != 0)
+            {
+                throw new InvalidOperationException("Incomplete CardDAV contact payload response; deletion skipped.");
+            }
+            _completedSnapshots.Add(snapshot);
+            DiagnosticsLogger.Log(
+                LogCategories.Core,
+                "CardDAV change scan completed (addressBook="
+                + (addressBook.DisplayName ?? string.Empty)
+                + ", remote=" + remoteVersions.Count
+                + ", changed=" + changedVersions.Count
+                + ", unchanged=" + unchangedCount
+                + ", payloadFetched=" + contacts.Count
+                + ").");
+            return contacts;
+        }
+
+        private CardDavRemoteSnapshot DownloadContactVersions(CardDavAddressBook addressBook)
+        {
             string body = "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
                 + "<card:addressbook-query xmlns:d=\"DAV:\" xmlns:card=\"urn:ietf:params:xml:ns:carddav\">"
-                + "<d:prop><d:getetag/><card:address-data content-type=\"text/vcard\"/></d:prop>"
-                + "<card:filter/>"
-                + "</card:addressbook-query>";
+                + "<d:prop><d:getetag/></d:prop><card:filter/></card:addressbook-query>";
+            return CardDavRemoteSnapshot.Parse(addressBook.Href,
+                SendDavRequest(addressBook.Href, "REPORT", "1", body));
+        }
 
-            XDocument document = SendDavRequest(addressBook.Href, "REPORT", "1", body);
+        private IList<CardDavContactRecord> DownloadContactPayloads(
+            CardDavAddressBook addressBook,
+            IList<RemoteContactVersion> changedVersions)
+        {
+            if (changedVersions == null || changedVersions.Count == 0)
+            {
+                return new List<CardDavContactRecord>();
+            }
+
+            var body = new StringBuilder();
+            body.Append("<?xml version=\"1.0\" encoding=\"utf-8\"?>");
+            body.Append("<card:addressbook-multiget xmlns:d=\"DAV:\" xmlns:card=\"urn:ietf:params:xml:ns:carddav\">");
+            body.Append("<d:prop><d:getetag/><card:address-data content-type=\"text/vcard\"/></d:prop>");
+            foreach (RemoteContactVersion version in changedVersions)
+            {
+                body.Append("<d:href>");
+                body.Append(EscapeXml(version.RequestHref));
+                body.Append("</d:href>");
+            }
+            body.Append("</card:addressbook-multiget>");
+
+            XDocument document = SendDavRequest(addressBook.Href, "REPORT", "1", body.ToString());
             var contacts = new List<CardDavContactRecord>();
             foreach (XElement responseElement in document.Descendants(Dav + "response"))
             {
@@ -87,6 +196,9 @@ namespace NcTalkOutlookAddIn.Services
                     continue;
                 }
 
+                string requestHref = ((string)responseElement.Element(Dav + "href") ?? string.Empty).Trim();
+                string href = ResolveUri(addressBook.Href, requestHref);
+                string etag = ((string)prop.Element(Dav + "getetag") ?? string.Empty).Trim();
                 string vcard = (string)prop.Element(CardDav + "address-data");
                 if (string.IsNullOrWhiteSpace(vcard))
                 {
@@ -95,19 +207,158 @@ namespace NcTalkOutlookAddIn.Services
 
                 vcard = CardDavVCardSupport.Normalize(vcard);
                 CardDavContactRecord contact = ParseVCard(vcard);
-                contact.Href = ResolveUri(
-                    addressBook.Href,
-                    (string)responseElement.Element(Dav + "href"));
-                contact.ETag = ((string)prop.Element(Dav + "getetag") ?? string.Empty).Trim();
+                contact.Href = href;
+                contact.ETag = etag;
                 CardDavVCardSupport.CachePhoto(contact.Href, vcard, _configuration);
                 contacts.Add(contact);
             }
             return contacts;
         }
 
+        private static string EscapeXml(string value)
+        {
+            return (value ?? string.Empty)
+                .Replace("&", "&amp;")
+                .Replace("<", "&lt;")
+                .Replace(">", "&gt;")
+                .Replace("\"", "&quot;")
+                .Replace("'", "&apos;");
+        }
+
+        internal static Dictionary<string, string> LoadKnownEtagsFromOutlook(
+            Outlook.Application outlookApplication)
+        {
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (outlookApplication == null)
+            {
+                return result;
+            }
+
+            Outlook.NameSpace session = null;
+            Outlook.MAPIFolder defaultContacts = null;
+            Outlook.Folders folders = null;
+            try
+            {
+                session = outlookApplication.Session;
+                defaultContacts = session.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderContacts);
+                CollectKnownEtagsFromFolder(defaultContacts, result);
+
+                folders = defaultContacts.Folders;
+                int count = folders.Count;
+                for (int index = 1; index <= count; index++)
+                {
+                    Outlook.MAPIFolder folder = null;
+                    try
+                    {
+                        folder = folders[index];
+                        if (folder != null)
+                        {
+                            CollectKnownEtagsFromFolder(folder, result);
+                        }
+                    }
+                    finally
+                    {
+                        ComInteropScope.TryRelease(folder, LogCategories.Core, "Failed to release CardDAV contacts subfolder during ETag scan.");
+                    }
+                }
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(folders, LogCategories.Core, "Failed to release CardDAV contacts subfolders during ETag scan.");
+                ComInteropScope.TryRelease(defaultContacts, LogCategories.Core, "Failed to release default contacts folder during CardDAV ETag scan.");
+                ComInteropScope.TryRelease(session, LogCategories.Core, "Failed to release Outlook session after CardDAV ETag scan.");
+            }
+
+            lock (KnownEtagsSyncRoot)
+            {
+                KnownEtags.Clear();
+                foreach (KeyValuePair<string, string> pair in result)
+                {
+                    KnownEtags[pair.Key] = pair.Value;
+                }
+            }
+
+            DiagnosticsLogger.Log(
+                LogCategories.Core,
+                "CardDAV local ETag cache initialized (contacts=" + result.Count + ").");
+            return result;
+        }
+
+        private static void CollectKnownEtagsFromFolder(
+            Outlook.MAPIFolder folder,
+            IDictionary<string, string> result)
+        {
+            if (folder == null || result == null)
+            {
+                return;
+            }
+
+            Outlook.Items items = null;
+            try
+            {
+                items = folder.Items;
+                int count = items.Count;
+                for (int index = 1; index <= count; index++)
+                {
+                    object raw = null;
+                    Outlook.ContactItem contact = null;
+                    try
+                    {
+                        raw = items[index];
+                        contact = raw as Outlook.ContactItem;
+                        if (contact == null)
+                        {
+                            continue;
+                        }
+
+                        string href = ReadUserProperty(contact, HrefPropertyName);
+                        string etag = ReadUserProperty(contact, ETagPropertyName);
+                        if (!string.IsNullOrWhiteSpace(href)
+                            && !string.IsNullOrWhiteSpace(etag))
+                        {
+                            result[href.Trim()] = etag.Trim();
+                        }
+                    }
+                    finally
+                    {
+                        if (contact != null)
+                        {
+                            ComInteropScope.TryRelease(contact, LogCategories.Core, "Failed to release CardDAV contact during ETag scan.");
+                        }
+                        else
+                        {
+                            ComInteropScope.TryRelease(raw, LogCategories.Core, "Failed to release non-contact item during CardDAV ETag scan.");
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(items, LogCategories.Core, "Failed to release CardDAV contact items during ETag scan.");
+            }
+        }
+
+        internal static void RememberKnownEtag(string href, string etag)
+        {
+            if (string.IsNullOrWhiteSpace(href) || string.IsNullOrWhiteSpace(etag))
+            {
+                return;
+            }
+            lock (KnownEtagsSyncRoot)
+            {
+                KnownEtags[href.Trim()] = etag.Trim();
+            }
+        }
+
+        private static string NormalizeEtag(string value)
+        {
+            return (value ?? string.Empty).Trim();
+        }
+
         internal int ImportIntoOutlook(
             Outlook.Application outlookApplication,
-            IEnumerable<CardDavContactRecord> contacts)
+            IEnumerable<CardDavContactRecord> contacts,
+            bool? useDefaultContactsFolder = null)
         {
             if (outlookApplication == null)
             {
@@ -117,9 +368,11 @@ namespace NcTalkOutlookAddIn.Services
             CardDavBackgroundSyncManager.EnsureStarted(_configuration, outlookApplication);
 
             CardDavSyncPreferences preferences = CardDavSyncPreferences.Load();
-            if (preferences.UseDefaultContactsFolder)
+            if (useDefaultContactsFolder ?? preferences.UseDefaultContactsFolder)
             {
-                return CardDavDefaultContactsImporter.Import(outlookApplication, contacts);
+                int imported = CardDavDefaultContactsImporter.Import(outlookApplication, contacts);
+                ReconcileDeletedContacts(outlookApplication);
+                return imported;
             }
 
             List<CardDavContactRecord> sourceContacts = (contacts ?? Enumerable.Empty<CardDavContactRecord>())
@@ -163,13 +416,14 @@ namespace NcTalkOutlookAddIn.Services
                     LogCategories.Core,
                     "CardDAV read-only sync imported/updated "
                     + imported
-                    + " contacts (instance="
+                    + " changed contacts (instance="
                     + instanceName
                     + ", company="
                     + companyContacts.Count
                     + ", personal="
                     + personalContacts.Count
                     + ").");
+                ReconcileDeletedContacts(outlookApplication);
                 return imported;
             }
             finally
@@ -179,6 +433,78 @@ namespace NcTalkOutlookAddIn.Services
                 ComInteropScope.TryRelease(defaultContacts, LogCategories.Core, "Failed to release Outlook contacts folder.");
                 ComInteropScope.TryRelease(session, LogCategories.Core, "Failed to release Outlook session after CardDAV sync.");
             }
+        }
+
+        internal void ReconcileDeletedContacts(Outlook.Application application)
+        {
+            DeletedCount = 0;
+            if (_completedSnapshots.Count == 0) return;
+            Outlook.NameSpace session = null;
+            Outlook.MAPIFolder root = null;
+            Outlook.Folders folders = null;
+            try
+            {
+                session = application.Session;
+                root = session.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderContacts);
+                DeletedCount += ReconcileFolder(root);
+                folders = root.Folders;
+                for (int index = 1; index <= folders.Count; index++)
+                {
+                    Outlook.MAPIFolder folder = null;
+                    try
+                    {
+                        folder = folders[index];
+                        if (folder.DefaultItemType == Outlook.OlItemType.olContactItem)
+                            DeletedCount += ReconcileFolder(folder);
+                    }
+                    finally
+                    {
+                        ComInteropScope.TryRelease(folder, LogCategories.Core, "Failed to release reconciled contacts folder.");
+                    }
+                }
+                DiagnosticsLogger.Log(LogCategories.Core, "CardDAV reconciliation completed (deleted=" + DeletedCount + ").");
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(folders, LogCategories.Core, "Failed to release reconciliation folders.");
+                ComInteropScope.TryRelease(root, LogCategories.Core, "Failed to release reconciliation root.");
+                ComInteropScope.TryRelease(session, LogCategories.Core, "Failed to release reconciliation session.");
+            }
+        }
+
+        private int ReconcileFolder(Outlook.MAPIFolder folder)
+        {
+            Outlook.Items items = null;
+            int deleted = 0;
+            try
+            {
+                items = folder.Items;
+                // Outlook collections are one-based; reverse traversal survives Delete().
+                for (int index = items.Count; index >= 1; index--)
+                {
+                    object raw = null;
+                    try
+                    {
+                        raw = items[index];
+                        var contact = raw as Outlook.ContactItem;
+                        if (contact == null) continue;
+                        string href = ReadUserProperty(contact, HrefPropertyName).Trim();
+                        if (!_completedSnapshots.Any(snapshot => snapshot.IsMissing(href))) continue;
+                        contact.Delete();
+                        deleted++;
+                        lock (KnownEtagsSyncRoot) { KnownEtags.Remove(href); }
+                    }
+                    finally
+                    {
+                        ComInteropScope.TryRelease(raw, LogCategories.Core, "Failed to release reconciled contact.");
+                    }
+                }
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(items, LogCategories.Core, "Failed to release reconciliation items.");
+            }
+            return deleted;
         }
 
         private static int ImportIntoFolder(
@@ -216,8 +542,19 @@ namespace NcTalkOutlookAddIn.Services
                         continue;
                     }
 
+                    string currentEtag = ReadUserProperty(target, ETagPropertyName);
+                    if (!string.IsNullOrWhiteSpace(source.ETag)
+                        && string.Equals(
+                            NormalizeEtag(currentEtag),
+                            NormalizeEtag(source.ETag),
+                            StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
                     ApplyContact(target, source);
                     target.Save();
+                    RememberKnownEtag(source.Href, source.ETag);
                     imported++;
                 }
                 finally
@@ -481,12 +818,18 @@ namespace NcTalkOutlookAddIn.Services
             });
 
             if (!response.HasHttpResponse
-                || (int)response.StatusCode < 200
-                || (int)response.StatusCode >= 300)
+                || (int)response.StatusCode != 207)
             {
                 throw new InvalidOperationException("CardDAV request failed for " + url + ".");
             }
-            return XDocument.Parse(response.ResponseText ?? string.Empty);
+            XDocument document = XDocument.Parse(response.ResponseText ?? string.Empty);
+            if (document.Root == null || document.Root.Name != Dav + "multistatus"
+                || document.Descendants(Dav + "error").Any()
+                || document.Descendants(Dav + "status").Any(status => !IsSuccessfulStatus(status.Value)))
+            {
+                throw new InvalidOperationException("Incomplete or failed CardDAV response; deletion skipped.");
+            }
+            return document;
         }
 
         private static CardDavContactRecord ParseVCard(string raw)

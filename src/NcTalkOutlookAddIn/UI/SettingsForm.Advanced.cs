@@ -117,14 +117,16 @@ namespace NcTalkOutlookAddIn.UI
             PopulateLanguageOverrideCombo(_eventDescriptionLangCombo, "talk");
             _advancedTab.Controls.Add(_eventDescriptionLangCombo);
 
-            _updateSettingsGroup.Text = Strings.UpdateSettingsHeading;
+            _updateSettingsGroup.Text = "Updates (IBP-Abspaltung – deaktiviert)";
             _updateSettingsGroup.Location = new Point(24, langTop + 72);
             _updateSettingsGroup.Size = new Size(520, 286);
             _advancedTab.Controls.Add(_updateSettingsGroup);
 
-            _updateNotifyCheckBox.Text = Strings.UpdateNotifyLabel;
+            _updateNotifyCheckBox.Text = "Offizielle Update-Benachrichtigungen deaktiviert";
             _updateNotifyCheckBox.AutoSize = true;
             _updateNotifyCheckBox.Location = new Point(12, 24);
+            _updateNotifyCheckBox.Checked = false;
+            _updateNotifyCheckBox.Enabled = false;
             _updateSettingsGroup.Controls.Add(_updateNotifyCheckBox);
 
             _updateInstalledVersionLabel.AutoSize = false;
@@ -145,14 +147,14 @@ namespace NcTalkOutlookAddIn.UI
             _updateCheckButton.Text = Strings.UpdateCheckNowButton;
             _updateCheckButton.Location = new Point(12, 130);
             _updateCheckButton.Size = new Size(120, 28);
-            _updateCheckButton.Click += OnUpdateCheckButtonClick;
+            _updateCheckButton.Enabled = false;
             _updateSettingsGroup.Controls.Add(_updateCheckButton);
 
-            _updateDownloadLink.Text = Strings.UpdateDownloadLink;
+            _updateDownloadLink.Text = "Upstream-Download deaktiviert";
             _updateDownloadLink.Location = new Point(148, 136);
             _updateDownloadLink.AutoSize = false;
             _updateDownloadLink.Size = new Size(320, 22);
-            _updateDownloadLink.LinkClicked += OnUpdateDownloadLinkClicked;
+            _updateDownloadLink.Enabled = false;
             _updateSettingsGroup.Controls.Add(_updateDownloadLink);
 
             _updateChangelogLabel.Text = Strings.UpdateChangelogHeading;
@@ -165,6 +167,7 @@ namespace NcTalkOutlookAddIn.UI
             _updateChangelogTextBox.ScrollBars = ScrollBars.Vertical;
             _updateChangelogTextBox.Location = new Point(12, 186);
             _updateChangelogTextBox.Size = new Size(480, 86);
+            _updateChangelogTextBox.Text = "Die offizielle Update-Funktion ist in der IBP-Abspaltung deaktiviert, damit keine Upstream-Version die IBP-Anpassungen überschreibt.";
             _updateSettingsGroup.Controls.Add(_updateChangelogTextBox);
 
             _tlsSettingsGroup.Text = Strings.AdvancedTlsHeading;
@@ -200,30 +203,22 @@ namespace NcTalkOutlookAddIn.UI
 
         private void UpdateUpdateCheckSection()
         {
-            UpdateCheckResult result = UpdateCheckService.BuildCachedResult(Result);
             string installedVersion = AddinVersionInfo.GetVersion();
             if (string.IsNullOrWhiteSpace(installedVersion))
             {
                 installedVersion = Strings.TalkVersionUnknown;
             }
-            string latestVersion = string.IsNullOrWhiteSpace(result.LatestVersion)
-                ? Strings.UpdateNotChecked
-                : result.LatestVersion.Trim();
-            string lastChecked = FormatUpdateCheckedAt(Result != null ? Result.UpdateLastCheckedAtUtc : string.Empty);
 
+            _updateNotifyCheckBox.Checked = false;
+            _updateNotifyCheckBox.Enabled = false;
             _updateInstalledVersionLabel.Text = string.Format(Strings.UpdateInstalledVersionFormat, installedVersion);
-            _updateLatestVersionLabel.Text = string.Format(Strings.UpdateLatestVersionFormat, latestVersion);
-            _updateLastCheckedLabel.Text = string.Format(Strings.UpdateLastCheckedFormat, lastChecked);
-
-            _updateOpenUrl = result.UpdateAvailable ? UpdateCheckService.GetPreferredOpenUrl(result) : string.Empty;
-            _updateDownloadLink.Text = string.IsNullOrWhiteSpace(_updateOpenUrl)
-                ? Strings.UpdateNoDownloadLink
-                : Strings.UpdateDownloadLink;
-            _updateDownloadLink.Enabled = !_isBusy && !string.IsNullOrWhiteSpace(_updateOpenUrl);
-
-            _updateChangelogTextBox.Text = string.IsNullOrWhiteSpace(result.ChangelogText)
-                ? Strings.UpdateChangelogEmpty
-                : result.ChangelogText;
+            _updateLatestVersionLabel.Text = "Neueste Version: Upstream-Prüfung deaktiviert";
+            _updateLastCheckedLabel.Text = "Letzte Prüfung: deaktiviert";
+            _updateOpenUrl = string.Empty;
+            _updateDownloadLink.Text = "Upstream-Download deaktiviert";
+            _updateDownloadLink.Enabled = false;
+            _updateCheckButton.Enabled = false;
+            _updateChangelogTextBox.Text = "Die offizielle Update-Funktion ist in der IBP-Abspaltung deaktiviert, damit keine Upstream-Version die IBP-Anpassungen überschreibt.";
         }
 
         private static string FormatUpdateCheckedAt(string value)
@@ -244,42 +239,13 @@ namespace NcTalkOutlookAddIn.UI
 
         private async void OnUpdateCheckButtonClick(object sender, EventArgs e)
         {
-            if (_isBusy)
-            {
-                return;
-            }
-
-            SetBusy(true);
-            SetStatus(Strings.UpdateCheckRunning, false);
-            try
-            {
-                var service = new UpdateCheckService();
-                UpdateCheckResult result = await service.CheckAsync(Result, true);
-                SetStatus(result != null && result.UpdateAvailable ? string.Format(Strings.UpdateAvailableStatusFormat, result.LatestVersion) : Strings.UpdateNoUpdateAvailable, false);
-            }
-            catch (Exception ex)
-            {
-                DiagnosticsLogger.LogException(LogCategories.Core, "Manual update check failed.", ex);
-                SetStatus(string.Format(Strings.UpdateCheckFailedFormat, ex.Message), true);
-            }
-            finally
-            {
-                SetBusy(false);
-                UpdateUpdateCheckSection();
-            }
+            await Task.Yield();
+            SetStatus("Offizielle Updates sind in der IBP-Abspaltung deaktiviert.", false);
         }
 
         private void OnUpdateDownloadLinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
         {
-            if (string.IsNullOrWhiteSpace(_updateOpenUrl))
-            {
-                return;
-            }
-
-            BrowserLauncher.OpenUrl(
-                _updateOpenUrl,
-                LogCategories.Core,
-                "Failed to open update download URL.");
+            SetStatus("Offizielle Updates sind in der IBP-Abspaltung deaktiviert.", false);
         }
 
         private void UpdateTlsOptionsState()
