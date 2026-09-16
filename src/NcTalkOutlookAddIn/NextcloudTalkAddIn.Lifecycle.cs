@@ -86,7 +86,15 @@ namespace NcTalkOutlookAddIn
                 "Upstream update check disabled for IBP fork.");
         }
 
-        private async void StartCardDavContactSync(bool userInitiated = false)
+        private void StartCardDavContactSync(bool userInitiated = false)
+        {
+            RunCardDavContactSyncAsync(userInitiated).ContinueWith(
+                task => DiagnosticsLogger.LogException(LogCategories.Core,
+                    "CardDAV sync launch failed.", task.Exception),
+                CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+        }
+
+        private async Task RunCardDavContactSyncAsync(bool userInitiated)
         {
             if (_currentSettings == null
                 || _outlookApplication == null
