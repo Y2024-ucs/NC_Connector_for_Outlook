@@ -85,12 +85,15 @@ namespace NcTalkOutlookAddIn.Services
     internal static class CardDavContactFolderSync
     {
         private const string HrefPropertyName = "NC-CardDAV-HREF";
+        private const string ETagPropertyName = "NC-CardDAV-ETAG";
         private const string GroupCopyPropertyName = "NC-CardDAV-GROUP-COPY";
         private const string GroupCopyNamePropertyName = "NC-CardDAV-GROUP-COPY-NAME";
+        private const string ManagedDistributionListPropertyName = "NC-CardDAV-GROUP";
         private const string GeneratedSystemAddressBookMarker = "z-server-generated--system";
         private const string PublicStringsBase = "http://schemas.microsoft.com/mapi/string/{00020329-0000-0000-C000-000000000046}/";
         private const string ManagedFolderProperty = PublicStringsBase + "NC-CardDAV-GROUP-FOLDER";
         private const string ManagedFolderNameProperty = PublicStringsBase + "NC-CardDAV-GROUP-FOLDER-NAME";
+        private const string ManagedFolderSignatureProperty = PublicStringsBase + "NC-CardDAV-GROUP-FOLDER-SIGNATURE";
         private static readonly XNamespace Dav = "DAV:";
         private static readonly XNamespace CardDav = "urn:ietf:params:xml:ns:carddav";
 
@@ -98,6 +101,7 @@ namespace NcTalkOutlookAddIn.Services
         {
             internal string EntryId { get; set; }
             internal string StoreId { get; set; }
+            internal string ETag { get; set; }
         }
 
         internal static int Reconcile(
@@ -141,13 +145,37 @@ namespace NcTalkOutlookAddIn.Services
                         groupFolder = EnsureManagedGroupFolder(defaultContacts, groupName);
                         if (groupFolder == null) continue;
 
+                        DeleteManagedDistributionLists(groupFolder);
+
+                        string signature = BuildGroupFolderSignature(groupName, sourceContacts, categoriesByHref);
+                        string previousSignature = ReadFolderProperty(groupFolder, ManagedFolderSignatureProperty);
+                        if (!string.IsNullOrWhiteSpace(signature)
+                            && string.Equals(signature, previousSignature, StringComparison.Ordinal))
+                        {
+                            folderCount++;
+                            DiagnosticsLogger.Log(
+                                LogCategories.Core,
+                                "CardDAV contact group folder unchanged (group=" + groupName + ").");
+                            continue;
+                        }
+
                         ClearManagedCopies(groupFolder);
+                        int expected = CountGroupMembers(groupName, categoriesByHref);
                         int copied = CopyGroupMembers(session, groupFolder, groupName, sourceContacts, categoriesByHref);
+                        if (copied == expected)
+                        {
+                            WriteFolderProperty(groupFolder, ManagedFolderSignatureProperty, signature);
+                        }
+                        else
+                        {
+                            WriteFolderProperty(groupFolder, ManagedFolderSignatureProperty, string.Empty);
+                        }
+
                         folderCount++;
                         DiagnosticsLogger.Log(
                             LogCategories.Core,
                             "CardDAV contact group folder synchronized (group=" + groupName
-                            + ", contacts=" + copied + ").");
+                            + ", contacts=" + copied + ", expected=" + expected + ").");
                     }
                     finally
                     {
@@ -231,7 +259,8 @@ namespace NcTalkOutlookAddIn.Services
                         result[href.Trim()] = new SourceContactReference
                         {
                             EntryId = contact.EntryID,
-                            StoreId = storeId
+                            StoreId = storeId,
+                            ETag = ReadContactProperty(contact, ETagPropertyName)
                         };
                     }
                     finally
@@ -306,6 +335,61 @@ namespace NcTalkOutlookAddIn.Services
             return copiedCount;
         }
 
+        private static int CountGroupMembers(
+            string groupName,
+            IDictionary<string, List<string>> categoriesByHref)
+        {
+            int count = 0;
+            foreach (KeyValuePair<string, List<string>> pair in categoriesByHref)
+            {
+                if (pair.Value != null && pair.Value.Any(category => string.Equals(
+                    (category ?? string.Empty).Trim(), groupName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        private static string BuildGroupFolderSignature(
+            string groupName,
+            IDictionary<string, SourceContactReference> sourceContacts,
+            IDictionary<string, List<string>> categoriesByHref)
+        {
+            var parts = new List<string>();
+            foreach (KeyValuePair<string, List<string>> pair in categoriesByHref)
+            {
+                if (pair.Value == null || !pair.Value.Any(category => string.Equals(
+                    (category ?? string.Empty).Trim(), groupName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                SourceContactReference sourceReference;
+                string etag = sourceContacts.TryGetValue(pair.Key, out sourceReference) && sourceReference != null
+                    ? sourceReference.ETag ?? string.Empty
+                    : string.Empty;
+                parts.Add((pair.Key ?? string.Empty).Trim().ToLowerInvariant() + "|" + etag.Trim());
+            }
+            parts.Sort(StringComparer.Ordinal);
+            return StableHash(groupName + "\n" + string.Join("\n", parts.ToArray()));
+        }
+
+        private static string StableHash(string value)
+        {
+            unchecked
+            {
+                ulong hash = 14695981039346656037UL;
+                byte[] bytes = Encoding.UTF8.GetBytes(value ?? string.Empty);
+                for (int index = 0; index < bytes.Length; index++)
+                {
+                    hash ^= bytes[index];
+                    hash *= 1099511628211UL;
+                }
+                return hash.ToString("X16");
+            }
+        }
+
         private static void ClearManagedCopies(Outlook.MAPIFolder folder)
         {
             Outlook.Items items = null;
@@ -342,6 +426,45 @@ namespace NcTalkOutlookAddIn.Services
             finally
             {
                 ComInteropScope.TryRelease(items, LogCategories.Core, "Failed to release CardDAV group folder items during cleanup.");
+            }
+        }
+
+        private static void DeleteManagedDistributionLists(Outlook.MAPIFolder folder)
+        {
+            Outlook.Items items = null;
+            try
+            {
+                items = folder.Items;
+                for (int index = items.Count; index >= 1; index--)
+                {
+                    object raw = null;
+                    Outlook.DistListItem list = null;
+                    try
+                    {
+                        raw = items[index];
+                        list = raw as Outlook.DistListItem;
+                        if (list != null
+                            && string.Equals(ReadDistributionListProperty(list, ManagedDistributionListPropertyName), "1", StringComparison.Ordinal))
+                        {
+                            list.Delete();
+                        }
+                    }
+                    finally
+                    {
+                        if (list != null)
+                        {
+                            ComInteropScope.TryRelease(list, LogCategories.Core, "Failed to release stale CardDAV group distribution list.");
+                        }
+                        else
+                        {
+                            ComInteropScope.TryRelease(raw, LogCategories.Core, "Failed to release non-distribution-list during stale CardDAV group cleanup.");
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(items, LogCategories.Core, "Failed to release CardDAV group folder items during distribution-list cleanup.");
             }
         }
 
@@ -491,6 +614,23 @@ namespace NcTalkOutlookAddIn.Services
             {
                 ComInteropScope.TryRelease(property, LogCategories.Core, "Failed to release CardDAV group folder contact property.");
                 ComInteropScope.TryRelease(properties, LogCategories.Core, "Failed to release CardDAV group folder contact properties.");
+            }
+        }
+
+        private static string ReadDistributionListProperty(Outlook.DistListItem item, string name)
+        {
+            Outlook.UserProperties properties = null;
+            Outlook.UserProperty property = null;
+            try
+            {
+                properties = item != null ? item.UserProperties : null;
+                property = properties != null ? properties.Find(name, true) : null;
+                return property != null ? Convert.ToString(property.Value) ?? string.Empty : string.Empty;
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(property, LogCategories.Core, "Failed to release CardDAV distribution-list property.");
+                ComInteropScope.TryRelease(properties, LogCategories.Core, "Failed to release CardDAV distribution-list properties.");
             }
         }
 
