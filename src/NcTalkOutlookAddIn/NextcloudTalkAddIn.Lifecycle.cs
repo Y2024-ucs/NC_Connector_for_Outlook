@@ -25,7 +25,118 @@ namespace NcTalkOutlookAddIn
     public sealed partial class NextcloudTalkAddIn
     {
         private static readonly TimeSpan CardDavStartupDelay = TimeSpan.FromSeconds(15);
+        private static readonly TimeSpan CardDavUiPhaseYieldDelay = TimeSpan.FromMilliseconds(75);
         private Timer _cardDavStartupDelayTimer;
+        private CardDavSyncStatusForm _cardDavSyncStatusForm;
+
+        private sealed class CardDavSyncStatusForm : Form
+        {
+            private readonly Label _statusLabel;
+            private readonly ProgressBar _progressBar;
+            private readonly System.Windows.Forms.Timer _hideTimer;
+
+            internal CardDavSyncStatusForm()
+            {
+                FormBorderStyle = FormBorderStyle.FixedToolWindow;
+                ShowInTaskbar = false;
+                StartPosition = FormStartPosition.Manual;
+                TopMost = false;
+                MaximizeBox = false;
+                MinimizeBox = false;
+                ControlBox = false;
+                Width = 390;
+                Height = 92;
+                Text = "NC Connector";
+
+                _statusLabel = new Label
+                {
+                    AutoSize = false,
+                    Left = 12,
+                    Top = 10,
+                    Width = 356,
+                    Height = 34,
+                    TextAlign = System.Drawing.ContentAlignment.MiddleLeft
+                };
+                Controls.Add(_statusLabel);
+
+                _progressBar = new ProgressBar
+                {
+                    Left = 12,
+                    Top = 51,
+                    Width = 356,
+                    Height = 15,
+                    Style = ProgressBarStyle.Marquee,
+                    MarqueeAnimationSpeed = 24
+                };
+                Controls.Add(_progressBar);
+
+                _hideTimer = new System.Windows.Forms.Timer();
+                _hideTimer.Tick += delegate
+                {
+                    _hideTimer.Stop();
+                    Hide();
+                };
+            }
+
+            protected override bool ShowWithoutActivation
+            {
+                get { return true; }
+            }
+
+            protected override CreateParams CreateParams
+            {
+                get
+                {
+                    const int WS_EX_NOACTIVATE = 0x08000000;
+                    CreateParams parameters = base.CreateParams;
+                    parameters.ExStyle |= WS_EX_NOACTIVATE;
+                    return parameters;
+                }
+            }
+
+            internal void SetStatus(string text, bool busy)
+            {
+                _hideTimer.Stop();
+                _statusLabel.Text = text ?? string.Empty;
+                _progressBar.Style = busy ? ProgressBarStyle.Marquee : ProgressBarStyle.Continuous;
+                if (!busy)
+                {
+                    _progressBar.Minimum = 0;
+                    _progressBar.Maximum = 100;
+                    _progressBar.Value = 100;
+                }
+                PositionBottomRight();
+                if (!Visible)
+                {
+                    Show();
+                }
+                Refresh();
+            }
+
+            internal void HideAfter(int milliseconds)
+            {
+                _hideTimer.Stop();
+                _hideTimer.Interval = Math.Max(250, milliseconds);
+                _hideTimer.Start();
+            }
+
+            private void PositionBottomRight()
+            {
+                System.Drawing.Rectangle workingArea = Screen.PrimaryScreen.WorkingArea;
+                Left = workingArea.Right - Width - 18;
+                Top = workingArea.Bottom - Height - 18;
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing)
+                {
+                    _hideTimer.Stop();
+                    _hideTimer.Dispose();
+                }
+                base.Dispose(disposing);
+            }
+        }
 
         public void OnConnection(object application, ext_ConnectMode connectMode, object addInInst, ref Array custom)
         {
@@ -181,6 +292,44 @@ namespace NcTalkOutlookAddIn
                 "CardDAV startup sync scheduled (delaySeconds=15).");
         }
 
+        private void ShowCardDavSyncStatus(string text)
+        {
+            if (_cardDavSyncStatusForm == null || _cardDavSyncStatusForm.IsDisposed)
+            {
+                _cardDavSyncStatusForm = new CardDavSyncStatusForm();
+            }
+            _cardDavSyncStatusForm.SetStatus(text, true);
+        }
+
+        private void CompleteCardDavSyncStatus(string text, int hideAfterMilliseconds)
+        {
+            if (_cardDavSyncStatusForm == null || _cardDavSyncStatusForm.IsDisposed)
+            {
+                _cardDavSyncStatusForm = new CardDavSyncStatusForm();
+            }
+            _cardDavSyncStatusForm.SetStatus(text, false);
+            _cardDavSyncStatusForm.HideAfter(hideAfterMilliseconds);
+        }
+
+        private void DisposeCardDavSyncStatus()
+        {
+            CardDavSyncStatusForm statusForm = _cardDavSyncStatusForm;
+            _cardDavSyncStatusForm = null;
+            if (statusForm == null)
+            {
+                return;
+            }
+            try
+            {
+                statusForm.Close();
+                statusForm.Dispose();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsLogger.LogException(LogCategories.Core, "Failed to dispose CardDAV sync status window.", ex);
+            }
+        }
+
         private void StartCardDavContactSync(bool userInitiated = false)
         {
             RunCardDavContactSyncAsync(userInitiated).ContinueWith(
@@ -248,10 +397,14 @@ namespace NcTalkOutlookAddIn
             }
             try
             {
+                ShowCardDavSyncStatus("NC Connector: Kontakte werden geprüft ...");
+
                 Dictionary<string, string> knownEtags =
                     CardDavReadOnlySync.LoadKnownEtagsFromOutlook(_outlookApplication);
                 var sync = new CardDavReadOnlySync(configuration);
                 IList<CardDavAddressBook> syncedAddressBooks = null;
+
+                ShowCardDavSyncStatus("NC Connector: Serverdaten werden geladen ...");
                 List<CardDavContactRecord> contacts = await Task.Run(() =>
                 {
                     IList<CardDavAddressBook> addressBooks =
@@ -267,23 +420,52 @@ namespace NcTalkOutlookAddIn
                     }
                     return result;
                 }).ConfigureAwait(false);
+
+                int count = 0;
+                int groups = 0;
+                int groupFolders = 0;
+
                 await RunOnOutlookUiThreadAsync(() =>
                 {
                     if (_outlookApplication == null) return;
-                    int count = sync.ImportIntoOutlook(_outlookApplication, contacts);
-                    int groups = CardDavContactGroupSync.Reconcile(
+                    ShowCardDavSyncStatus("NC Connector: Kontakte werden aktualisiert ...");
+                    count = sync.ImportIntoOutlook(_outlookApplication, contacts);
+                }).ConfigureAwait(false);
+
+                await Task.Delay(CardDavUiPhaseYieldDelay).ConfigureAwait(false);
+
+                await RunOnOutlookUiThreadAsync(() =>
+                {
+                    if (_outlookApplication == null) return;
+                    ShowCardDavSyncStatus("NC Connector: Verteilerlisten werden abgeglichen ...");
+                    groups = CardDavContactGroupSync.Reconcile(
                         configuration,
                         _outlookApplication,
                         syncedAddressBooks,
                         preferences);
-                    int groupFolders = CardDavContactFolderSync.Reconcile(
+                }).ConfigureAwait(false);
+
+                await Task.Delay(CardDavUiPhaseYieldDelay).ConfigureAwait(false);
+
+                await RunOnOutlookUiThreadAsync(() =>
+                {
+                    if (_outlookApplication == null) return;
+                    ShowCardDavSyncStatus("NC Connector: Gruppenordner werden abgeglichen ...");
+                    groupFolders = CardDavContactFolderSync.Reconcile(
                         configuration,
                         _outlookApplication,
                         syncedAddressBooks,
                         preferences);
+                }).ConfigureAwait(false);
+
+                await RunOnOutlookUiThreadAsync(() =>
+                {
                     DiagnosticsLogger.Log(LogCategories.Core, "CardDAV sync completed (changedContacts="
                         + count + ", deleted=" + sync.DeletedCount + ", groups=" + groups
                         + ", groupFolders=" + groupFolders + ").");
+                    CompleteCardDavSyncStatus(
+                        "NC Connector: Synchronisierung abgeschlossen.",
+                        userInitiated ? 900 : 2200);
                     if (userInitiated) MessageBox.Show("Nextcloud-Kontakte synchronisiert: " + count
                         + " geändert/neu, " + sync.DeletedCount + " gelöscht, " + groups
                         + " Gruppen und " + groupFolders + " Gruppenordner aktualisiert.", "Kontakte synchronisieren");
@@ -297,10 +479,21 @@ namespace NcTalkOutlookAddIn
                         ? "CardDAV sync failed."
                         : "CardDAV automatic sync failed; existing Outlook contacts were kept and the background timer will retry.",
                     ex);
-                if (userInitiated && _uiSynchronizationContext != null)
+                if (_uiSynchronizationContext != null)
                 {
-                    _uiSynchronizationContext.Post(_ => MessageBox.Show("Kontaktsynchronisation fehlgeschlagen: "
-                        + ex.Message, "Kontakte synchronisieren"), null);
+                    _uiSynchronizationContext.Post(_ =>
+                    {
+                        CompleteCardDavSyncStatus(
+                            userInitiated
+                                ? "NC Connector: Synchronisierung fehlgeschlagen."
+                                : "NC Connector: Server nicht erreichbar - neuer Versuch später.",
+                            3500);
+                        if (userInitiated)
+                        {
+                            MessageBox.Show("Kontaktsynchronisation fehlgeschlagen: "
+                                + ex.Message, "Kontakte synchronisieren");
+                        }
+                    }, null);
                 }
             }
             finally
@@ -496,6 +689,7 @@ namespace NcTalkOutlookAddIn
                 }
             }
 
+            DisposeCardDavSyncStatus();
             UnhookApplication();
             UnhookInspector();
             UnhookMailComposeSubscriptions();
