@@ -5,11 +5,11 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
 
-[assembly: AssemblyTitle("NcTalkOutlookAddIn")]
-[assembly: AssemblyDescription("NC Connector for Outlook COM add-in for Outlook classic")]
+[assembly: AssemblyTitle("IBP Nextcloud Integration für Outlook")]
+[assembly: AssemblyDescription("IBP Nextcloud Integration für Outlook")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Bastian Kleinschmidt")]
-[assembly: AssemblyProduct("NC Connector for Outlook")]
+[assembly: AssemblyCompany("IBP GmbH")]
+[assembly: AssemblyProduct("IBP Nextcloud Integration für Outlook")]
 [assembly: AssemblyCopyright("Copyright (c) 2025")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
@@ -19,6 +19,5 @@ using System.Runtime.InteropServices;
 // The following GUID is used as the ID of the type library when this project is made COM-visible.
 [assembly: Guid("f7812432-4b4f-45a6-8f16-22a3d28b1fe4")]
 
-[assembly: AssemblyVersion("3.4.0.0")]
-[assembly: AssemblyFileVersion("3.4.0.0")]
-
+[assembly: AssemblyVersion("3.4.1.0")]
+[assembly: AssemblyFileVersion("3.4.1.0")]
