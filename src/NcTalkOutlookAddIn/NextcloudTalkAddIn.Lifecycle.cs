@@ -17,6 +17,7 @@ using NcTalkOutlookAddIn.Settings;
 using NcTalkOutlookAddIn.UI;
 using NcTalkOutlookAddIn.Utilities;
 using Outlook = Microsoft.Office.Interop.Outlook;
+using Timer = System.Threading.Timer;
 
 namespace NcTalkOutlookAddIn
 {
