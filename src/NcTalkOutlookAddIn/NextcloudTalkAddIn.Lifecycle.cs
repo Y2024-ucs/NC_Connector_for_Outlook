@@ -23,6 +23,9 @@ namespace NcTalkOutlookAddIn
     // Add-in lifecycle and bootstrap/teardown flow.
     public sealed partial class NextcloudTalkAddIn
     {
+        private static readonly TimeSpan CardDavStartupDelay = TimeSpan.FromSeconds(15);
+        private Timer _cardDavStartupDelayTimer;
+
         public void OnConnection(object application, ext_ConnectMode connectMode, object addInInst, ref Array custom)
         {
             _outlookApplication = (Outlook.Application)application;
@@ -57,7 +60,6 @@ namespace NcTalkOutlookAddIn
             EnsureInspectorHook();
             ApplyIfbSettings();
             StartUpdateCheckIfDue();
-            StartCardDavContactSync();
         }
 
         private void InitializeOutlookUiSynchronizationContext()
@@ -84,6 +86,98 @@ namespace NcTalkOutlookAddIn
             DiagnosticsLogger.Log(
                 LogCategories.Core,
                 "Upstream update check disabled for IBP fork.");
+        }
+
+        private void ScheduleCardDavStartupSync()
+        {
+            OutlookUiSynchronizationContext uiContext = _uiSynchronizationContext;
+            if (uiContext == null)
+            {
+                DiagnosticsLogger.Log(
+                    LogCategories.Core,
+                    "CardDAV startup sync not scheduled because the Outlook UI context is unavailable.");
+                return;
+            }
+
+            Timer previousTimer = _cardDavStartupDelayTimer;
+            _cardDavStartupDelayTimer = null;
+            if (previousTimer != null)
+            {
+                try
+                {
+                    previousTimer.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticsLogger.LogException(
+                        LogCategories.Core,
+                        "Failed to dispose previous CardDAV startup delay timer.",
+                        ex);
+                }
+            }
+
+            _cardDavStartupDelayTimer = new Timer(
+                state =>
+                {
+                    try
+                    {
+                        uiContext.Post(
+                            ignored =>
+                            {
+                                try
+                                {
+                                    if (_outlookApplication == null || _currentSettings == null)
+                                    {
+                                        return;
+                                    }
+
+                                    var configuration = new TalkServiceConfiguration(
+                                        _currentSettings.ServerUrl,
+                                        _currentSettings.Username,
+                                        _currentSettings.AppPassword);
+                                    if (!configuration.IsComplete())
+                                    {
+                                        DiagnosticsLogger.Log(
+                                            LogCategories.Core,
+                                            "CardDAV delayed startup sync skipped because Nextcloud credentials are incomplete.");
+                                        return;
+                                    }
+
+                                    // Start the recurring timer before the first network attempt.
+                                    // If the server is unavailable now, the next 15-minute run retries automatically.
+                                    CardDavBackgroundSyncManager.EnsureStarted(
+                                        configuration,
+                                        _outlookApplication);
+                                    DiagnosticsLogger.Log(
+                                        LogCategories.Core,
+                                        "CardDAV delayed startup sync starting after Outlook startup.");
+                                    StartCardDavContactSync();
+                                }
+                                catch (Exception ex)
+                                {
+                                    DiagnosticsLogger.LogException(
+                                        LogCategories.Core,
+                                        "CardDAV delayed startup sync launch failed.",
+                                        ex);
+                                }
+                            },
+                            null);
+                    }
+                    catch (Exception ex)
+                    {
+                        DiagnosticsLogger.LogException(
+                            LogCategories.Core,
+                            "Failed to post delayed CardDAV startup sync to the Outlook UI thread.",
+                            ex);
+                    }
+                },
+                null,
+                CardDavStartupDelay,
+                Timeout.InfiniteTimeSpan);
+
+            DiagnosticsLogger.Log(
+                LogCategories.Core,
+                "CardDAV startup sync scheduled (delaySeconds=15).");
         }
 
         private void StartCardDavContactSync(bool userInitiated = false)
@@ -196,7 +290,12 @@ namespace NcTalkOutlookAddIn
             }
             catch (Exception ex)
             {
-                DiagnosticsLogger.LogException(LogCategories.Core, "CardDAV sync failed.", ex);
+                DiagnosticsLogger.LogException(
+                    LogCategories.Core,
+                    userInitiated
+                        ? "CardDAV sync failed."
+                        : "CardDAV automatic sync failed; existing Outlook contacts were kept and the background timer will retry.",
+                    ex);
                 if (userInitiated && _uiSynchronizationContext != null)
                 {
                     _uiSynchronizationContext.Post(_ => MessageBox.Show("Kontaktsynchronisation fehlgeschlagen: "
@@ -365,9 +464,10 @@ namespace NcTalkOutlookAddIn
         {
         }
 
-        // IDTExtensibility2 requires this callback; startup work happens in OnConnection
+        // Delay network and contact synchronization until Outlook reports startup complete.
         public void OnStartupComplete(ref Array custom)
         {
+            ScheduleCardDavStartupSync();
         }
 
         public void OnBeginShutdown(ref Array custom)
@@ -378,6 +478,23 @@ namespace NcTalkOutlookAddIn
         // Outlook can call both shutdown callbacks, so teardown must stay idempotent
         private void TearDownAddInState(string origin, bool clearOutlookApplication)
         {
+            Timer cardDavStartupDelayTimer = _cardDavStartupDelayTimer;
+            _cardDavStartupDelayTimer = null;
+            if (cardDavStartupDelayTimer != null)
+            {
+                try
+                {
+                    cardDavStartupDelayTimer.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticsLogger.LogException(
+                        LogCategories.Core,
+                        "Failed to dispose CardDAV startup delay timer during add-in " + (origin ?? "teardown") + ".",
+                        ex);
+                }
+            }
+
             UnhookApplication();
             UnhookInspector();
             UnhookMailComposeSubscriptions();
