@@ -3,7 +3,7 @@
      xmlns:http="http://wixtoolset.org/schemas/v4/wxs/http">
   <Package
     Name="NC Connector for Outlook"
-    Manufacturer="Bastian Kleinschmidt"
+    Manufacturer="IBP GmbH"
     Version="$(var.ProductVersion)"
     UpgradeCode="{8C9D7AA6-EBB2-4F7D-9B5F-A34C59F314B3}"
     Compressed="yes"
@@ -11,7 +11,7 @@
 
     <SummaryInformation
       Description="Nextcloud integration for Outlook"
-      Manufacturer="Bastian Kleinschmidt" />
+      Manufacturer="IBP GmbH" />
 
     <MajorUpgrade AllowDowngrades="yes" />
     <MediaTemplate EmbedCab="yes" />
