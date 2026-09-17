@@ -18,8 +18,6 @@ namespace NcTalkOutlookAddIn.Models
             bool endpointAvailable,
             bool fetchSucceeded,
             bool policyActive,
-            bool warningVisible,
-            string warningMessage,
             string mode,
             string reason,
             bool seatAssigned,
@@ -30,13 +28,19 @@ namespace NcTalkOutlookAddIn.Models
             IDictionary<string, object> emailSignaturePolicy,
             IDictionary<string, object> shareEditable,
             IDictionary<string, object> talkEditable,
-            IDictionary<string, object> emailSignatureEditable)
+            IDictionary<string, object> emailSignatureEditable,
+            string licenseStatus = null,
+            string accessStatus = null,
+            bool canManageLicense = false,
+            string graceUntilIso = null,
+            string licenseActivationState = null,
+            bool licenseConnectionError = false,
+            string licenseLastSyncAtIso = null,
+            string licenseOfflineUntilIso = null)
         {
             EndpointAvailable = endpointAvailable;
             FetchSucceeded = fetchSucceeded;
             PolicyActive = policyActive;
-            WarningVisible = warningVisible;
-            WarningMessage = warningMessage ?? string.Empty;
             Mode = mode ?? "local";
             Reason = reason ?? string.Empty;
             SeatAssigned = seatAssigned;
@@ -48,6 +52,14 @@ namespace NcTalkOutlookAddIn.Models
             ShareEditable = shareEditable;
             TalkEditable = talkEditable;
             EmailSignatureEditable = emailSignatureEditable;
+            LicenseStatus = licenseStatus ?? string.Empty;
+            AccessStatus = accessStatus ?? string.Empty;
+            CanManageLicense = canManageLicense;
+            GraceUntilIso = graceUntilIso ?? string.Empty;
+            LicenseActivationState = licenseActivationState ?? string.Empty;
+            LicenseConnectionError = licenseConnectionError;
+            LicenseLastSyncAtIso = licenseLastSyncAtIso ?? string.Empty;
+            LicenseOfflineUntilIso = licenseOfflineUntilIso ?? string.Empty;
         }
 
         internal bool EndpointAvailable { get; private set; }
@@ -55,10 +67,6 @@ namespace NcTalkOutlookAddIn.Models
         internal bool FetchSucceeded { get; private set; }
 
         internal bool PolicyActive { get; private set; }
-
-        internal bool WarningVisible { get; private set; }
-
-        internal string WarningMessage { get; private set; }
 
         internal string Mode { get; private set; }
 
@@ -69,6 +77,23 @@ namespace NcTalkOutlookAddIn.Models
         internal bool IsValid { get; private set; }
 
         internal string SeatState { get; private set; }
+
+        // License metadata describes server state; it does not grant access.
+        internal string LicenseStatus { get; private set; }
+
+        internal string AccessStatus { get; private set; }
+
+        internal bool CanManageLicense { get; private set; }
+
+        internal string GraceUntilIso { get; private set; }
+
+        internal string LicenseActivationState { get; private set; }
+
+        internal bool LicenseConnectionError { get; private set; }
+
+        internal string LicenseLastSyncAtIso { get; private set; }
+
+        internal string LicenseOfflineUntilIso { get; private set; }
 
         internal IDictionary<string, object> SharePolicy { get; private set; }
 

@@ -87,7 +87,10 @@ namespace NcTalkOutlookAddIn.UI
             PolicyUiHelper.ApplyPolicyWarningState(
                 _backendPolicyStatus,
                 _policyWarningPanel,
-                _policyWarningTextLabel);
+                _policyWarningTextLabel,
+                _policyWarningTitleLabel,
+                _policyWarningLinkLabel,
+                _configuration != null ? _configuration.BaseUrl : string.Empty);
             LayoutPolicyWarningPanel();
             UpdateStepHostBounds();
             LayoutCurrentStep();
@@ -128,12 +131,5 @@ namespace NcTalkOutlookAddIn.UI
             UpdateExpireState();
         }
 
-        private static void OpenPolicyAdminGuide()
-        {
-            BrowserLauncher.OpenUrl(
-                Strings.PolicyAdminGuideUrl,
-                LogCategories.FileLink,
-                "Failed to open policy admin guide URL.");
-        }
     }
 }

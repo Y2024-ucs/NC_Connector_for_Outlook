@@ -28,7 +28,7 @@ namespace NcTalkOutlookAddIn.Utilities
                 ControlPaint.DrawBorder(
                     args.Graphics,
                     panel.ClientRectangle,
-                    WarningColor,
+                    titleLabel.ForeColor,
                     ButtonBorderStyle.Solid);
             };
 
@@ -81,8 +81,9 @@ namespace NcTalkOutlookAddIn.Utilities
 
             int linkTop = textLabel.Bottom + textLinkGap;
             linkLabel.Location = new Point(padding, linkTop);
+            linkLabel.MaximumSize = new Size(textWidth, 0);
 
-            int height = linkLabel.Bottom + padding;
+            int height = (linkLabel.Visible ? linkLabel.Bottom : textLabel.Bottom) + padding;
             panel.SetBounds(left, top, width, height);
             return height;
         }

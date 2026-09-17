@@ -463,6 +463,18 @@ Observed behavior by state:
 - **Backend temporarily unreachable:** Sharing and Talk use saved local settings. A matching message that requires a central signature can remain open and unsent until the signature policy can be checked.
 - **Backend lacks the signature domain:** Share and Talk policies continue to work. Central signatures stay disabled and Outlook displays an update notice.
 
+### License notices in Outlook
+
+Settings, the sharing wizard and the Talk dialog use the same status notice. An active license has no license warning. During the grace period, a yellow notice shows how long Pro features remain available; it does not disable them for users with an active assigned seat.
+
+Once grace has ended, Outlook distinguishes an expired license from an inactive or invalid license, an activation problem, and a missed offline verification deadline. A suspended seat is reported separately. Users without a seat continue to see the seat-assignment hint. Basic sharing and Talk remain usable with local settings.
+
+Full Nextcloud administrators see license notices even without their own seat and can open **Manage license in backend**. The link opens NC Connector's administration page on the configured Nextcloud. Other users are directed to their Nextcloud administrator. Older backends that do not report these details receive a general notice instead of a guessed expiry reason or an administration link.
+
+A failed license synchronization is not itself labelled as an invalid license: the cause can be a connection problem, an unusable server response, or unavailable local activation data. The notice includes the last successful synchronization and the offline deadline when supplied by the backend. A failure to retrieve the Nextcloud backend status has its own connection notice. Disabled-feature tooltips use the corresponding reason; there is no additional license pop-up on every action.
+
+License activation remains part of the backend's normal synchronization. Outlook does not activate licenses or contact the license server directly. After correcting a license or seat assignment, reopen the affected dialog or refresh the connection in Settings to load the current backend status.
+
 ### Policy rollout
 
 The backend can manage:

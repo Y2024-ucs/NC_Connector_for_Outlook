@@ -264,6 +264,16 @@ Runtime-Regeln:
 - Die TLS-Einstellung wird über `ServicePointManager.SecurityProtocol` angewendet. Zuvor setzt `TransportSecurityConfigurator` die .NET-Schalter für System-Default-TLS und starke Kryptografie programmatisch; die Auswahl hängt im von Outlook bereitgestellten AppDomain deshalb nicht allein von `NcTalkOutlookAddIn.dll.config` ab. Verbindungstest und Login-Flow-Diagnose fordern über `NcHttpClient` eine neue Verbindung an, damit ein geänderter TLS-Modus mit einem neuen Handshake statt über eine vorhandene gepoolte Verbindung geprüft wird.
 - `app.config` bildet die Versionen der gebündelten HtmlSanitizer-Abhängigkeiten ab. Der Laufzeit-Resolver bedient nur passende Anfragen des Add-ins und dieses Abhängigkeitsstapels aus dem Add-in-Verzeichnis; höhere Versionen, andere Tokens, Kulturen oder fremde Requester bleiben unberührt. `tools/ci/Check-VendorAssemblyBindings.ps1` lädt jede transitive Vendor-Referenz in einer frischen .NET-Framework-AppDomain mit diesen Redirects.
 
+### Darstellung des Lizenzstatus
+
+`BackendPolicyService.ParseStatus` normalisiert direkte und OCS-umschlossene Statusantworten. `BackendPolicyStatus` übernimmt die optionalen Angaben `license_status`, `access_status`, `can_manage_license`, `grace_until_iso`, `license_activation.state`, `license_connection_error`, `license_last_sync_at_iso` und `license_offline_until_iso`. Fehlende Felder bleiben leer/false; nur ein JSON-Boolean `true` schaltet den Lizenzverwaltungslink frei.
+
+`PolicyUiHelper` wählt die lokalisierten Hinweise beim Anzeigen in Einstellungen, FileLink und Talk und verwendet dieselben Ursachen in Tooltips deaktivierter Funktionen. Lizenzablehnungen werden von `seat_state=suspended_overlimit` unterschieden; unbekannte Seat-Zustände erhalten einen allgemeinen Seat-Hinweis. Ältere Backends ohne erklärende Felder erhalten einen allgemeinen Zugriffshinweis. Nachfrist- und Verbindungshinweise verwenden einen gelben Statusstil, ohne die Funktionsfreigabe zu ändern. Vom Backend gelieferte Zeitpunkte werden nur zur Anzeige in Ortszeit formatiert und nicht als clientseitige Berechtigungsfristen ausgewertet.
+
+Der Verwaltungslink wird aus der validierten konfigurierten HTTPS-Basis-URL unter Beibehaltung des Installationsunterpfads gebildet und führt zu `/index.php/settings/admin/ncc_backend_4mc`. Er erscheint nur bei Lizenzhinweisen für Benutzer mit `can_manage_license=true`. Dies ist ein UI-Hinweis, keine Autorisierung; das Backend prüft die Berechtigungen weiterhin selbst. `WarningPanelUiHelper` berechnet die Panelhöhe mit oder ohne Aktionslink.
+
+Die Freigabe bleibt von den bisherigen Prüfungen auf `is_valid`, `seat_assigned`, `seat_state` und Policy-Domains abhängig. Es gibt keine clientseitige Aktivierung, Lizenzserveranfrage, neuen Hintergrundtimer, COM-Thread-Änderung oder Änderung des Signaturcaches. `Invoke-OutlookPolicyMappingTests.ps1` prüft Parser-Kompatibilität, Status-/Seat-Priorität, rollenabhängige Aktionen und unveränderte Freigabeentscheidungen.
+
 ### Ende-zu-Ende-Abläufe
 
 #### Talk-Link-Ablauf (Termine)

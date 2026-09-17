@@ -463,6 +463,18 @@ Beobachtbares Verhalten je Zustand:
 - **Backend vorübergehend nicht erreichbar:** Freigaben und Talk verwenden gespeicherte lokale Einstellungen. Eine passende Mail mit verpflichtender zentraler Signatur kann geöffnet und ungesendet bleiben, bis die Signatur-Policy wieder geprüft werden kann.
 - **Backend ohne Signatur-Domain:** Freigabe- und Talk-Policies funktionieren weiter. Zentrale Signaturen bleiben deaktiviert und Outlook zeigt einen Update-Hinweis.
 
+### Lizenzhinweise in Outlook
+
+Einstellungen, Freigabe-Wizard und Talk-Dialog verwenden denselben Statushinweis. Eine aktive Lizenz erzeugt keine Lizenzwarnung. Während der Nachfrist zeigt ein gelber Hinweis, wie lange die Pro-Funktionen verfügbar bleiben; für Benutzer mit aktivem zugewiesenem Seat werden sie dadurch nicht deaktiviert.
+
+Nach Ende der Nachfrist unterscheidet Outlook eine abgelaufene Lizenz von einer inaktiven oder ungültigen Lizenz, einem Aktivierungsproblem und einer überschrittenen Offline-Prüffrist. Ein tatsächlich pausierter Seat wird gesondert gemeldet. Benutzer ohne Seat sehen weiterhin den Hinweis auf die fehlende Zuweisung. Die grundlegenden Freigabe- und Talk-Funktionen bleiben mit lokalen Einstellungen nutzbar.
+
+Vollständige Nextcloud-Administratoren sehen Lizenzhinweise auch ohne eigenen Seat und können **Lizenz im Backend verwalten** öffnen. Der Link führt zur NC-Connector-Verwaltung der konfigurierten Nextcloud. Andere Benutzer werden an ihren Nextcloud-Administrator verwiesen. Bei älteren Backends ohne diese zusätzlichen Angaben erscheint ein allgemeiner Hinweis statt einer vermuteten Ablaufursache oder eines Verwaltungslinks.
+
+Eine fehlgeschlagene Lizenzsynchronisierung wird für sich genommen nicht als ungültige Lizenz bezeichnet: Ursache können ein Verbindungsproblem, eine unbrauchbare Serverantwort oder nicht verfügbare lokale Aktivierungsdaten sein. Wenn das Backend die Angaben liefert, nennt der Hinweis die letzte erfolgreiche Synchronisierung und die Offline-Prüffrist. Scheitert dagegen der Abruf des Nextcloud-Backend-Status, erscheint ein eigener Verbindungshinweis. Tooltips deaktivierter Funktionen verwenden den passenden Grund; ein zusätzliches Lizenz-Popup bei jeder Aktion gibt es nicht.
+
+Die Lizenzaktivierung bleibt Teil der normalen Backend-Synchronisierung. Outlook aktiviert keine Lizenzen und kontaktiert den Lizenzserver nicht direkt. Nach Korrektur einer Lizenz oder Seat-Zuweisung den betroffenen Dialog erneut öffnen oder die Verbindung in den Einstellungen aktualisieren, um den aktuellen Backend-Status zu laden.
+
 ### Policy-Rollout
 
 Das Backend kann verwalten:

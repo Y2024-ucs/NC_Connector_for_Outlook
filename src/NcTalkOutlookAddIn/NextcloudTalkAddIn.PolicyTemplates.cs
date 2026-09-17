@@ -34,7 +34,7 @@ namespace NcTalkOutlookAddIn
                     + ", share=" + (status != null && status.IsDomainActive("share"))
                     + ", talk=" + (status != null && status.IsDomainActive("talk"))
                     + ", emailSignature=" + (status != null && status.IsDomainActive("email_signature"))
-                    + ", warningVisible=" + (status != null && status.WarningVisible)
+                    + ", accessStatus=" + (status != null ? status.AccessStatus : "n/a")
                     + ", mode=" + (status != null ? status.Mode : "local")
                     + ", reason=" + (status != null ? status.Reason : "n/a")
                     + ").");

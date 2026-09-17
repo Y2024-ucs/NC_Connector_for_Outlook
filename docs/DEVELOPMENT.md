@@ -227,6 +227,16 @@ Runtime rules:
 - The TLS setting is applied through `ServicePointManager.SecurityProtocol`. Before that assignment, `TransportSecurityConfigurator` sets the .NET switches for system-default TLS and strong cryptography in code, so the choice does not depend only on `NcTalkOutlookAddIn.dll.config` inside Outlook's AppDomain. Connection tests and login-flow diagnostics request a fresh connection through `NcHttpClient`, so a changed TLS mode is tested with a new handshake instead of an existing pooled connection.
 - `app.config` maps the versions of the bundled HtmlSanitizer dependencies. The runtime resolver handles only matching requests from the add-in and this dependency stack in the add-in directory; higher versions, different tokens or cultures, and unrelated requesters remain untouched. `tools/ci/Check-VendorAssemblyBindings.ps1` loads every transitive vendor reference in a fresh .NET Framework AppDomain with these redirects.
 
+### License status presentation
+
+`BackendPolicyService.ParseStatus` normalizes both plain and OCS-wrapped status responses. `BackendPolicyStatus` retains the optional `license_status`, `access_status`, `can_manage_license`, `grace_until_iso`, `license_activation.state`, `license_connection_error`, `license_last_sync_at_iso` and `license_offline_until_iso` metadata. Missing fields default to empty/false; only a JSON boolean `true` enables the license-management action.
+
+`PolicyUiHelper` selects localized notices at display time for Settings, FileLink and Talk, and reuses the same causes in disabled-feature tooltips. It distinguishes license refusal from `seat_state=suspended_overlimit`; unknown seat states receive a generic seat message. Old backends without explanatory fields receive a generic access warning. Grace and connection notices use a yellow status style without altering feature access. Dates supplied by the backend are formatted in local time for display only, never evaluated as client-side entitlement deadlines.
+
+The administration link is built from the validated configured HTTPS base URL, preserving its installation subpath, and targets `/index.php/settings/admin/ncc_backend_4mc`. It is offered only for license notices to users with `can_manage_license=true`. This is a UI hint, not authorization; the backend still enforces permissions. `WarningPanelUiHelper` sizes panels with or without an action link.
+
+Access remains determined by the existing `is_valid`, `seat_assigned`, `seat_state` and policy-domain checks. No client-side activation, licensing-server request, background timer, COM-thread change or signature-cache change is introduced. `Invoke-OutlookPolicyMappingTests.ps1` covers parser compatibility, status/seat precedence, role-specific actions and unchanged access decisions.
+
 ### End-to-end flows
 
 #### Talk link flow (appointments)

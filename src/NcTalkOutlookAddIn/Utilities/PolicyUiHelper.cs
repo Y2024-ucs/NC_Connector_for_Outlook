@@ -3,6 +3,8 @@
 // See LICENSE.txt for details.
 
 using System;
+using System.Drawing;
+using System.Globalization;
 using System.Windows.Forms;
 using NcTalkOutlookAddIn.Models;
 
@@ -14,14 +16,159 @@ namespace NcTalkOutlookAddIn.Utilities
         internal static bool ApplyPolicyWarningState(
             BackendPolicyStatus status,
             Panel panel,
-            Label textLabel)
+            Label textLabel,
+            Label titleLabel,
+            LinkLabel linkLabel,
+            string baseUrl)
         {
-            bool visible = status != null
-                           && status.WarningVisible
-                           && !string.IsNullOrWhiteSpace(status.WarningMessage);
+            string message = GetPolicyWarningMessage(status);
+            bool visible = !string.IsNullOrWhiteSpace(message);
             panel.Visible = visible;
-            textLabel.Text = visible ? status.WarningMessage : string.Empty;
+            textLabel.Text = message;
+            Color noticeColor = status != null && status.IsValid
+                ? Color.FromArgb(156, 108, 0)
+                : Color.FromArgb(176, 0, 32);
+            titleLabel.ForeColor = noticeColor;
+            panel.BackColor = Color.FromArgb(20, noticeColor);
+            string adminUrl = GetLicenseAdminUrl(status, baseUrl);
+            linkLabel.Tag = adminUrl;
+            linkLabel.Visible = !string.IsNullOrEmpty(adminUrl);
+            panel.Invalidate();
             return visible;
+        }
+
+        internal static string GetPolicyWarningMessage(BackendPolicyStatus status)
+        {
+            if (status == null || !status.EndpointAvailable)
+            {
+                return string.Empty;
+            }
+            if (!status.FetchSucceeded)
+            {
+                return Strings.PolicyWarningBackendUnavailable;
+            }
+            if (!status.SeatAssigned && !status.CanManageLicense)
+            {
+                return Strings.PolicyWarningNoSeat;
+            }
+
+            string licenseNotice = GetLicenseNotice(status);
+            if (!string.IsNullOrEmpty(licenseNotice))
+            {
+                return licenseNotice;
+            }
+            if (!status.SeatAssigned)
+            {
+                return Strings.PolicyWarningNoSeat;
+            }
+            return GetSeatNotice(status);
+        }
+
+        private static string GetSeatNotice(BackendPolicyStatus status)
+        {
+            return string.Equals(status.SeatState, "active", StringComparison.OrdinalIgnoreCase)
+                ? string.Empty
+                : WithRoleHint(status,
+                    string.Equals(status.SeatState, "suspended_overlimit", StringComparison.OrdinalIgnoreCase)
+                        ? Strings.PolicyWarningSeatSuspended
+                        : Strings.PolicyWarningSeatUnavailable);
+        }
+
+        private static string GetLicenseNotice(BackendPolicyStatus status)
+        {
+            if (status == null || !status.EndpointAvailable || !status.FetchSucceeded
+                || (!status.SeatAssigned && !status.CanManageLicense))
+            {
+                return string.Empty;
+            }
+            // Grace preserves license validity, not a suspended user's seat access.
+            if (status.IsValid && status.SeatAssigned
+                && !string.Equals(status.SeatState, "active", StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Empty;
+            }
+
+            // The backend decides access. These fields explain its decision only.
+            string accessStatus = string.IsNullOrWhiteSpace(status.AccessStatus)
+                ? status.LicenseStatus
+                : status.AccessStatus;
+            string message = string.Empty;
+            if (!status.IsValid)
+            {
+                switch (accessStatus.ToUpperInvariant())
+                {
+                    case "EXPIRED": message = Strings.PolicyLicenseExpired; break;
+                    case "INACTIVE": message = Strings.PolicyLicenseInactive; break;
+                    case "INVALID": message = Strings.PolicyLicenseInvalid; break;
+                    case "OFFLINE_EXPIRED": message = Strings.PolicyLicenseOfflineExpired; break;
+                    case "ACTIVATION_REQUIRED":
+                        message = string.Equals(status.LicenseActivationState, "conflict", StringComparison.OrdinalIgnoreCase)
+                            ? Strings.PolicyLicenseActivationConflict
+                            : Strings.PolicyLicenseActivationRequired;
+                        break;
+                    default: message = Strings.PolicyWarningLicenseInvalid; break;
+                }
+            }
+            else if (string.Equals(accessStatus, "GRACE", StringComparison.OrdinalIgnoreCase))
+            {
+                message = FormatStatusDate(Strings.PolicyLicenseGraceFormat, status.GraceUntilIso);
+                if (string.IsNullOrEmpty(message))
+                {
+                    message = Strings.PolicyLicenseGrace;
+                }
+            }
+
+            if (status.LicenseConnectionError)
+            {
+                message = AppendNotice(message, Strings.PolicyLicenseConnectionError);
+                message = AppendNotice(message, FormatStatusDate(Strings.PolicyLicenseLastSyncFormat, status.LicenseLastSyncAtIso));
+                message = AppendNotice(message, FormatStatusDate(Strings.PolicyLicenseOfflineUntilFormat, status.LicenseOfflineUntilIso));
+            }
+            return string.IsNullOrEmpty(message) ? string.Empty : WithRoleHint(status, message);
+        }
+
+        private static string WithRoleHint(BackendPolicyStatus status, string message)
+        {
+            return AppendNotice(message, status.CanManageLicense
+                ? Strings.PolicyLicenseAdminHint
+                : Strings.PolicyLicenseUserHint);
+        }
+
+        private static string AppendNotice(string message, string extra)
+        {
+            if (string.IsNullOrEmpty(extra))
+            {
+                return message;
+            }
+            return string.IsNullOrEmpty(message) ? extra : message + Environment.NewLine + extra;
+        }
+
+        private static string FormatStatusDate(string format, string isoDate)
+        {
+            DateTimeOffset value;
+            return DateTimeOffset.TryParse(isoDate, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out value)
+                ? string.Format(CultureInfo.CurrentCulture, format, value.LocalDateTime.ToString("g", CultureInfo.CurrentCulture))
+                : string.Empty;
+        }
+
+        internal static string GetLicenseAdminUrl(BackendPolicyStatus status, string baseUrl)
+        {
+            string normalizedUrl;
+            if (status == null || !status.CanManageLicense || string.IsNullOrEmpty(GetLicenseNotice(status))
+                || !NextcloudUriValidator.TryNormalizeBaseUrl(baseUrl, out normalizedUrl))
+            {
+                return string.Empty;
+            }
+            return normalizedUrl + "/index.php/settings/admin/ncc_backend_4mc";
+        }
+
+        internal static void OpenLicenseAdministration(LinkLabel linkLabel, string logCategory)
+        {
+            string url = linkLabel.Tag as string;
+            if (!string.IsNullOrEmpty(url))
+            {
+                BrowserLauncher.OpenUrl(url, logCategory, "Failed to open backend license settings.");
+            }
         }
 
         internal static bool IsPolicyActive(BackendPolicyStatus status)
@@ -55,17 +202,20 @@ namespace NcTalkOutlookAddIn.Utilities
                 return Strings.SharingPasswordSeparateBackendRequiredTooltip;
             }
 
+            if (!status.FetchSucceeded)
+            {
+                return Strings.PolicyWarningBackendUnavailable;
+            }
+            if (!status.IsValid && (status.SeatAssigned || status.CanManageLicense))
+            {
+                return GetPolicyWarningMessage(status);
+            }
             if (!status.SeatAssigned)
             {
                 return Strings.SharingPasswordSeparateNoSeatTooltip;
             }
 
-            if (!status.IsValid || !string.Equals(status.SeatState, "active", StringComparison.OrdinalIgnoreCase))
-            {
-                return Strings.SharingPasswordSeparatePausedTooltip;
-            }
-
-            return string.Empty;
+            return GetSeatNotice(status);
         }
 
         internal static bool HasPasswordDeliveryMode(BackendPolicyStatus status)

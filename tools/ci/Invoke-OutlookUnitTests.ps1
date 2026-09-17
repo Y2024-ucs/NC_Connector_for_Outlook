@@ -1271,8 +1271,6 @@ internal static class OutlookUtilityTests
             true,
             true,
             true,
-            false,
-            "",
             "policy",
             "policy_active",
             true,
