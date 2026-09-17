@@ -30,15 +30,9 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Extensibility, Version=7.0.3300.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
-      <EmbedInteropTypes>true</EmbedInteropTypes>
-    </Reference>
-    <Reference Include="Microsoft.Office.Interop.Outlook, Version=15.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c">
-      <EmbedInteropTypes>true</EmbedInteropTypes>
-    </Reference>
-    <Reference Include="office, Version=15.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c">
-      <EmbedInteropTypes>true</EmbedInteropTypes>
-    </Reference>
+    <Reference Include="Extensibility, Version=7.0.3300.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a"><EmbedInteropTypes>true</EmbedInteropTypes></Reference>
+    <Reference Include="Microsoft.Office.Interop.Outlook, Version=15.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c"><EmbedInteropTypes>true</EmbedInteropTypes></Reference>
+    <Reference Include="office, Version=15.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c"><EmbedInteropTypes>true</EmbedInteropTypes></Reference>
     <Reference Include="stdole, Version=7.0.3300.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -46,45 +40,20 @@
     <Reference Include="System.Numerics" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
+    <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Security" />
     <Reference Include="System.Web" />
     <Reference Include="System.Web.Extensions" />
-    <Reference Include="AngleSharp">
-      <HintPath>vendor\htmlsanitizer\AngleSharp.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="AngleSharp.Css">
-      <HintPath>vendor\htmlsanitizer\AngleSharp.Css.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="HtmlSanitizer">
-      <HintPath>vendor\htmlsanitizer\HtmlSanitizer.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="System.Buffers">
-      <HintPath>vendor\htmlsanitizer\System.Buffers.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="System.Collections.Immutable">
-      <HintPath>vendor\htmlsanitizer\System.Collections.Immutable.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="System.Memory">
-      <HintPath>vendor\htmlsanitizer\System.Memory.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="System.Numerics.Vectors">
-      <HintPath>vendor\htmlsanitizer\System.Numerics.Vectors.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="System.Runtime.CompilerServices.Unsafe">
-      <HintPath>vendor\htmlsanitizer\System.Runtime.CompilerServices.Unsafe.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="System.Text.Encoding.CodePages">
-      <HintPath>vendor\htmlsanitizer\System.Text.Encoding.CodePages.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="AngleSharp"><HintPath>vendor\htmlsanitizer\AngleSharp.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="AngleSharp.Css"><HintPath>vendor\htmlsanitizer\AngleSharp.Css.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="HtmlSanitizer"><HintPath>vendor\htmlsanitizer\HtmlSanitizer.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="System.Buffers"><HintPath>vendor\htmlsanitizer\System.Buffers.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="System.Collections.Immutable"><HintPath>vendor\htmlsanitizer\System.Collections.Immutable.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="System.Memory"><HintPath>vendor\htmlsanitizer\System.Memory.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="System.Numerics.Vectors"><HintPath>vendor\htmlsanitizer\System.Numerics.Vectors.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="System.Runtime.CompilerServices.Unsafe"><HintPath>vendor\htmlsanitizer\System.Runtime.CompilerServices.Unsafe.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="System.Text.Encoding.CodePages"><HintPath>vendor\htmlsanitizer\System.Text.Encoding.CodePages.dll</HintPath><Private>True</Private></Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="NextcloudTalkAddIn.cs" />
@@ -111,6 +80,7 @@
     <Compile Include="Settings\ManagedSetupPolicy.cs" />
     <Compile Include="Settings\SettingsFileTransaction.cs" />
     <Compile Include="Settings\SettingsStorage.cs" />
+    <Compile Include="Models\CardDavAddressBook.cs" />
     <Compile Include="Models\TalkRoomType.cs" />
     <Compile Include="Models\TalkRoomRequest.cs" />
     <Compile Include="Models\TalkRoomCreationResult.cs" />
@@ -174,6 +144,12 @@
     <Compile Include="Services\TalkServiceConfiguration.cs" />
     <Compile Include="Services\TalkServiceException.cs" />
     <Compile Include="Services\NcHttpClient.cs" />
+    <Compile Include="Services\DavDiscoveryService.cs" />
+    <Compile Include="Services\CardDavReadOnlySync.cs" />
+    <Compile Include="Services\CardDavRemoteSnapshot.cs" />
+    <Compile Include="Services\CardDavDefaultContactsImporter.cs" />
+    <Compile Include="Services\CardDavSyncPreferences.cs" />
+    <Compile Include="Services\CardDavVCardSupport.cs" />
     <Compile Include="Services\NextcloudCapabilitiesService.cs" />
     <Compile Include="Services\NextcloudUserIdentityService.cs" />
     <Compile Include="Services\TalkService.cs" />
@@ -205,6 +181,7 @@
     <Compile Include="Services\PasswordPolicyService.cs" />
     <Compile Include="UI\SettingsForm.cs" />
     <Compile Include="UI\SettingsForm.General.cs" />
+    <Compile Include="UI\SettingsForm.CardDav.cs" />
     <Compile Include="UI\SettingsForm.Sharing.cs" />
     <Compile Include="UI\SettingsForm.Talk.cs" />
     <Compile Include="UI\SettingsForm.Signature.cs" />
@@ -213,6 +190,7 @@
     <Compile Include="UI\SettingsForm.Debug.cs" />
     <Compile Include="UI\SettingsForm.About.cs" />
     <Compile Include="UI\SettingsForm.Language.cs" />
+    <Compile Include="UI\CardDavFirstRunForm.cs" />
     <Compile Include="UI\SettingsTabControl.cs" />
     <Compile Include="UI\ScaledForm.cs" />
     <Compile Include="UI\TalkLinkForm.cs" />
@@ -284,13 +262,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />
-    <Content Include="LICENSE.txt">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\..\VENDOR.md">
-      <Link>VENDOR.md</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <Content Include="LICENSE.txt"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <Content Include="..\..\VENDOR.md"><Link>VENDOR.md</Link><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

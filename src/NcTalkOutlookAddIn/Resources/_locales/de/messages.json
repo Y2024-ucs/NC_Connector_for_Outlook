@@ -660,7 +660,7 @@
     "message": "Erstellt eine Nextcloud-Talk-Unterhaltung für diesen Termin."
   },
   "outlook_ribbon_tab_label": {
-    "message": "NC Connector"
+    "message": "IBP Nextcloud Integration für Outlook"
   },
   "outlook_ribbon_config_group": {
     "message": "Konfiguration"

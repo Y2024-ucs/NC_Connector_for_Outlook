@@ -61,6 +61,7 @@ namespace NcTalkOutlookAddIn
         private readonly DeferredAppointmentEnsureState _deferredAppointmentEnsureState = new DeferredAppointmentEnsureState();
         private OutlookUiSynchronizationContext _uiSynchronizationContext;
         private IRibbonUI _ribbonUi;
+        private readonly List<IRibbonUI> _ribbonUis = new List<IRibbonUI>();
         private const int ComposeAttachmentEvalDebounceMs = 250;
         internal const string IcalToken = "X-NCTALK-TOKEN";
         internal const string IcalUrl = "X-NCTALK-URL";
@@ -137,7 +138,7 @@ namespace NcTalkOutlookAddIn
                     @"<customUI xmlns='http://schemas.microsoft.com/office/2009/07/customui' onLoad='OnRibbonLoad'>
   <ribbon>
     <tabs>
-      <tab id='NcTalkExplorerTab' label='{0}' insertAfterMso='TabMail'>
+      <tab id='NcTalkExplorerTab' label='{0}'>
         <group id='NcTalkExplorerGroup' label='{1}'>
           <button id='NcTalkSettingsExplorerButton'
                   label='{2}'
@@ -146,6 +147,14 @@ namespace NcTalkOutlookAddIn
                   onAction='OnSettingsButtonPressed'
                   screentip='{3}'
                   supertip='{4}' />
+          <button id='NcCardDavSyncExplorerButton'
+                  label='Kontakte synchronisieren'
+                  size='large'
+                  getImage='OnGetButtonImage'
+                  getVisible='OnGetCardDavSyncVisible'
+                  onAction='OnCardDavSyncButtonPressed'
+                  screentip='Nextcloud-Kontakte synchronisieren'
+                  supertip='Neue, geänderte und gelöschte Nextcloud-Kontakte mit Outlook abgleichen.' />
         </group>
       </tab>
     </tabs>
@@ -208,10 +217,61 @@ namespace NcTalkOutlookAddIn
         // Stores the instance for later refresh operations.
         public void OnRibbonLoad(IRibbonUI ribbonUI)
         {
+            if (!_ribbonUis.Contains(ribbonUI)) _ribbonUis.Add(ribbonUI);
             // Keep a stable handle so future dynamic ribbon refreshes can call Invalidate/InvalidateControl.
             if (!ReferenceEquals(_ribbonUi, ribbonUI))
             {
                 _ribbonUi = ribbonUI;
+            }
+        }
+
+        public bool OnGetCardDavSyncVisible(IRibbonControl control)
+        {
+            object context = null;
+            Outlook.MAPIFolder folder = null;
+            try
+            {
+                context = control != null ? control.Context : null;
+                var explorer = context as Outlook.Explorer;
+                if (explorer == null) return false;
+                folder = explorer.CurrentFolder;
+                return folder != null && folder.DefaultItemType == Outlook.OlItemType.olContactItem;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsLogger.LogException(LogCategories.Core, "Failed to determine CardDAV ribbon visibility.", ex);
+                return false;
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(folder, LogCategories.Core, "Failed to release ribbon contacts folder.");
+                ComInteropScope.TryRelease(context, LogCategories.Core, "Failed to release ribbon context.");
+            }
+        }
+
+        public void OnCardDavSyncButtonPressed(IRibbonControl control)
+        {
+            try
+            {
+                if (!OnGetCardDavSyncVisible(control)) return;
+                EnsureSettingsLoaded();
+                StartCardDavContactSync(true);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsLogger.LogException(LogCategories.Core, "CardDAV ribbon handler failed.", ex);
+            }
+        }
+
+        private void RefreshCardDavRibbon()
+        {
+            foreach (IRibbonUI ribbon in _ribbonUis.ToArray())
+            {
+                try { ribbon.InvalidateControl("NcCardDavSyncExplorerButton"); }
+                catch (Exception ex)
+                {
+                    DiagnosticsLogger.LogException(LogCategories.Core, "Failed to refresh CardDAV ribbon.", ex);
+                }
             }
         }
 
