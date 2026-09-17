@@ -2,7 +2,7 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:http="http://wixtoolset.org/schemas/v4/wxs/http">
   <Package
-    Name="NC Connector for Outlook"
+    Name="IBP Nextcloud Integration für Outlook"
     Manufacturer="IBP GmbH"
     Version="$(var.ProductVersion)"
     Language="1031"
@@ -42,7 +42,7 @@
 
         <Component Id="cmpOutlookAddinReg" Guid="{8ED9BE3B-8138-4F3D-92FD-A5DA0CECA9F6}">
           <RegistryValue Root="HKLM" Key="Software\Microsoft\Office\Outlook\Addins\NcTalkOutlook.AddIn" Name="LoadBehavior" Type="integer" Value="3" KeyPath="yes" />
-          <RegistryValue Root="HKLM" Key="Software\Microsoft\Office\Outlook\Addins\NcTalkOutlook.AddIn" Name="FriendlyName" Type="string" Value="NC Connector for Outlook" />
+          <RegistryValue Root="HKLM" Key="Software\Microsoft\Office\Outlook\Addins\NcTalkOutlook.AddIn" Name="FriendlyName" Type="string" Value="IBP Nextcloud Integration für Outlook" />
           <RegistryValue Root="HKLM" Key="Software\Microsoft\Office\Outlook\Addins\NcTalkOutlook.AddIn" Name="Description" Type="string" Value="IBP Nextcloud Integration für Outlook" />
           <RegistryValue Root="HKLM" Key="Software\Microsoft\Office\Outlook\Addins\NcTalkOutlook.AddIn" Name="CommandLineSafe" Type="integer" Value="0" />
 
@@ -84,7 +84,7 @@
     <StandardDirectory Id="ProgramFilesFolder">
       <Component Id="cmpOutlookAddinReg32" Guid="{BC89C35C-3ACF-4F5B-B851-AFE8576EE014}" Bitness="always32">
         <RegistryValue Root="HKLM" Key="Software\Microsoft\Office\Outlook\Addins\NcTalkOutlook.AddIn" Name="LoadBehavior" Type="integer" Value="3" KeyPath="yes" />
-        <RegistryValue Root="HKLM" Key="Software\Microsoft\Office\Outlook\Addins\NcTalkOutlook.AddIn" Name="FriendlyName" Type="string" Value="NC Connector for Outlook" />
+        <RegistryValue Root="HKLM" Key="Software\Microsoft\Office\Outlook\Addins\NcTalkOutlook.AddIn" Name="FriendlyName" Type="string" Value="IBP Nextcloud Integration für Outlook" />
         <RegistryValue Root="HKLM" Key="Software\Microsoft\Office\Outlook\Addins\NcTalkOutlook.AddIn" Name="Description" Type="string" Value="IBP Nextcloud Integration für Outlook" />
         <RegistryValue Root="HKLM" Key="Software\Microsoft\Office\Outlook\Addins\NcTalkOutlook.AddIn" Name="CommandLineSafe" Type="integer" Value="0" />
 
@@ -110,7 +110,7 @@
 
     <Feature
       Id="MainFeature"
-      Title="NC Connector for Outlook"
+      Title="IBP Nextcloud Integration für Outlook"
       Level="1"
       TypicalDefault="install"
       InstallDefault="local">
