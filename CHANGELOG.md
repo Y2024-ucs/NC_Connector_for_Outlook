@@ -4,6 +4,19 @@ All notable changes to **NC Connector for Outlook** will be documented in this f
 
 This project follows the principles of **Keep a Changelog** and **Semantic Versioning**.
 
+## [3.4.1] - 2026-09-18
+
+### Changed
+
+- Settings and the Sharing and Talk wizards show clearer license status messages for grace periods, activation issues, and synchronization failures, with translations across all 15 supported languages.
+- Nextcloud administrators can open backend license management directly from license notices.
+
+### Fixed
+
+- Sending with ordinary attachments no longer stops just because cached attachment rules are older than five minutes. The last resolved rules remain in use while they refresh in the background; required NC Connector sharing still applies.
+- Initial attachment-rule checks and required sharing no longer report a failed upload when none took place.
+- Backend signatures remain outside Nextcloud share blocks when sending normal or inline replies. Borders inside share tables are no longer mistaken for the divider before quoted mail.
+
 ## [3.4.0] - 2026-09-14
 
 ### Added
