@@ -19,6 +19,7 @@ namespace NcTalkOutlookAddIn.Controllers
         private const string OutlookOriginalMessageBookmarkName = "_MailOriginal";
         private const string ManagedEmailSignatureBookmarkName = "NcConnectorSignature";
         private const int OutlookOriginalMessageProtectedGap = 2;
+        private const int WordInformationWithinTable = 12;
         private readonly NextcloudTalkAddIn _owner;
 
         internal sealed class EmailSignatureReconcileResult
@@ -1706,8 +1707,8 @@ namespace NcTalkOutlookAddIn.Controllers
                 int count = Convert.ToInt32(
                     paragraphs.GetType().InvokeMember("Count", BindingFlags.GetProperty, null, paragraphs, null),
                     CultureInfo.InvariantCulture);
-                int maxParagraphsToInspect = Math.Min(count, 80);
-                for (int i = 1; i <= maxParagraphsToInspect; i++)
+                int inspectedParagraphs = 0;
+                for (int i = 1; i <= count && inspectedParagraphs < 80; i++)
                 {
                     object paragraph = null;
                     object paragraphRange = null;
@@ -1743,6 +1744,23 @@ namespace NcTalkOutlookAddIn.Controllers
                             continue;
                         }
 
+                        // Share-table cell borders are not Outlook quote separators.
+                        object withinTable = paragraphRange.GetType().InvokeMember(
+                            "Information",
+                            BindingFlags.GetProperty,
+                            null,
+                            paragraphRange,
+                            new object[] { WordInformationWithinTable });
+                        if (withinTable == null)
+                        {
+                            return false;
+                        }
+                        if (Convert.ToBoolean(withinTable, CultureInfo.InvariantCulture))
+                        {
+                            continue;
+                        }
+
+                        inspectedParagraphs++;
                         if (ParagraphHasVisibleBorder(
                             paragraph,
                             failedBorderIndexes))
