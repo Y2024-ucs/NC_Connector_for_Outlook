@@ -562,6 +562,8 @@ Unter **Einstellungen -> Freigabe -> Anhänge** können Administratoren oder Bac
 
 `ZIP-Download` ist die Vorgabe, wenn weder ein lokaler noch ein Backend-Wert vorhanden ist. Das Linkziel gilt nur für die Anhangsautomatisierung; manuell erstellte Freigaben verlinken immer auf die Nextcloud-Freigabeseite.
 
+Anhangsregeln, die älter als fünf Minuten sind, gelten während der Aktualisierung im Hintergrund weiter. Allein dieses Alter unterbricht den Versand nicht. Wurden noch keine Regeln geladen oder gerade Einstellungen geändert, bittet ein Informationshinweis darum, das Senden in einem Moment erneut zu versuchen. Die Mail bleibt offen und ihre Anhänge bleiben unverändert. Ein eigener Warnhinweis erklärt, wenn die wirksamen Einstellungen tatsächlich eine Freigabe über NC Connector vorschreiben; keiner der beiden Hinweise meldet einen fehlgeschlagenen Upload.
+
 Beide Linkziele bleiben schreibgeschützte Freigaben. Kann aus der öffentlichen Freigabe keine gültige ZIP-Download-URL abgeleitet werden, stoppt das Einfügen mit einem Fehler. NC Connector beschriftet eine normale Freigabeseiten-URL nicht als ZIP-Download.
 
 Outlook oder Exchange kann einen großen Anhang ablehnen, bevor ein Add-in-Ereignis läuft. In diesem Fall müssen Benutzer **Nextcloud-Freigabe einfügen** wählen und die Datei direkt im Freigabe-Assistenten hinzufügen.

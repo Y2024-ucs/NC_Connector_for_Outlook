@@ -821,6 +821,12 @@
   "sharing_attachment_automation_locked_error": {
     "message": "Thunderbird 的「上傳大於以下大小的檔案」選項已啟用（$1 MB）。這會與 NC Connector 的附件自動化衝突。下方附件選項已被鎖定。"
   },
+  "outlook_attachment_policy_pending": {
+    "message": "正在更新附件規則。請稍後重試傳送。"
+  },
+  "outlook_attachment_routing_required": {
+    "message": "目前的附件設定要求透過 NC Connector 分享檔案。請使用 Nextcloud 分享精靈分享這些檔案。"
+  },
   "sharing_attachment_mode_reason_always": {
     "message": "附件模式已啟用。所選附件將透過 NC Connector 分享。"
   },

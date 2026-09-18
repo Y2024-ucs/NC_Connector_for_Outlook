@@ -821,6 +821,12 @@
   "sharing_attachment_automation_locked_error": {
     "message": "L’option Thunderbird «Téléverser pour les fichiers supérieurs à» est activée ($1 MB). Cela entre en conflit avec l’automatisation des pièces jointes de NC Connector. Les options ci-dessous sont verrouillées."
   },
+  "outlook_attachment_policy_pending": {
+    "message": "Les règles relatives aux pièces jointes sont en cours de mise à jour. Veuillez réessayer d’envoyer votre message dans un instant."
+  },
+  "outlook_attachment_routing_required": {
+    "message": "Les paramètres actuels des pièces jointes exigent que les fichiers soient partagés avec NC Connector. Veuillez utiliser l’assistant de partage Nextcloud pour partager ces fichiers."
+  },
   "sharing_attachment_mode_reason_always": {
     "message": "Le mode pièces jointes est actif. Les pièces jointes sélectionnées seront partagées avec NC Connector."
   },

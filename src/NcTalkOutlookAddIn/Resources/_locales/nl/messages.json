@@ -821,6 +821,12 @@
   "sharing_attachment_automation_locked_error": {
     "message": "De Thunderbird-optie „Uploaden voor bestanden groter dan” is ingeschakeld ($1 MB). Dit conflicteert met de bijlage-automatisering van NC Connector. De onderstaande bijlage-opties zijn vergrendeld."
   },
+  "outlook_attachment_policy_pending": {
+    "message": "De regels voor bijlagen worden bijgewerkt. Probeer het bericht over een ogenblik opnieuw te verzenden."
+  },
+  "outlook_attachment_routing_required": {
+    "message": "De huidige instellingen voor bijlagen vereisen dat bestanden met NC Connector worden gedeeld. Gebruik de Nextcloud-wizard voor delen om deze bestanden te delen."
+  },
   "sharing_attachment_mode_reason_always": {
     "message": "Bijlagenmodus is actief. Geselecteerde bijlagen worden gedeeld met NC Connector."
   },

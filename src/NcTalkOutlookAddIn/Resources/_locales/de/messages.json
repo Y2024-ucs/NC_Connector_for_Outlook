@@ -842,6 +842,12 @@
   "sharing_attachment_automation_locked_error": {
     "message": "In Thunderbird ist die Option „Hochladen für Dateien größer als“ aktiviert ($1 MB). Das kollidiert mit der NC Connector Anhangs-Automatisierung. Die Anhangsoptionen unten sind deshalb gesperrt."
   },
+  "outlook_attachment_policy_pending": {
+    "message": "Die Anhangsregeln werden gerade aktualisiert. Bitte versuchen Sie das Senden in einem Moment erneut."
+  },
+  "outlook_attachment_routing_required": {
+    "message": "Die aktuellen Anhangseinstellungen schreiben das Teilen über NC Connector vor. Bitte teilen Sie diese Dateien über den Nextcloud-Freigabeassistenten."
+  },
   "sharing_attachment_mode_reason_always": {
     "message": "Anhänge werden in diesem Modus immer über NC Connector geteilt."
   },

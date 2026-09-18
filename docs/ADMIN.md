@@ -562,6 +562,8 @@ In **Settings -> Sharing -> Attachments**, administrators or backend policy can 
 
 `ZIP download` is the default when neither a local value nor a backend value is available. The link-target setting applies only to attachment automation; manually created shares always link to the Nextcloud share page.
 
+Attachment rules older than five minutes continue to apply while they are refreshed in the background. Sending is not interrupted solely because of that age. If no rules have been loaded yet, or settings have just changed, an information message asks the user to try sending again in a moment. The mail remains open and its attachments are unchanged. A separate warning explains when the effective settings actually require NC Connector sharing; neither notice reports an upload failure.
+
 Both attachment targets remain read-only shares. If a valid ZIP-download URL cannot be derived from the public share, insertion stops with an error. NC Connector does not label a normal share-page URL as a ZIP download.
 
 Outlook or Exchange can reject a large attachment before an add-in event runs. In that case, users must select **Insert Nextcloud share** and add the file directly in the sharing wizard.

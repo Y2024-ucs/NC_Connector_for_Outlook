@@ -821,6 +821,12 @@
   "sharing_attachment_automation_locked_error": {
     "message": "L'opzione di Thunderbird «Carica per file più grandi di» è attiva ($1 MB). Questo è in conflitto con l'automazione allegati di NC Connector. Le opzioni allegati qui sotto sono bloccate."
   },
+  "outlook_attachment_policy_pending": {
+    "message": "Le regole per gli allegati sono in fase di aggiornamento. Riprova a inviare il messaggio tra un momento."
+  },
+  "outlook_attachment_routing_required": {
+    "message": "Le impostazioni attuali degli allegati richiedono che i file vengano condivisi con NC Connector. Usa la procedura guidata di condivisione di Nextcloud per condividere questi file."
+  },
   "sharing_attachment_mode_reason_always": {
     "message": "La modalità allegati è attiva. Gli allegati selezionati verranno condivisi con NC Connector."
   },

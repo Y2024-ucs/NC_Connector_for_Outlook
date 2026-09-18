@@ -821,6 +821,12 @@
   "sharing_attachment_automation_locked_error": {
     "message": "A Thunderbird „Feltöltés ekkora fájlméret felett” beállítása be van kapcsolva ($1 MB). Ez ütközik az NC Connector melléklet-automatizálásával. Az alábbi mellékletopciók zárolva vannak."
   },
+  "outlook_attachment_policy_pending": {
+    "message": "A mellékletekre vonatkozó szabályok frissítése folyamatban van. Kérjük, próbálja meg egy pillanat múlva újra elküldeni az üzenetet."
+  },
+  "outlook_attachment_routing_required": {
+    "message": "A mellékletek jelenlegi beállításai megkövetelik a fájlok NC Connectoron keresztüli megosztását. Kérjük, használja a Nextcloud megosztási varázslóját ezeknek a fájloknak a megosztásához."
+  },
   "sharing_attachment_mode_reason_always": {
     "message": "A mellékletmód aktív. A kijelölt mellékletek az NC Connectoron keresztül lesznek megosztva."
   },

@@ -821,6 +821,12 @@
   "sharing_attachment_automation_locked_error": {
     "message": "Thunderbird の「次より大きいファイルをアップロード」が有効です（$1 MB）。これは NC Connector の添付ファイル自動化と競合します。以下の添付ファイル設定はロックされています。"
   },
+  "outlook_attachment_policy_pending": {
+    "message": "添付ファイルのルールを更新しています。しばらくしてからもう一度送信してください。"
+  },
+  "outlook_attachment_routing_required": {
+    "message": "現在の添付ファイル設定では、NC Connector を使用してファイルを共有する必要があります。Nextcloud 共有ウィザードを使用してこれらのファイルを共有してください。"
+  },
   "sharing_attachment_mode_reason_always": {
     "message": "添付ファイルモードが有効です。選択した添付ファイルは NC Connector で共有されます。"
   },

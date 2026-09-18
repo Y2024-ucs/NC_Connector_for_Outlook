@@ -63,7 +63,7 @@ namespace NcTalkOutlookAddIn
                         if (settings.AlwaysConnector)
                         {
                             cancel = true;
-                            ShowForcedAttachmentProcessingError();
+                            ShowRequiredAttachmentRoutingNotice();
                         }
                         return;
                     }
@@ -89,7 +89,7 @@ namespace NcTalkOutlookAddIn
                         if (settings.AlwaysConnector)
                         {
                             cancel = true;
-                            ShowForcedAttachmentProcessingError();
+                            ShowRequiredAttachmentRoutingNotice();
                         }
                         return;
                     }
@@ -189,7 +189,7 @@ namespace NcTalkOutlookAddIn
                     if (settings.AlwaysConnector)
                     {
                         cancel = true;
-                        ShowForcedAttachmentProcessingError();
+                        ShowRequiredAttachmentRoutingNotice();
                     }
                     DiagnosticsLogger.LogException(
                         LogCategories.FileLink,

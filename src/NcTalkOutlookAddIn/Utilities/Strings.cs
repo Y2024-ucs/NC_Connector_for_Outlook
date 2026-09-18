@@ -1030,6 +1030,8 @@ namespace NcTalkOutlookAddIn.Utilities
         internal static string FileLinkWizardRenameDuplicatePrompt { get { return Get("sharing_prompt_rename_duplicate", "The file \"$1\" already exists in the queue. Please enter a new name."); } }
         internal static string FileLinkWizardAttachmentModeReasonThreshold { get { return Get("sharing_attachment_mode_reason_threshold", "Attachment threshold exceeded: {0} > {1}. Last added: \"{2}\" ({3}). These attachments will be shared with NC Connector."); } }
         internal static string FileLinkWizardAttachmentModeReasonAlways { get { return Get("sharing_attachment_mode_reason_always", "Attachment mode is active. Selected attachments will be shared with NC Connector."); } }
+        internal static string AttachmentPolicyPending { get { return Get("outlook_attachment_policy_pending", "Attachment rules are being updated. Please try sending again in a moment."); } }
+        internal static string AttachmentRoutingRequired { get { return Get("outlook_attachment_routing_required", "The current attachment settings require files to be shared with NC Connector. Please use the Nextcloud sharing wizard to share these files."); } }
 
         internal static string AttachmentPromptTitle { get { return Get("sharing_attachment_prompt_title", "Attachment limit exceeded"); } }
         internal static string AttachmentPromptReason { get { return Get("sharing_attachment_prompt_reason", "The total attachment size is {0} and exceeds the configured limit of {1}. Last added: \"{2}\" ({3})."); } }

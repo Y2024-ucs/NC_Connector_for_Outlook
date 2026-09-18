@@ -821,6 +821,12 @@
   "sharing_attachment_automation_locked_error": {
     "message": "A opção do Thunderbird \"Carregar ficheiros maiores do que\" está ativa ($1 MB). Isto entra em conflito com a automatização de anexos do NC Connector. As opções de anexos abaixo estão bloqueadas."
   },
+  "outlook_attachment_policy_pending": {
+    "message": "As regras dos anexos estão a ser atualizadas. Tente enviar novamente dentro de momentos."
+  },
+  "outlook_attachment_routing_required": {
+    "message": "As definições atuais dos anexos exigem que os ficheiros sejam partilhados com o NC Connector. Utilize o assistente de partilha do Nextcloud para partilhar estes ficheiros."
+  },
   "sharing_attachment_mode_reason_always": {
     "message": "O modo de anexos está ativo. Os anexos selecionados serão partilhados com o NC Connector."
   },

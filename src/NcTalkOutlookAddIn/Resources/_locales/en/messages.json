@@ -842,6 +842,12 @@
   "sharing_attachment_automation_locked_error": {
     "message": "Thunderbird's \"Upload for files larger than\" option is enabled ($1 MB). This conflicts with NC Connector attachment automation. The attachment options below are locked."
   },
+  "outlook_attachment_policy_pending": {
+    "message": "Attachment rules are being updated. Please try sending again in a moment."
+  },
+  "outlook_attachment_routing_required": {
+    "message": "The current attachment settings require files to be shared with NC Connector. Please use the Nextcloud sharing wizard to share these files."
+  },
   "sharing_attachment_mode_reason_always": {
     "message": "Attachment mode is active. Selected attachments will be shared with NC Connector."
   },

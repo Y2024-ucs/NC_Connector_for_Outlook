@@ -41,20 +41,23 @@ namespace NcTalkOutlookAddIn
 
             private AttachmentAutomationSettings ReadAttachmentAutomationSettings()
             {
-                if (HasFreshAttachmentAutomationSettingsSnapshot())
+                AttachmentAutomationSettings snapshot =
+                    _attachmentAutomationSettingsSnapshot;
+                if (!HasFreshAttachmentAutomationSettingsSnapshot())
                 {
-                    return _attachmentAutomationSettingsSnapshot;
+                    BeginAttachmentAutomationSettingsRefresh();
                 }
 
-                BeginAttachmentAutomationSettingsRefresh();
-                return ReadLocalAttachmentAutomationSettings();
+                return snapshot
+                       ?? _attachmentAutomationSettingsSnapshot
+                       ?? ReadLocalAttachmentAutomationSettings();
             }
 
             private async Task<AttachmentAutomationSettings> ReadAttachmentAutomationSettingsAsync()
             {
-                if (HasFreshAttachmentAutomationSettingsSnapshot())
+                if (_attachmentAutomationSettingsSnapshot != null)
                 {
-                    return _attachmentAutomationSettingsSnapshot;
+                    return ReadAttachmentAutomationSettings();
                 }
 
                 while (!_disposed)
@@ -153,6 +156,15 @@ namespace NcTalkOutlookAddIn
                         () => _owner.FetchBackendPolicyStatus(
                             configuration,
                             "compose_attachment_evaluate")).ConfigureAwait(false);
+                    if ((policyStatus == null || !policyStatus.FetchSucceeded)
+                        && _attachmentAutomationSettingsSnapshot != null)
+                    {
+                        LogFileLink(
+                            "Compose attachment policy refresh unavailable; retaining the previous rules (composeKey="
+                            + _composeKey
+                            + ").");
+                        return _attachmentAutomationSettingsSnapshot ?? local;
+                    }
                     resolved = ApplyAttachmentAutomationPolicy(
                         local,
                         policyStatus);
@@ -240,12 +252,16 @@ namespace NcTalkOutlookAddIn
                     return true;
                 }
 
-                if (!HasFreshAttachmentAutomationSettingsSnapshot()
+                if (_attachmentAutomationSettingsSnapshot == null
                     && _owner.SettingsAreComplete())
                 {
                     BeginAttachmentAutomationSettingsRefresh();
                     cancel = true;
-                    ShowForcedAttachmentProcessingError();
+                    MessageBox.Show(
+                        Strings.AttachmentPolicyPending,
+                        Strings.DialogTitle,
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
                     LogFileLink(
                         "Compose send blocked while attachment policy snapshot is pending (composeKey="
                         + _composeKey
@@ -267,12 +283,12 @@ namespace NcTalkOutlookAddIn
                     out guardState))
                 {
                     cancel = true;
-                    ShowForcedAttachmentProcessingError();
+                    ShowRequiredAttachmentRoutingNotice();
                     return false;
                 }
 
                 cancel = true;
-                ShowForcedAttachmentProcessingError();
+                ShowRequiredAttachmentRoutingNotice();
                 LogFileLink(
                     "Compose send blocked by required attachment routing (composeKey="
                     + _composeKey
@@ -282,12 +298,10 @@ namespace NcTalkOutlookAddIn
                 return false;
             }
 
-            private static void ShowForcedAttachmentProcessingError()
+            private static void ShowRequiredAttachmentRoutingNotice()
             {
                 MessageBox.Show(
-                    Strings.FileLinkWizardAttachmentModeReasonAlways
-                    + "\r\n\r\n"
-                    + Strings.FileLinkWizardUploadFailed,
+                    Strings.AttachmentRoutingRequired,
                     Strings.DialogTitle,
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);

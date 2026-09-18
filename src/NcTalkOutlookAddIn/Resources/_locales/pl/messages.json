@@ -821,6 +821,12 @@
   "sharing_attachment_automation_locked_error": {
     "message": "W Thunderbirdu jest włączona opcja „Prześlij dla plików większych niż” ($1 MB). To koliduje z automatyzacją załączników NC Connector. Poniższe opcje załączników są zablokowane."
   },
+  "outlook_attachment_policy_pending": {
+    "message": "Trwa aktualizowanie reguł dotyczących załączników. Spróbuj ponownie wysłać wiadomość za chwilę."
+  },
+  "outlook_attachment_routing_required": {
+    "message": "Bieżące ustawienia załączników wymagają udostępniania plików przez NC Connector. Użyj kreatora udostępniania Nextcloud, aby udostępnić te pliki."
+  },
   "sharing_attachment_mode_reason_always": {
     "message": "Tryb załączników jest aktywny. Wybrane załączniki zostaną udostępnione przez NC Connector."
   },

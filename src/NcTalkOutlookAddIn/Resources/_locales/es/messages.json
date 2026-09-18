@@ -821,6 +821,12 @@
   "sharing_attachment_automation_locked_error": {
     "message": "La opción de Thunderbird «Subir archivos mayores que» está activada ($1 MB). Esto entra en conflicto con la automatización de adjuntos de NC Connector. Las opciones de adjuntos de abajo están bloqueadas."
   },
+  "outlook_attachment_policy_pending": {
+    "message": "Se están actualizando las reglas de los adjuntos. Vuelva a intentar enviar el mensaje en un momento."
+  },
+  "outlook_attachment_routing_required": {
+    "message": "La configuración actual de los adjuntos requiere que los archivos se compartan con NC Connector. Utilice el asistente de uso compartido de Nextcloud para compartir estos archivos."
+  },
   "sharing_attachment_mode_reason_always": {
     "message": "El modo de adjuntos está activo. Los adjuntos seleccionados se compartirán con NC Connector."
   },

@@ -821,6 +821,12 @@
   "sharing_attachment_automation_locked_error": {
     "message": "V Thunderbirdu je zapnutá možnost „Nahrávat soubory větší než“ ($1 MB). To je v konfliktu s automatizací příloh NC Connectoru. Níže uvedené možnosti příloh jsou uzamčeny."
   },
+  "outlook_attachment_policy_pending": {
+    "message": "Pravidla pro přílohy se právě aktualizují. Zkuste zprávu za chvíli odeslat znovu."
+  },
+  "outlook_attachment_routing_required": {
+    "message": "Aktuální nastavení příloh vyžaduje sdílení souborů přes NC Connector. Ke sdílení těchto souborů použijte průvodce sdílením Nextcloud."
+  },
   "sharing_attachment_mode_reason_always": {
     "message": "Režim příloh je aktivní. Vybrané přílohy budou sdíleny přes NC Connector."
   },

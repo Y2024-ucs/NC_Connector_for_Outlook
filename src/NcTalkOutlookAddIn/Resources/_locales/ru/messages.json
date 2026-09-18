@@ -821,6 +821,12 @@
   "sharing_attachment_automation_locked_error": {
     "message": "В Thunderbird включена опция «Загружать файлы больше чем» ($1 MB). Это конфликтует с автоматизацией вложений NC Connector. Параметры вложений ниже заблокированы."
   },
+  "outlook_attachment_policy_pending": {
+    "message": "Правила для вложений обновляются. Повторите попытку отправки через некоторое время."
+  },
+  "outlook_attachment_routing_required": {
+    "message": "Текущие настройки вложений требуют предоставления общего доступа к файлам через NC Connector. Используйте мастер общего доступа Nextcloud, чтобы поделиться этими файлами."
+  },
   "sharing_attachment_mode_reason_always": {
     "message": "Режим вложений активен. Выбранные вложения будут отправлены через NC Connector."
   },
