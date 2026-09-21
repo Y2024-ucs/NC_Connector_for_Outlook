@@ -27,8 +27,16 @@ namespace NcTalkOutlookAddIn.Services
         internal string Email1 { get; set; }
         internal string Email2 { get; set; }
         internal string BusinessPhone { get; set; }
+        internal string BusinessPhone2 { get; set; }
         internal string MobilePhone { get; set; }
         internal string HomePhone { get; set; }
+        internal string HomePhone2 { get; set; }
+        internal string BusinessFax { get; set; }
+        internal string HomeFax { get; set; }
+        internal string OtherPhone { get; set; }
+        internal string PagerPhone { get; set; }
+        internal string CompanyMainPhone { get; set; }
+        internal string CarPhone { get; set; }
         internal string BusinessAddressStreet { get; set; }
         internal string BusinessAddressCity { get; set; }
         internal string BusinessAddressState { get; set; }
@@ -627,8 +635,16 @@ namespace NcTalkOutlookAddIn.Services
             target.Email1Address = source.Email1 ?? string.Empty;
             target.Email2Address = source.Email2 ?? string.Empty;
             target.BusinessTelephoneNumber = source.BusinessPhone ?? string.Empty;
+            target.Business2TelephoneNumber = source.BusinessPhone2 ?? string.Empty;
             target.MobileTelephoneNumber = source.MobilePhone ?? string.Empty;
             target.HomeTelephoneNumber = source.HomePhone ?? string.Empty;
+            target.Home2TelephoneNumber = source.HomePhone2 ?? string.Empty;
+            target.BusinessFaxNumber = source.BusinessFax ?? string.Empty;
+            target.HomeFaxNumber = source.HomeFax ?? string.Empty;
+            target.OtherTelephoneNumber = source.OtherPhone ?? string.Empty;
+            target.PagerNumber = source.PagerPhone ?? string.Empty;
+            target.CompanyMainTelephoneNumber = source.CompanyMainPhone ?? string.Empty;
+            target.CarTelephoneNumber = source.CarPhone ?? string.Empty;
             target.BusinessAddressStreet = source.BusinessAddressStreet ?? string.Empty;
             target.BusinessAddressCity = source.BusinessAddressCity ?? string.Empty;
             target.BusinessAddressState = source.BusinessAddressState ?? string.Empty;
@@ -835,6 +851,7 @@ namespace NcTalkOutlookAddIn.Services
         private static CardDavContactRecord ParseVCard(string raw)
         {
             List<string> lines = UnfoldVCard(raw);
+            Dictionary<string, string> groupLabels = ReadVCardGroupLabels(lines);
             var result = new CardDavContactRecord();
             foreach (string line in lines)
             {
@@ -847,7 +864,7 @@ namespace NcTalkOutlookAddIn.Services
                 string left = line.Substring(0, colon);
                 string upperLeft = left.ToUpperInvariant();
                 string value = DecodeVCardValue(left, line.Substring(colon + 1));
-                string name = left.Split(';')[0].ToUpperInvariant();
+                string name = NormalizeVCardPropertyName(left);
 
                 switch (name)
                 {
@@ -868,9 +885,13 @@ namespace NcTalkOutlookAddIn.Services
                         else if (string.IsNullOrWhiteSpace(result.Email2)) result.Email2 = value;
                         break;
                     case "TEL":
-                        if (upperLeft.Contains("CELL") || upperLeft.Contains("MOBILE")) result.MobilePhone = value;
-                        else if (upperLeft.Contains("HOME")) result.HomePhone = value;
-                        else if (string.IsNullOrWhiteSpace(result.BusinessPhone)) result.BusinessPhone = value;
+                        string group = GetVCardPropertyGroup(left);
+                        string groupLabel = string.Empty;
+                        if (!string.IsNullOrWhiteSpace(group))
+                        {
+                            groupLabels.TryGetValue(group, out groupLabel);
+                        }
+                        AssignTelephone(result, value, upperLeft, groupLabel);
                         break;
                     case "ADR":
                         string[] address = SplitVCardComponents(value);
@@ -893,6 +914,183 @@ namespace NcTalkOutlookAddIn.Services
             return result;
         }
 
+        private static Dictionary<string, string> ReadVCardGroupLabels(IList<string> lines)
+        {
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (lines == null)
+            {
+                return result;
+            }
+
+            foreach (string line in lines)
+            {
+                int colon = line.IndexOf(':');
+                if (colon <= 0)
+                {
+                    continue;
+                }
+
+                string left = line.Substring(0, colon);
+                if (!string.Equals(
+                        NormalizeVCardPropertyName(left),
+                        "X-ABLABEL",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string group = GetVCardPropertyGroup(left);
+                if (string.IsNullOrWhiteSpace(group))
+                {
+                    continue;
+                }
+
+                string label = DecodeVCardValue(left, line.Substring(colon + 1));
+                if (!string.IsNullOrWhiteSpace(label))
+                {
+                    result[group] = NormalizeAppleVCardLabel(label);
+                }
+            }
+            return result;
+        }
+
+        private static string NormalizeVCardPropertyName(string fieldDefinition)
+        {
+            string token = GetVCardPropertyToken(fieldDefinition);
+            int dot = token.LastIndexOf('.');
+            if (dot >= 0 && dot + 1 < token.Length)
+            {
+                token = token.Substring(dot + 1);
+            }
+            return token.ToUpperInvariant();
+        }
+
+        private static string GetVCardPropertyGroup(string fieldDefinition)
+        {
+            string token = GetVCardPropertyToken(fieldDefinition);
+            int dot = token.LastIndexOf('.');
+            return dot > 0 ? token.Substring(0, dot) : string.Empty;
+        }
+
+        private static string GetVCardPropertyToken(string fieldDefinition)
+        {
+            if (string.IsNullOrWhiteSpace(fieldDefinition))
+            {
+                return string.Empty;
+            }
+            int semicolon = fieldDefinition.IndexOf(';');
+            return (semicolon >= 0
+                    ? fieldDefinition.Substring(0, semicolon)
+                    : fieldDefinition)
+                .Trim();
+        }
+
+        private static string NormalizeAppleVCardLabel(string value)
+        {
+            string label = (value ?? string.Empty).Trim();
+            if (label.StartsWith("_$!<", StringComparison.Ordinal)
+                && label.EndsWith(">!$_", StringComparison.Ordinal)
+                && label.Length > 8)
+            {
+                label = label.Substring(4, label.Length - 8);
+            }
+            return label.Trim();
+        }
+
+        private static void AssignTelephone(
+            CardDavContactRecord contact,
+            string value,
+            string fieldDefinition,
+            string groupLabel)
+        {
+            if (contact == null || string.IsNullOrWhiteSpace(value))
+            {
+                return;
+            }
+
+            string type = ((fieldDefinition ?? string.Empty)
+                           + ";"
+                           + (groupLabel ?? string.Empty))
+                .ToUpperInvariant();
+
+            if (type.Contains("FAX"))
+            {
+                if (type.Contains("HOME"))
+                {
+                    SetPhoneValue(ref contact.HomeFax, value);
+                }
+                else
+                {
+                    SetPhoneValue(ref contact.BusinessFax, value);
+                }
+                return;
+            }
+
+            if (type.Contains("CELL")
+                || type.Contains("MOBILE")
+                || type.Contains("IPHONE"))
+            {
+                SetPhoneValue(ref contact.MobilePhone, value);
+                return;
+            }
+
+            if (type.Contains("HOME"))
+            {
+                if (!SetPhoneValue(ref contact.HomePhone, value))
+                {
+                    SetPhoneValue(ref contact.HomePhone2, value);
+                }
+                return;
+            }
+
+            if (type.Contains("PAGER"))
+            {
+                SetPhoneValue(ref contact.PagerPhone, value);
+                return;
+            }
+
+            if (type.Contains("CAR"))
+            {
+                SetPhoneValue(ref contact.CarPhone, value);
+                return;
+            }
+
+            if (type.Contains("MAIN"))
+            {
+                SetPhoneValue(ref contact.CompanyMainPhone, value);
+                return;
+            }
+
+            if (!SetPhoneValue(ref contact.BusinessPhone, value)
+                && !SetPhoneValue(ref contact.BusinessPhone2, value))
+            {
+                SetPhoneValue(ref contact.OtherPhone, value);
+            }
+        }
+
+        private static bool SetPhoneValue(ref string target, string value)
+        {
+            string normalized = (value ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                return false;
+            }
+            if (string.Equals(
+                    (target ?? string.Empty).Trim(),
+                    normalized,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            if (!string.IsNullOrWhiteSpace(target))
+            {
+                return false;
+            }
+
+            target = normalized;
+            return true;
+        }
+
         private static List<string> UnfoldVCard(string raw)
         {
             string normalized = (raw ?? string.Empty)
@@ -902,12 +1100,21 @@ namespace NcTalkOutlookAddIn.Services
             var result = new List<string>();
             foreach (string line in source)
             {
-                if (result.Count > 0 && result[result.Count - 1].EndsWith("=", StringComparison.Ordinal))
+                bool foldedLine = line.StartsWith(" ", StringComparison.Ordinal)
+                                  || line.StartsWith("\t", StringComparison.Ordinal);
+                if (result.Count > 0
+                    && result[result.Count - 1].EndsWith("=", StringComparison.Ordinal)
+                    && IsQuotedPrintableProperty(result[result.Count - 1]))
                 {
                     string previous = result[result.Count - 1];
-                    result[result.Count - 1] = previous.Substring(0, previous.Length - 1) + line;
+                    string continuation = foldedLine && line.Length > 0
+                        ? line.Substring(1)
+                        : line;
+                    result[result.Count - 1] =
+                        previous.Substring(0, previous.Length - 1)
+                        + continuation;
                 }
-                else if ((line.StartsWith(" ") || line.StartsWith("\t")) && result.Count > 0)
+                else if (foldedLine && result.Count > 0)
                 {
                     result[result.Count - 1] += line.Substring(1);
                 }
@@ -917,6 +1124,21 @@ namespace NcTalkOutlookAddIn.Services
                 }
             }
             return result;
+        }
+
+        private static bool IsQuotedPrintableProperty(string unfoldedLine)
+        {
+            if (string.IsNullOrWhiteSpace(unfoldedLine))
+            {
+                return false;
+            }
+            int colon = unfoldedLine.IndexOf(':');
+            string fieldDefinition = colon >= 0
+                ? unfoldedLine.Substring(0, colon)
+                : unfoldedLine;
+            return fieldDefinition.IndexOf(
+                       "QUOTED-PRINTABLE",
+                       StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static string DecodeVCardValue(string fieldDefinition, string value)
