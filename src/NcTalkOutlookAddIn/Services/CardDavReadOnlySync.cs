@@ -58,7 +58,7 @@ namespace NcTalkOutlookAddIn.Services
         private const string HrefPropertyName = "NC-CardDAV-HREF";
         private const string ETagPropertyName = "NC-CardDAV-ETAG";
         private const string ImportSchemaPropertyName = "NC-CardDAV-SCHEMA";
-        private const string CurrentImportSchema = "2";
+        private const string CurrentImportSchema = "3";
         private const string CompanyFolderSuffix = " - Firmenverzeichnis";
         private const string PersonalFolderSuffix = " - Persönliche Kontakte";
         private const string GeneratedSystemAddressBookMarker = "z-server-generated--system";
@@ -642,6 +642,7 @@ namespace NcTalkOutlookAddIn.Services
             target.FullName = source.FullName ?? string.Empty;
             target.FirstName = source.FirstName ?? string.Empty;
             target.LastName = source.LastName ?? string.Empty;
+            target.FileAs = ResolveContactFileAs(source);
             target.CompanyName = source.Company ?? string.Empty;
             target.JobTitle = source.JobTitle ?? string.Empty;
             target.Email1Address = source.Email1 ?? string.Empty;
@@ -669,6 +670,29 @@ namespace NcTalkOutlookAddIn.Services
             WriteUserProperty(target, ETagPropertyName, source.ETag);
             WriteUserProperty(target, ImportSchemaPropertyName, CurrentImportSchema);
             CardDavVCardSupport.ApplyPhoto(target, source.Href);
+        }
+
+        private static string ResolveContactFileAs(CardDavContactRecord source)
+        {
+            if (source == null)
+            {
+                return string.Empty;
+            }
+
+            if (!string.IsNullOrWhiteSpace(source.FullName))
+            {
+                return source.FullName.Trim();
+            }
+
+            string name = ((source.FirstName ?? string.Empty)
+                + " "
+                + (source.LastName ?? string.Empty)).Trim();
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                return name;
+            }
+
+            return (source.Email1 ?? string.Empty).Trim();
         }
 
         private static bool IsSystemDirectoryContact(CardDavContactRecord contact)
@@ -766,6 +790,7 @@ namespace NcTalkOutlookAddIn.Services
                         {
                             Outlook.MAPIFolder match = folder;
                             folder = null;
+                            EnsureFolderAvailableInAddressBook(match);
                             return match;
                         }
                     }
@@ -774,11 +799,38 @@ namespace NcTalkOutlookAddIn.Services
                         ComInteropScope.TryRelease(folder, LogCategories.Core, "Failed to release Outlook contact subfolder.");
                     }
                 }
-                return folders.Add(name, Outlook.OlDefaultFolders.olFolderContacts);
+                Outlook.MAPIFolder created = folders.Add(
+                    name,
+                    Outlook.OlDefaultFolders.olFolderContacts);
+                EnsureFolderAvailableInAddressBook(created);
+                return created;
             }
             finally
             {
                 ComInteropScope.TryRelease(folders, LogCategories.Core, "Failed to release Outlook contact folders collection.");
+            }
+        }
+
+        private static void EnsureFolderAvailableInAddressBook(Outlook.MAPIFolder folder)
+        {
+            if (folder == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (!folder.ShowAsOutlookAB)
+                {
+                    folder.ShowAsOutlookAB = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsLogger.LogException(
+                    LogCategories.Core,
+                    "Failed to enable Outlook address book for CardDAV contacts folder.",
+                    ex);
             }
         }
 
