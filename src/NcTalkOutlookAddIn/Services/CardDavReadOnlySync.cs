@@ -58,7 +58,7 @@ namespace NcTalkOutlookAddIn.Services
         private const string HrefPropertyName = "NC-CardDAV-HREF";
         private const string ETagPropertyName = "NC-CardDAV-ETAG";
         private const string ImportSchemaPropertyName = "NC-CardDAV-SCHEMA";
-        private const string CurrentImportSchema = "3";
+        private const string CurrentImportSchema = "4";
         private const string CompanyFolderSuffix = " - Firmenverzeichnis";
         private const string PersonalFolderSuffix = " - Persönliche Kontakte";
         private const string GeneratedSystemAddressBookMarker = "z-server-generated--system";
@@ -549,8 +549,7 @@ namespace NcTalkOutlookAddIn.Services
                     if (target == null)
                     {
                         folderItems = targetFolder.Items;
-                        target = folderItems.Add(Outlook.OlItemType.olContactItem)
-                            as Outlook.ContactItem;
+                        target = folderItems.Add() as Outlook.ContactItem;
                     }
                     if (target == null)
                     {
@@ -574,6 +573,20 @@ namespace NcTalkOutlookAddIn.Services
 
                     ApplyContact(target, source);
                     target.Save();
+
+                    string savedEntryId = target.EntryID;
+                    ComInteropScope.TryRelease(
+                        target,
+                        LogCategories.Core,
+                        "Failed to release saved CardDAV ContactItem before reload.");
+                    target = null;
+
+                    if (!string.IsNullOrWhiteSpace(savedEntryId))
+                    {
+                        target = session.GetItemFromID(savedEntryId, storeId)
+                            as Outlook.ContactItem;
+                    }
+
                     RememberKnownEtag(source.Href, source.ETag);
                     imported++;
                 }
