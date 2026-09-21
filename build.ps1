@@ -162,7 +162,7 @@ if (-not (Test-Path $builtMsiPath)) {
 }
 
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
-$finalName = "NCConnectorForOutlook-$assemblyVersionShort.msi"
+$finalName = "IBP-NC-ConnectorForOutlook$assemblyVersionShort.msi"
 $finalPath = Join-Path $OutputDir $finalName
 Copy-Item -Force $builtMsiPath $finalPath
 
