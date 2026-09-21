@@ -57,6 +57,8 @@ namespace NcTalkOutlookAddIn.Services
         private const string UidPropertyName = "NC-CardDAV-UID";
         private const string HrefPropertyName = "NC-CardDAV-HREF";
         private const string ETagPropertyName = "NC-CardDAV-ETAG";
+        private const string ImportSchemaPropertyName = "NC-CardDAV-SCHEMA";
+        private const string CurrentImportSchema = "2";
         private const string CompanyFolderSuffix = " - Firmenverzeichnis";
         private const string PersonalFolderSuffix = " - Persönliche Kontakte";
         private const string GeneratedSystemAddressBookMarker = "z-server-generated--system";
@@ -321,8 +323,13 @@ namespace NcTalkOutlookAddIn.Services
 
                         string href = ReadUserProperty(contact, HrefPropertyName);
                         string etag = ReadUserProperty(contact, ETagPropertyName);
+                        string importSchema = ReadUserProperty(contact, ImportSchemaPropertyName);
                         if (!string.IsNullOrWhiteSpace(href)
-                            && !string.IsNullOrWhiteSpace(etag))
+                            && !string.IsNullOrWhiteSpace(etag)
+                            && string.Equals(
+                                importSchema,
+                                CurrentImportSchema,
+                                StringComparison.Ordinal))
                         {
                             result[href.Trim()] = etag.Trim();
                         }
@@ -551,10 +558,15 @@ namespace NcTalkOutlookAddIn.Services
                     }
 
                     string currentEtag = ReadUserProperty(target, ETagPropertyName);
+                    string currentImportSchema = ReadUserProperty(target, ImportSchemaPropertyName);
                     if (!string.IsNullOrWhiteSpace(source.ETag)
                         && string.Equals(
                             NormalizeEtag(currentEtag),
                             NormalizeEtag(source.ETag),
+                            StringComparison.Ordinal)
+                        && string.Equals(
+                            currentImportSchema,
+                            CurrentImportSchema,
                             StringComparison.Ordinal))
                     {
                         continue;
@@ -655,6 +667,7 @@ namespace NcTalkOutlookAddIn.Services
             WriteUserProperty(target, UidPropertyName, source.Uid);
             WriteUserProperty(target, HrefPropertyName, source.Href);
             WriteUserProperty(target, ETagPropertyName, source.ETag);
+            WriteUserProperty(target, ImportSchemaPropertyName, CurrentImportSchema);
             CardDavVCardSupport.ApplyPhoto(target, source.Href);
         }
 
