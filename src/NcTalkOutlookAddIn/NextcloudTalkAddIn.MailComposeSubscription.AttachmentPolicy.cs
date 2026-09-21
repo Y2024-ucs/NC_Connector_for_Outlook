@@ -46,8 +46,15 @@ namespace NcTalkOutlookAddIn
                     return _attachmentAutomationSettingsSnapshot;
                 }
 
+                // Do not make sending mail depend on a live backend-policy refresh.
+                // When the cached policy expires, refresh it in the background and
+                // continue with the last known snapshot. This avoids a false
+                // "attachment routing required" error every time the 5-minute
+                // policy cache expires.
+                AttachmentAutomationSettings staleSnapshot =
+                    _attachmentAutomationSettingsSnapshot;
                 BeginAttachmentAutomationSettingsRefresh();
-                return ReadLocalAttachmentAutomationSettings();
+                return staleSnapshot ?? ReadLocalAttachmentAutomationSettings();
             }
 
             private async Task<AttachmentAutomationSettings> ReadAttachmentAutomationSettingsAsync()
@@ -238,19 +245,6 @@ namespace NcTalkOutlookAddIn
                 if (attachmentCount <= 0)
                 {
                     return true;
-                }
-
-                if (!HasFreshAttachmentAutomationSettingsSnapshot()
-                    && _owner.SettingsAreComplete())
-                {
-                    BeginAttachmentAutomationSettingsRefresh();
-                    cancel = true;
-                    ShowForcedAttachmentProcessingError();
-                    LogFileLink(
-                        "Compose send blocked while attachment policy snapshot is pending (composeKey="
-                        + _composeKey
-                        + ").");
-                    return false;
                 }
 
                 AttachmentAutomationSettings settings =
