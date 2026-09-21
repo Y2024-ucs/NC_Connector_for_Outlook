@@ -20,7 +20,7 @@ namespace NcTalkOutlookAddIn.Services
         private const string HrefPropertyName = "NC-CardDAV-HREF";
         private const string ETagPropertyName = "NC-CardDAV-ETAG";
         private const string ImportSchemaPropertyName = "NC-CardDAV-SCHEMA";
-        private const string CurrentImportSchema = "2";
+        private const string CurrentImportSchema = "3";
 
         internal static int Import(
             Outlook.Application outlookApplication,
@@ -37,6 +37,7 @@ namespace NcTalkOutlookAddIn.Services
             {
                 session = outlookApplication.Session;
                 defaultContacts = session.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderContacts);
+                EnsureFolderAvailableInAddressBook(defaultContacts);
                 return ImportIntoFolder(session, defaultContacts, contacts);
             }
             finally
@@ -159,6 +160,7 @@ namespace NcTalkOutlookAddIn.Services
             target.FullName = source.FullName ?? string.Empty;
             target.FirstName = source.FirstName ?? string.Empty;
             target.LastName = source.LastName ?? string.Empty;
+            target.FileAs = ResolveContactFileAs(source);
             target.CompanyName = source.Company ?? string.Empty;
             target.JobTitle = source.JobTitle ?? string.Empty;
             target.Email1Address = source.Email1 ?? string.Empty;
@@ -186,6 +188,52 @@ namespace NcTalkOutlookAddIn.Services
             WriteUserProperty(target, HrefPropertyName, source.Href);
             WriteUserProperty(target, ETagPropertyName, source.ETag);
             WriteUserProperty(target, ImportSchemaPropertyName, CurrentImportSchema);
+        }
+
+        private static string ResolveContactFileAs(CardDavContactRecord source)
+        {
+            if (source == null)
+            {
+                return string.Empty;
+            }
+
+            if (!string.IsNullOrWhiteSpace(source.FullName))
+            {
+                return source.FullName.Trim();
+            }
+
+            string name = ((source.FirstName ?? string.Empty)
+                + " "
+                + (source.LastName ?? string.Empty)).Trim();
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                return name;
+            }
+
+            return (source.Email1 ?? string.Empty).Trim();
+        }
+
+        private static void EnsureFolderAvailableInAddressBook(Outlook.MAPIFolder folder)
+        {
+            if (folder == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (!folder.ShowAsOutlookAB)
+                {
+                    folder.ShowAsOutlookAB = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsLogger.LogException(
+                    LogCategories.Core,
+                    "Failed to enable Outlook address book for default CardDAV contacts folder.",
+                    ex);
+            }
         }
 
         private static string BuildContactKey(string uid, string href)
