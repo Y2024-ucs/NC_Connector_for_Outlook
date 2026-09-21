@@ -1012,16 +1012,20 @@ namespace NcTalkOutlookAddIn.Services
                            + ";"
                            + (groupLabel ?? string.Empty))
                 .ToUpperInvariant();
+            string assigned;
 
             if (type.Contains("FAX"))
             {
                 if (type.Contains("HOME"))
                 {
-                    SetPhoneValue(ref contact.HomeFax, value);
+                    if (TryAssignPhoneValue(contact.HomeFax, value, out assigned))
+                    {
+                        contact.HomeFax = assigned;
+                    }
                 }
-                else
+                else if (TryAssignPhoneValue(contact.BusinessFax, value, out assigned))
                 {
-                    SetPhoneValue(ref contact.BusinessFax, value);
+                    contact.BusinessFax = assigned;
                 }
                 return;
             }
@@ -1030,64 +1034,99 @@ namespace NcTalkOutlookAddIn.Services
                 || type.Contains("MOBILE")
                 || type.Contains("IPHONE"))
             {
-                SetPhoneValue(ref contact.MobilePhone, value);
+                if (TryAssignPhoneValue(contact.MobilePhone, value, out assigned))
+                {
+                    contact.MobilePhone = assigned;
+                }
+                else if (TryAssignPhoneValue(contact.OtherPhone, value, out assigned))
+                {
+                    contact.OtherPhone = assigned;
+                }
                 return;
             }
 
             if (type.Contains("HOME"))
             {
-                if (!SetPhoneValue(ref contact.HomePhone, value))
+                if (TryAssignPhoneValue(contact.HomePhone, value, out assigned))
                 {
-                    SetPhoneValue(ref contact.HomePhone2, value);
+                    contact.HomePhone = assigned;
+                }
+                else if (TryAssignPhoneValue(contact.HomePhone2, value, out assigned))
+                {
+                    contact.HomePhone2 = assigned;
+                }
+                else if (TryAssignPhoneValue(contact.OtherPhone, value, out assigned))
+                {
+                    contact.OtherPhone = assigned;
                 }
                 return;
             }
 
             if (type.Contains("PAGER"))
             {
-                SetPhoneValue(ref contact.PagerPhone, value);
+                if (TryAssignPhoneValue(contact.PagerPhone, value, out assigned))
+                {
+                    contact.PagerPhone = assigned;
+                }
                 return;
             }
 
             if (type.Contains("CAR"))
             {
-                SetPhoneValue(ref contact.CarPhone, value);
+                if (TryAssignPhoneValue(contact.CarPhone, value, out assigned))
+                {
+                    contact.CarPhone = assigned;
+                }
                 return;
             }
 
             if (type.Contains("MAIN"))
             {
-                SetPhoneValue(ref contact.CompanyMainPhone, value);
+                if (TryAssignPhoneValue(contact.CompanyMainPhone, value, out assigned))
+                {
+                    contact.CompanyMainPhone = assigned;
+                }
                 return;
             }
 
-            if (!SetPhoneValue(ref contact.BusinessPhone, value)
-                && !SetPhoneValue(ref contact.BusinessPhone2, value))
+            if (TryAssignPhoneValue(contact.BusinessPhone, value, out assigned))
             {
-                SetPhoneValue(ref contact.OtherPhone, value);
+                contact.BusinessPhone = assigned;
+            }
+            else if (TryAssignPhoneValue(contact.BusinessPhone2, value, out assigned))
+            {
+                contact.BusinessPhone2 = assigned;
+            }
+            else if (TryAssignPhoneValue(contact.OtherPhone, value, out assigned))
+            {
+                contact.OtherPhone = assigned;
             }
         }
 
-        private static bool SetPhoneValue(ref string target, string value)
+        private static bool TryAssignPhoneValue(
+            string current,
+            string value,
+            out string assigned)
         {
+            assigned = current;
             string normalized = (value ?? string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(normalized))
             {
                 return false;
             }
             if (string.Equals(
-                    (target ?? string.Empty).Trim(),
+                    (current ?? string.Empty).Trim(),
                     normalized,
                     StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
-            if (!string.IsNullOrWhiteSpace(target))
+            if (!string.IsNullOrWhiteSpace(current))
             {
                 return false;
             }
 
-            target = normalized;
+            assigned = normalized;
             return true;
         }
 
