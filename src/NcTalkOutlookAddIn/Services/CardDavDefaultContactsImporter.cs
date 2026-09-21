@@ -19,6 +19,8 @@ namespace NcTalkOutlookAddIn.Services
         private const string UidPropertyName = "NC-CardDAV-UID";
         private const string HrefPropertyName = "NC-CardDAV-HREF";
         private const string ETagPropertyName = "NC-CardDAV-ETAG";
+        private const string ImportSchemaPropertyName = "NC-CardDAV-SCHEMA";
+        private const string CurrentImportSchema = "2";
 
         internal static int Import(
             Outlook.Application outlookApplication,
@@ -183,6 +185,7 @@ namespace NcTalkOutlookAddIn.Services
             WriteUserProperty(target, UidPropertyName, source.Uid);
             WriteUserProperty(target, HrefPropertyName, source.Href);
             WriteUserProperty(target, ETagPropertyName, source.ETag);
+            WriteUserProperty(target, ImportSchemaPropertyName, CurrentImportSchema);
         }
 
         private static string BuildContactKey(string uid, string href)
