@@ -162,8 +162,16 @@ namespace NcTalkOutlookAddIn.Services
             target.Email1Address = source.Email1 ?? string.Empty;
             target.Email2Address = source.Email2 ?? string.Empty;
             target.BusinessTelephoneNumber = source.BusinessPhone ?? string.Empty;
+            target.Business2TelephoneNumber = source.BusinessPhone2 ?? string.Empty;
             target.MobileTelephoneNumber = source.MobilePhone ?? string.Empty;
             target.HomeTelephoneNumber = source.HomePhone ?? string.Empty;
+            target.Home2TelephoneNumber = source.HomePhone2 ?? string.Empty;
+            target.BusinessFaxNumber = source.BusinessFax ?? string.Empty;
+            target.HomeFaxNumber = source.HomeFax ?? string.Empty;
+            target.OtherTelephoneNumber = source.OtherPhone ?? string.Empty;
+            target.PagerNumber = source.PagerPhone ?? string.Empty;
+            target.CompanyMainTelephoneNumber = source.CompanyMainPhone ?? string.Empty;
+            target.CarTelephoneNumber = source.CarPhone ?? string.Empty;
             target.BusinessAddressStreet = source.BusinessAddressStreet ?? string.Empty;
             target.BusinessAddressCity = source.BusinessAddressCity ?? string.Empty;
             target.BusinessAddressState = source.BusinessAddressState ?? string.Empty;
