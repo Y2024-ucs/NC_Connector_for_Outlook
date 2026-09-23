@@ -72,6 +72,7 @@ namespace NcTalkOutlookAddIn.Services
         private readonly TalkServiceConfiguration _configuration;
         private readonly List<CardDavRemoteSnapshot> _completedSnapshots = new List<CardDavRemoteSnapshot>();
         internal int DeletedCount { get; private set; }
+        internal bool HasPendingDeletions { get; private set; }
 
         internal CardDavReadOnlySync(TalkServiceConfiguration configuration)
         {
@@ -102,6 +103,11 @@ namespace NcTalkOutlookAddIn.Services
             }
 
             CardDavRemoteSnapshot snapshot = DownloadContactVersions(addressBook);
+            if (knownEtags != null && knownEtags.Keys.Any(href => snapshot.IsMissing(href)))
+            {
+                HasPendingDeletions = true;
+            }
+
             IList<RemoteContactVersion> remoteVersions = snapshot.Versions.Select(pair => new RemoteContactVersion
             {
                 RequestHref = pair.Key,
@@ -373,20 +379,28 @@ namespace NcTalkOutlookAddIn.Services
         internal int ImportIntoOutlook(
             Outlook.Application outlookApplication,
             IEnumerable<CardDavContactRecord> contacts,
-            bool? useDefaultContactsFolder = null)
+            bool? useDefaultContactsFolder = null,
+            bool reconcileDeletedContacts = true,
+            bool ensureBackgroundSync = true)
         {
             if (outlookApplication == null)
             {
                 throw new ArgumentNullException("outlookApplication");
             }
 
-            CardDavBackgroundSyncManager.EnsureStarted(_configuration, outlookApplication);
+            if (ensureBackgroundSync)
+            {
+                CardDavBackgroundSyncManager.EnsureStarted(_configuration, outlookApplication);
+            }
 
             CardDavSyncPreferences preferences = CardDavSyncPreferences.Load();
             if (useDefaultContactsFolder ?? preferences.UseDefaultContactsFolder)
             {
                 int imported = CardDavDefaultContactsImporter.Import(outlookApplication, contacts);
-                ReconcileDeletedContacts(outlookApplication);
+                if (reconcileDeletedContacts)
+                {
+                    ReconcileDeletedContacts(outlookApplication);
+                }
                 return imported;
             }
 
@@ -438,7 +452,10 @@ namespace NcTalkOutlookAddIn.Services
                     + ", personal="
                     + personalContacts.Count
                     + ").");
-                ReconcileDeletedContacts(outlookApplication);
+                if (reconcileDeletedContacts)
+                {
+                    ReconcileDeletedContacts(outlookApplication);
+                }
                 return imported;
             }
             finally
@@ -573,20 +590,6 @@ namespace NcTalkOutlookAddIn.Services
 
                     ApplyContact(target, source);
                     target.Save();
-
-                    string savedEntryId = target.EntryID;
-                    ComInteropScope.TryRelease(
-                        target,
-                        LogCategories.Core,
-                        "Failed to release saved CardDAV ContactItem before reload.");
-                    target = null;
-
-                    if (!string.IsNullOrWhiteSpace(savedEntryId))
-                    {
-                        target = session.GetItemFromID(savedEntryId, storeId)
-                            as Outlook.ContactItem;
-                    }
-
                     RememberKnownEtag(source.Href, source.ETag);
                     imported++;
                 }
