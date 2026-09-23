@@ -4,8 +4,10 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -26,6 +28,20 @@ namespace NcTalkOutlookAddIn
     {
         private static readonly TimeSpan CardDavStartupDelay = TimeSpan.FromSeconds(15);
         private static readonly TimeSpan CardDavUiPhaseYieldDelay = TimeSpan.FromMilliseconds(75);
+        private const int CardDavUiSliceBudgetMilliseconds = 40;
+        private const int CardDavRecentInputWindowMilliseconds = 900;
+        private const int CardDavActiveInputBackoffMilliseconds = 300;
+        private const int CardDavIdleYieldMilliseconds = 20;
+        [StructLayout(LayoutKind.Sequential)]
+        private struct LastInputInfo
+        {
+            internal uint cbSize;
+            internal uint dwTime;
+        }
+
+        [DllImport("user32.dll")]
+        private static extern bool GetLastInputInfo(ref LastInputInfo plii);
+
         private Timer _cardDavStartupDelayTimer;
         private CardDavSyncStatusForm _cardDavSyncStatusForm;
 
@@ -424,39 +440,64 @@ namespace NcTalkOutlookAddIn
                 int count = 0;
                 int groups = 0;
                 int groupFolders = 0;
+                bool hasOutlookChanges = contacts.Count > 0 || sync.HasPendingDeletions;
 
-                await RunOnOutlookUiThreadAsync(() =>
+                if (contacts.Count > 0)
                 {
-                    if (_outlookApplication == null) return;
-                    ShowCardDavSyncStatus("NC Connector: Kontakte werden aktualisiert ...");
-                    count = sync.ImportIntoOutlook(_outlookApplication, contacts);
-                }).ConfigureAwait(false);
+                    await RunOnOutlookUiThreadAsync(() =>
+                    {
+                        ShowCardDavSyncStatus("NC Connector: Kontakte werden aktualisiert ...");
+                    }).ConfigureAwait(false);
 
-                await Task.Delay(CardDavUiPhaseYieldDelay).ConfigureAwait(false);
+                    count = await ImportCardDavContactsResponsivelyAsync(
+                        sync,
+                        contacts,
+                        preferences.UseDefaultContactsFolder).ConfigureAwait(false);
+                }
 
-                await RunOnOutlookUiThreadAsync(() =>
+                if (sync.HasPendingDeletions)
                 {
-                    if (_outlookApplication == null) return;
-                    ShowCardDavSyncStatus("NC Connector: Verteilerlisten werden abgeglichen ...");
-                    groups = CardDavContactGroupSync.Reconcile(
-                        configuration,
-                        _outlookApplication,
-                        syncedAddressBooks,
-                        preferences);
-                }).ConfigureAwait(false);
+                    await WaitForCardDavUiWindowAsync().ConfigureAwait(false);
+                    await RunOnOutlookUiThreadAsync(() =>
+                    {
+                        if (_outlookApplication == null) return;
+                        ShowCardDavSyncStatus("NC Connector: Gelöschte Kontakte werden abgeglichen ...");
+                        sync.ReconcileDeletedContacts(_outlookApplication);
+                    }).ConfigureAwait(false);
+                }
 
-                await Task.Delay(CardDavUiPhaseYieldDelay).ConfigureAwait(false);
-
-                await RunOnOutlookUiThreadAsync(() =>
+                if (hasOutlookChanges)
                 {
-                    if (_outlookApplication == null) return;
-                    ShowCardDavSyncStatus("NC Connector: Gruppenordner werden abgeglichen ...");
-                    groupFolders = CardDavContactFolderSync.Reconcile(
-                        configuration,
-                        _outlookApplication,
-                        syncedAddressBooks,
-                        preferences);
-                }).ConfigureAwait(false);
+                    await WaitForCardDavUiWindowAsync().ConfigureAwait(false);
+                    await RunOnOutlookUiThreadAsync(() =>
+                    {
+                        if (_outlookApplication == null) return;
+                        ShowCardDavSyncStatus("NC Connector: Verteilerlisten werden abgeglichen ...");
+                        groups = CardDavContactGroupSync.Reconcile(
+                            configuration,
+                            _outlookApplication,
+                            syncedAddressBooks,
+                            preferences);
+                    }).ConfigureAwait(false);
+
+                    await WaitForCardDavUiWindowAsync().ConfigureAwait(false);
+                    await RunOnOutlookUiThreadAsync(() =>
+                    {
+                        if (_outlookApplication == null) return;
+                        ShowCardDavSyncStatus("NC Connector: Gruppenordner werden abgeglichen ...");
+                        groupFolders = CardDavContactFolderSync.Reconcile(
+                            configuration,
+                            _outlookApplication,
+                            syncedAddressBooks,
+                            preferences);
+                    }).ConfigureAwait(false);
+                }
+                else
+                {
+                    DiagnosticsLogger.Log(
+                        LogCategories.Core,
+                        "CardDAV Outlook write phases skipped because no remote contact changes were detected.");
+                }
 
                 await RunOnOutlookUiThreadAsync(() =>
                 {
@@ -499,6 +540,84 @@ namespace NcTalkOutlookAddIn
             finally
             {
                 CardDavBackgroundSyncManager.EndSync();
+            }
+        }
+
+        private async Task<int> ImportCardDavContactsResponsivelyAsync(
+            CardDavReadOnlySync sync,
+            IList<CardDavContactRecord> contacts,
+            bool useDefaultContactsFolder)
+        {
+            if (sync == null || contacts == null || contacts.Count == 0)
+            {
+                return 0;
+            }
+
+            int index = 0;
+            int imported = 0;
+            while (index < contacts.Count)
+            {
+                int sliceImported = 0;
+                await RunOnOutlookUiThreadAsync(() =>
+                {
+                    if (_outlookApplication == null)
+                    {
+                        return;
+                    }
+
+                    var stopwatch = Stopwatch.StartNew();
+                    do
+                    {
+                        CardDavContactRecord contact = contacts[index];
+                        sliceImported += sync.ImportIntoOutlook(
+                            _outlookApplication,
+                            new[] { contact },
+                            useDefaultContactsFolder,
+                            false,
+                            false);
+                        index++;
+                    }
+                    while (index < contacts.Count
+                        && stopwatch.ElapsedMilliseconds < CardDavUiSliceBudgetMilliseconds);
+                }).ConfigureAwait(false);
+
+                imported += sliceImported;
+
+                if (index < contacts.Count)
+                {
+                    await WaitForCardDavUiWindowAsync().ConfigureAwait(false);
+                }
+            }
+
+            return imported;
+        }
+
+        private static async Task WaitForCardDavUiWindowAsync()
+        {
+            int delay = WasUserRecentlyActive()
+                ? CardDavActiveInputBackoffMilliseconds
+                : CardDavIdleYieldMilliseconds;
+            await Task.Delay(delay).ConfigureAwait(false);
+        }
+
+        private static bool WasUserRecentlyActive()
+        {
+            try
+            {
+                var info = new LastInputInfo();
+                info.cbSize = (uint)Marshal.SizeOf(typeof(LastInputInfo));
+                if (!GetLastInputInfo(ref info))
+                {
+                    return false;
+                }
+
+                uint now = unchecked((uint)Environment.TickCount);
+                uint idleMilliseconds = unchecked(now - info.dwTime);
+                return idleMilliseconds <= CardDavRecentInputWindowMilliseconds;
+            }
+            catch
+            {
+                return false;
             }
         }
 
