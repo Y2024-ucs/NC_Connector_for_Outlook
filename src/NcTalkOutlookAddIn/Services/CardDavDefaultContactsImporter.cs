@@ -88,20 +88,6 @@ namespace NcTalkOutlookAddIn.Services
 
                     ApplyContact(target, source);
                     target.Save();
-
-                    string savedEntryId = target.EntryID;
-                    ComInteropScope.TryRelease(
-                        target,
-                        LogCategories.Core,
-                        "Failed to release saved default CardDAV ContactItem before reload.");
-                    target = null;
-
-                    if (!string.IsNullOrWhiteSpace(savedEntryId))
-                    {
-                        target = session.GetItemFromID(savedEntryId, storeId)
-                            as Outlook.ContactItem;
-                    }
-
                     CardDavReadOnlySync.RememberKnownEtag(source.Href, source.ETag);
                     imported++;
                 }
