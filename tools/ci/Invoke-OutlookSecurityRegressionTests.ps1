@@ -15,7 +15,6 @@ using System.IO;
 using System.Net;
 using System.Reflection;
 using System.Text;
-using NcTalkOutlookAddIn.Models;
 using NcTalkOutlookAddIn.Services;
 using NcTalkOutlookAddIn.Settings;
 using NcTalkOutlookAddIn.Utilities;
@@ -102,7 +101,6 @@ internal static class OutlookSecurityRegressionTests
     {
         TestNextcloudUriBoundary();
         TestStructuredSecretRedaction();
-        TestUpdateTargetPolicy();
         TestAtomicSettingsTransaction();
         TestTransportSecurityConfigurator();
 
@@ -180,44 +178,6 @@ internal static class OutlookSecurityRegressionTests
                 && !output.Contains("echo"),
             output);
         Check("Redaction marker is present", output.Contains("<REDACTED>"), output);
-    }
-
-    private static void TestUpdateTargetPolicy()
-    {
-        var result = new UpdateCheckResult
-        {
-            DownloadUrl = "https://evil.example.test/update.msi",
-            ReleaseUrl = "https://github.com/nc-connector/NC_Connector_for_Outlook/releases/tag/v3.4.0"
-        };
-        Check(
-            "Untrusted download falls back to trusted release page",
-            UpdateCheckService.GetPreferredOpenUrl(result)
-                == "https://github.com/nc-connector/NC_Connector_for_Outlook/releases/tag/v3.4.0");
-
-        result.DownloadUrl =
-            "https://github.com/nc-connector/NC_Connector_for_Outlook/releases/download/v3.4.0/NC-Connector.msi";
-        Check(
-            "Trusted GitHub release download is accepted",
-            UpdateCheckService.GetPreferredOpenUrl(result) == result.DownloadUrl);
-
-        result.DownloadUrl = "http://github.com/nc-connector/NC_Connector_for_Outlook/releases/download/v3.4.0/file.msi";
-        result.ReleaseUrl = "https://github.com/another/repository/releases/tag/v3.4.0";
-        Check(
-            "HTTP and wrong-repository update targets are rejected",
-            UpdateCheckService.GetPreferredOpenUrl(result) == string.Empty);
-
-        var settings = new AddinSettings
-        {
-            UpdateLatestVersion = "3.2.9",
-            UpdateDownloadUrl =
-                "https://github.com/nc-connector/NC_Connector_for_Outlook/releases/download/v3.2.9/file.msi"
-        };
-        UpdateCheckResult cached = UpdateCheckService.BuildCachedResult(settings);
-        Check("Cached server state cannot downgrade local version comparison", !cached.UpdateAvailable);
-
-        settings.UpdateLatestVersion = "3.4.0";
-        cached = UpdateCheckService.BuildCachedResult(settings);
-        Check("Newer cached version is detected locally", cached.UpdateAvailable);
     }
 
     private static void TestAtomicSettingsTransaction()
@@ -327,8 +287,6 @@ internal static class OutlookSecurityRegressionTests
 
     $sources = @(
         $testSource,
-        (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Models\UpdateCheckResult.cs"),
-        (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\UpdateCheckService.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Settings\SettingsFileTransaction.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\DiagnosticsLogger.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\HttpFailureDiagnostics.cs"),

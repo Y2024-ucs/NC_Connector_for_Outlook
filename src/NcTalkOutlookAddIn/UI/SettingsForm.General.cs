@@ -103,6 +103,7 @@ namespace NcTalkOutlookAddIn.UI
             _appPasswordTextBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             _generalTab.Controls.Add(_appPasswordTextBox);
 
+            InitializeCardDavSettingsSection();
             ApplyGeneralTabFieldSizing();
         }
 

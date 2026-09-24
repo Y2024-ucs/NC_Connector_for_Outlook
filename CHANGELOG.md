@@ -4,6 +4,18 @@ All notable changes to **NC Connector for Outlook** will be documented in this f
 
 This project follows the principles of **Keep a Changelog** and **Semantic Versioning**.
 
+## [3.4.9] - 2026-09-24
+
+### Added
+
+- CardDAV contact synchronization for personal contacts and the company directory, including incremental ETag updates, managed deletion reconciliation, groups, and Outlook group folders.
+- Outlook ribbon action for manually synchronizing contacts and CardDAV first-run/settings controls.
+
+### Changed
+
+- Integrated upstream 3.4.1 changes while retaining the IBP branding and the IBP-specific CardDAV behavior.
+- The built-in upstream update checker remains intentionally removed from the IBP-managed deployment.
+
 ## [3.4.1] - 2026-09-18
 
 ### Changed
