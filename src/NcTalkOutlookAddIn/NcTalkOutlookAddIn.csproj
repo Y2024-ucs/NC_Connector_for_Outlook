@@ -102,7 +102,6 @@
     <Compile Include="Models\SharePasswordDeliveryMode.cs" />
     <Compile Include="Models\SharePasswordDeliveryPolicy.cs" />
     <Compile Include="Models\SecretsLinkResult.cs" />
-    <Compile Include="Models\UpdateCheckResult.cs" />
     <Compile Include="Models\NextcloudUser.cs" />
     <Compile Include="Models\PasswordPolicyInfo.cs" />
     <Compile Include="Models\TalkParticipant.cs" />
@@ -176,7 +175,6 @@
     <Compile Include="Services\BackendPolicyService.cs" />
     <Compile Include="Services\EmailSignaturePolicyService.cs" />
     <Compile Include="Services\SecretsService.cs" />
-    <Compile Include="Services\UpdateCheckService.cs" />
     <Compile Include="Services\OutlookAttachmentAutomationGuardService.cs" />
     <Compile Include="Services\PasswordPolicyService.cs" />
     <Compile Include="UI\SettingsForm.cs" />
