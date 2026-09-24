@@ -187,7 +187,6 @@ namespace NcTalkOutlookAddIn
             EnsureApplicationHook();
             EnsureInspectorHook();
             ApplyIfbSettings();
-            StartUpdateCheckIfDue();
         }
 
         private void InitializeOutlookUiSynchronizationContext()
@@ -207,13 +206,6 @@ namespace NcTalkOutlookAddIn
                 _uiSynchronizationContext = null;
                 DiagnosticsLogger.LogException(LogCategories.Core, "Failed to initialize Outlook UI synchronization context.", ex);
             }
-        }
-
-        private void StartUpdateCheckIfDue()
-        {
-            DiagnosticsLogger.Log(
-                LogCategories.Core,
-                "Upstream update check disabled for IBP fork.");
         }
 
         private void ScheduleCardDavStartupSync()
@@ -628,76 +620,6 @@ namespace NcTalkOutlookAddIn
                 && addressBook.Href.IndexOf(
                     "z-server-generated--system",
                     StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        private void StoreUpdateCheckSettings(AddinSettings updateSettings)
-        {
-            if (updateSettings == null || _currentSettings == null || _settingsStorage == null)
-            {
-                return;
-            }
-
-            _currentSettings.UpdateInstallId = updateSettings.UpdateInstallId ?? string.Empty;
-            _currentSettings.UpdateLastCheckedAtUtc = updateSettings.UpdateLastCheckedAtUtc ?? string.Empty;
-            _currentSettings.UpdateLatestVersion = updateSettings.UpdateLatestVersion ?? string.Empty;
-            _currentSettings.UpdateReleaseUrl = updateSettings.UpdateReleaseUrl ?? string.Empty;
-            _currentSettings.UpdateDownloadUrl = updateSettings.UpdateDownloadUrl ?? string.Empty;
-            _currentSettings.UpdatePublishedAt = updateSettings.UpdatePublishedAt ?? string.Empty;
-            _currentSettings.UpdateChangelogTitle = updateSettings.UpdateChangelogTitle ?? string.Empty;
-            _currentSettings.UpdateChangelogText = updateSettings.UpdateChangelogText ?? string.Empty;
-            _settingsStorage.Save(_currentSettings);
-        }
-
-        private void PostUpdateNotification(UpdateCheckResult result)
-        {
-            SynchronizationContext context = _uiSynchronizationContext;
-            if (context == null)
-            {
-                DiagnosticsLogger.Log(LogCategories.Core, "Update notification skipped because no UI context is available.");
-                return;
-            }
-
-            context.Post(_ => ShowUpdateNotification(result), null);
-        }
-
-        private void ShowUpdateNotification(UpdateCheckResult result)
-        {
-            try
-            {
-                if (_currentSettings == null || !UpdateCheckService.ShouldNotify(_currentSettings, result))
-                {
-                    return;
-                }
-
-                UpdateCheckService.MarkNotified(_currentSettings, result);
-                if (_settingsStorage != null)
-                {
-                    _settingsStorage.Save(_currentSettings);
-                }
-
-                DialogResult answer = MessageBox.Show(
-                    UpdateCheckService.BuildNotificationMessage(result),
-                    Strings.UpdateAvailableTitle,
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Information);
-                if (answer != DialogResult.Yes)
-                {
-                    return;
-                }
-
-                string url = UpdateCheckService.GetPreferredOpenUrl(result);
-                if (!string.IsNullOrWhiteSpace(url))
-                {
-                    BrowserLauncher.OpenUrl(
-                        url,
-                        LogCategories.Core,
-                        "Failed to open update download URL.");
-                }
-            }
-            catch (Exception ex)
-            {
-                DiagnosticsLogger.LogException(LogCategories.Core, "Update notification failed.", ex);
-            }
         }
 
         private void TryApplyOfficeUiLanguage()
