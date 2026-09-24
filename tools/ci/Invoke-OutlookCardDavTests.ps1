@@ -70,8 +70,27 @@ internal static class CardDavTests
 '@ | Set-Content -Path $testSource -Encoding UTF8
     $csc = Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\csc.exe"
     $exe = Join-Path $TempRoot "CardDavTests.exe"
-    $snapshotSource = Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\CardDavRemoteSnapshot.cs"
-    & $csc /nologo /target:exe "/out:$exe" /r:System.Core.dll /r:System.Xml.Linq.dll $testSource $snapshotSource
+    $snapshotSourcePath = Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\CardDavRemoteSnapshot.cs"
+    $snapshotSource = Get-Content -LiteralPath $snapshotSourcePath -Raw
+    $snapshotClass = [regex]::Match(
+        $snapshotSource,
+        '(?s)    internal sealed class CardDavRemoteSnapshot.*?(?=\r?\n    internal static class CardDavContactFolderSync)')
+    if (-not $snapshotClass.Success) {
+        throw "CardDavRemoteSnapshot class could not be isolated for the safety test."
+    }
+    $snapshotTestSource = Join-Path $TempRoot "CardDavRemoteSnapshot.TestSource.cs"
+    @(
+        "using System;"
+        "using System.Collections.Generic;"
+        "using System.Linq;"
+        "using System.Xml.Linq;"
+        ""
+        "namespace NcTalkOutlookAddIn.Services"
+        "{"
+        $snapshotClass.Value
+        "}"
+    ) | Set-Content -Path $snapshotTestSource -Encoding UTF8
+    & $csc /nologo /target:exe "/out:$exe" /r:System.Core.dll /r:System.Xml.Linq.dll $testSource $snapshotTestSource
     if ($LASTEXITCODE -ne 0) { throw "CardDAV test compilation failed." }
     & $exe
     if ($LASTEXITCODE -ne 0) { throw "CardDAV safety tests failed." }

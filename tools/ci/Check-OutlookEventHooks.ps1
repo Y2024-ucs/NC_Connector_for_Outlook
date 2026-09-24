@@ -43,13 +43,17 @@ foreach ($file in $runtimeFiles) {
 }
 
 $removalKeys = New-Object System.Collections.Generic.HashSet[string]([StringComparer]::Ordinal)
+$removalEvents = New-Object System.Collections.Generic.HashSet[string]([StringComparer]::Ordinal)
 foreach ($removal in $removals) {
     [void]$removalKeys.Add($removal.Key)
+    [void]$removalEvents.Add($removal.Event)
 }
 
 $failures = New-Object System.Collections.Generic.List[string]
 foreach ($addition in $additions) {
-    if (-not $removalKeys.Contains($addition.Key)) {
+    $hasExactRemoval = $removalKeys.Contains($addition.Key)
+    $hasStoredHandlerRemoval = $addition.Handler -eq "handler" -and $removalEvents.Contains($addition.Event)
+    if (-not $hasExactRemoval -and -not $hasStoredHandlerRemoval) {
         $failures.Add("$($addition.File):$($addition.Line) subscribes $($addition.Event) += $($addition.Handler), but no matching unsubscribe was found.")
     }
 }

@@ -39,8 +39,11 @@ foreach ($key in $usedKeys) {
         $failures.Add("Code uses locale key '$key', but en/messages.json does not define it.")
     }
 }
+$unusedKeyAllowList = @(
+    "options_update_heading" # Updater UI is intentionally removed in the IBP fork.
+)
 foreach ($key in $englishKeys) {
-    if (-not $usedKeys.Contains($key)) {
+    if (-not $usedKeys.Contains($key) -and $key -notin $unusedKeyAllowList) {
         $failures.Add("en/messages.json defines locale key '$key', but the code does not use it.")
     }
 }

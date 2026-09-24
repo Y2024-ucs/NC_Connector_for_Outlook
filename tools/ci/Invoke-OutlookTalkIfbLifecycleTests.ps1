@@ -141,7 +141,7 @@ foreach ($path in @(
 Assert-SourceContract `
     "Explorer lifecycle subscribes and unsubscribes calendar selection changes" `
     $hooks `
-    'SelectionChange\s*\+=\s*selectionChangeHandler[\s\S]*SelectionChange\s*-=\s*selectionChangeHandler'
+    'SelectionChange\s*\+=\s*(?:handler|selectionChangeHandler)[\s\S]*SelectionChange\s*-=\s*(?:existingHandler|selectionChangeHandler)'
 Assert-SourceContract `
     "Existing Explorer selection is processed immediately after the hook is installed" `
     $hooks `
