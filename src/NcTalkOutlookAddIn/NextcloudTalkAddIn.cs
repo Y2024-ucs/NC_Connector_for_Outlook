@@ -57,7 +57,6 @@ namespace NcTalkOutlookAddIn
         private readonly MailInteropController _mailInteropController;
         private readonly MailBodyInsertionController _mailBodyInsertionController;
         private readonly ManagedEmailSignatureController _managedEmailSignatureController;
-        private readonly UpdateCheckService _updateCheckService = new UpdateCheckService();
         private readonly DeferredAppointmentEnsureState _deferredAppointmentEnsureState = new DeferredAppointmentEnsureState();
         private OutlookUiSynchronizationContext _uiSynchronizationContext;
         private IRibbonUI _ribbonUi;
