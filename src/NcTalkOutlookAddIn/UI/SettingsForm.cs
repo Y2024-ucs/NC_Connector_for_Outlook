@@ -270,10 +270,7 @@ namespace NcTalkOutlookAddIn.UI
                 Strings.PolicyWarningAdminLinkLabel);
             Controls.Add(_policyWarningPanel);
             _policyWarningLinkLabel.LinkClicked += (s, e) =>
-                BrowserLauncher.OpenUrl(
-                    Strings.PolicyAdminGuideUrl,
-                    LogCategories.Core,
-                    "Failed to open policy admin guide URL.");
+                PolicyUiHelper.OpenLicenseAdministration(_policyWarningLinkLabel, LogCategories.Core);
         }
 
         protected override void OnShown(EventArgs e)
@@ -720,7 +717,10 @@ namespace NcTalkOutlookAddIn.UI
             bool warningVisible = PolicyUiHelper.ApplyPolicyWarningState(
                 _backendPolicyStatus,
                 _policyWarningPanel,
-                _policyWarningTextLabel);
+                _policyWarningTextLabel,
+                _policyWarningTitleLabel,
+                _policyWarningLinkLabel,
+                _serverUrlTextBox.Text);
             string currentShareLanguage = GetSelectedLanguageChoice(_shareBlockLangCombo);
             string currentTalkLanguage = GetSelectedLanguageChoice(_eventDescriptionLangCombo);
             RefreshLanguageOverrideCombos(currentShareLanguage, currentTalkLanguage);
@@ -738,6 +738,7 @@ namespace NcTalkOutlookAddIn.UI
                 + ", talk=" + PolicyUiHelper.IsPolicyDomainActive(_backendPolicyStatus, "talk").ToString(CultureInfo.InvariantCulture)
                 + ", emailSignature=" + PolicyUiHelper.IsPolicyDomainActive(_backendPolicyStatus, "email_signature").ToString(CultureInfo.InvariantCulture)
                 + ", warningVisible=" + warningVisible.ToString(CultureInfo.InvariantCulture)
+                + ", accessStatus=" + (_backendPolicyStatus != null ? _backendPolicyStatus.AccessStatus : "n/a")
                 + ", mode=" + (_backendPolicyStatus != null ? _backendPolicyStatus.Mode : "local")
                 + ", reason=" + (_backendPolicyStatus != null ? _backendPolicyStatus.Reason : "n/a")
                 + ").");
