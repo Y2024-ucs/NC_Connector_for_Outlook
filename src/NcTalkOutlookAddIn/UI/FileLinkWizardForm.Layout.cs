@@ -61,7 +61,8 @@ namespace NcTalkOutlookAddIn.UI
                 string.Empty,
                 Strings.PolicyWarningAdminLinkLabel);
             Controls.Add(_policyWarningPanel);
-            _policyWarningLinkLabel.LinkClicked += (s, e) => OpenPolicyAdminGuide();
+            _policyWarningLinkLabel.LinkClicked += (s, e) =>
+                PolicyUiHelper.OpenLicenseAdministration(_policyWarningLinkLabel, LogCategories.FileLink);
         }
 
         private void InitializeWizardLayout()
@@ -644,6 +645,7 @@ namespace NcTalkOutlookAddIn.UI
         private void ReflowWizardLayout()
         {
             LayoutBottomButtons();
+            LayoutPolicyWarningPanel();
             UpdateStepHostBounds();
             LayoutCurrentStep();
             LayoutProgressPanel();
