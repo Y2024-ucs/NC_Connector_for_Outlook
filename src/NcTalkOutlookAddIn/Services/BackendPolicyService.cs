@@ -4,7 +4,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Net;
 using NcTalkOutlookAddIn.Models;
 using NcTalkOutlookAddIn.Utilities;
@@ -65,8 +64,14 @@ namespace NcTalkOutlookAddIn.Services
                     reason: "endpoint_unavailable");
             }
 
+            return ParseStatus(payload);
+        }
+
+        internal static BackendPolicyStatus ParseStatus(IDictionary<string, object> payload)
+        {
             IDictionary<string, object> normalized = NormalizePayload(payload);
             IDictionary<string, object> status = NcJson.GetDictionary(normalized, "status");
+            IDictionary<string, object> licenseActivation = NcJson.GetDictionary(status, "license_activation");
             IDictionary<string, object> policy = NcJson.GetDictionary(normalized, "policy");
             IDictionary<string, object> policyEditable = NcJson.GetDictionary(normalized, "policy_editable");
             IDictionary<string, object> sharePolicy = NcJson.GetDictionary(policy, "share");
@@ -79,6 +84,11 @@ namespace NcTalkOutlookAddIn.Services
             bool seatAssigned = GetBool(status, "seat_assigned");
             bool isValid = GetBool(status, "is_valid");
             string seatState = NcJson.GetStringOrEmpty(status, "seat_state");
+            object rawCanManageLicense;
+            bool canManageLicense = status != null
+                                    && status.TryGetValue("can_manage_license", out rawCanManageLicense)
+                                    && rawCanManageLicense is bool
+                                    && (bool)rawCanManageLicense;
 
             bool seatUsable = seatAssigned
                               && isValid
@@ -87,15 +97,11 @@ namespace NcTalkOutlookAddIn.Services
             bool talkPolicyActive = seatUsable && talkPolicy != null && talkEditable != null;
             bool emailSignaturePolicyActive = seatUsable && emailSignaturePolicy != null && emailSignatureEditable != null;
             bool policyActive = sharePolicyActive || talkPolicyActive || emailSignaturePolicyActive;
-            bool warningVisible = !policyActive && ShouldWarnForSeat(status);
-            string warningMessage = warningVisible ? BuildSeatWarningMessage(seatAssigned, isValid, seatState) : string.Empty;
 
             BackendPolicyStatus normalizedStatus = new BackendPolicyStatus(
                 endpointAvailable: true,
                 fetchSucceeded: true,
                 policyActive: policyActive,
-                warningVisible: warningVisible,
-                warningMessage: warningMessage,
                 mode: policyActive ? "policy" : "local",
                 reason: policyActive ? "policy_active" : (seatUsable ? "policy_domains_unavailable" : "seat_not_usable"),
                 seatAssigned: seatAssigned,
@@ -106,7 +112,15 @@ namespace NcTalkOutlookAddIn.Services
                 emailSignaturePolicy: emailSignaturePolicy,
                 shareEditable: shareEditable,
                 talkEditable: talkEditable,
-                emailSignatureEditable: emailSignatureEditable);
+                emailSignatureEditable: emailSignatureEditable,
+                licenseStatus: NcJson.GetStringOrEmpty(status, "license_status"),
+                accessStatus: NcJson.GetStringOrEmpty(status, "access_status"),
+                canManageLicense: canManageLicense,
+                graceUntilIso: NcJson.GetStringOrEmpty(status, "grace_until_iso"),
+                licenseActivationState: NcJson.GetStringOrEmpty(licenseActivation, "state"),
+                licenseConnectionError: GetBool(status, "license_connection_error"),
+                licenseLastSyncAtIso: NcJson.GetStringOrEmpty(status, "license_last_sync_at_iso"),
+                licenseOfflineUntilIso: NcJson.GetStringOrEmpty(status, "license_offline_until_iso"));
             return normalizedStatus;
         }
 
@@ -116,8 +130,6 @@ namespace NcTalkOutlookAddIn.Services
                 endpointAvailable: endpointAvailable,
                 fetchSucceeded: fetchSucceeded,
                 policyActive: false,
-                warningVisible: false,
-                warningMessage: string.Empty,
                 mode: "local",
                 reason: reason,
                 seatAssigned: false,
@@ -181,51 +193,6 @@ namespace NcTalkOutlookAddIn.Services
             return data ?? payload;
         }
 
-        private static string BuildSeatWarningMessage(bool seatAssigned, bool isValid, string seatState)
-        {
-            if (!seatAssigned)
-            {
-                return Strings.PolicyWarningNoSeat;
-            }
-            if (!isValid)
-            {
-                if (!string.IsNullOrWhiteSpace(seatState))
-                {
-                    return string.Format(
-                        CultureInfo.CurrentCulture,
-                        Strings.PolicyWarningSeatStateFormat,
-                        seatState);
-                }
-                return Strings.PolicyWarningLicenseInvalid;
-            }
-            if (!string.IsNullOrWhiteSpace(seatState))
-            {
-                return string.Format(
-                    CultureInfo.CurrentCulture,
-                    Strings.PolicyWarningSeatStateFormat,
-                    seatState);
-            }
-            return Strings.PolicyWarningLicenseInvalid;
-        }
-
-        private static bool ShouldWarnForSeat(IDictionary<string, object> status)
-        {
-            if (status == null)
-            {
-                return false;
-            }
-            bool seatAssigned = GetBool(status, "seat_assigned");
-            bool isValid = GetBool(status, "is_valid");
-            string seatState = NcJson.GetStringOrEmpty(status, "seat_state");
-
-            if (seatAssigned
-                && (!isValid
-                    || !string.Equals(seatState, "active", StringComparison.OrdinalIgnoreCase)))
-            {
-                return true;
-            }
-            return false;
-        }
         private static bool GetBool(IDictionary<string, object> parent, string key)
         {
             if (parent == null || string.IsNullOrWhiteSpace(key))
