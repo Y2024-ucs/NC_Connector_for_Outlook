@@ -1239,8 +1239,6 @@ internal static class OutlookFileLinkRenderingTests
             true,
             true,
             true,
-            false,
-            string.Empty,
             "policy",
             string.Empty,
             true,
