@@ -842,6 +842,12 @@
   "sharing_attachment_automation_locked_error": {
     "message": "In Thunderbird ist die Option „Hochladen für Dateien größer als“ aktiviert ($1 MB). Das kollidiert mit der NC Connector Anhangs-Automatisierung. Die Anhangsoptionen unten sind deshalb gesperrt."
   },
+  "outlook_attachment_policy_pending": {
+    "message": "Die Anhangsregeln werden gerade aktualisiert. Bitte versuchen Sie das Senden in einem Moment erneut."
+  },
+  "outlook_attachment_routing_required": {
+    "message": "Die aktuellen Anhangseinstellungen schreiben das Teilen über NC Connector vor. Bitte teilen Sie diese Dateien über den Nextcloud-Freigabeassistenten."
+  },
   "sharing_attachment_mode_reason_always": {
     "message": "Anhänge werden in diesem Modus immer über NC Connector geteilt."
   },
@@ -921,16 +927,61 @@
     "message": "Vom Administrator gesteuert"
   },
   "policy_warning_admin_link_label": {
-    "message": "Admin-Einrichtungsanleitung öffnen"
+    "message": "Lizenz im Backend verwalten"
   },
   "policy_warning_title": {
-    "message": "Backend-Policy ist derzeit nicht verfügbar."
+    "message": "NC Connector-Status"
   },
   "policy_warning_license_invalid": {
-    "message": "Ihre NC Connector Lizenz oder Seat-Zuweisung ist derzeit nicht gültig. Es werden lokale Einstellungen verwendet. Bitte wenden Sie sich an Ihren Nextcloud-Administrator."
+    "message": "Das Backend konnte den Zugriff auf die Pro-Funktionen nicht bestätigen. Die Basisfunktionen bleiben verfügbar."
   },
-  "policy_warning_seat_state_format": {
-    "message": "Ihr NC Connector Seat befindet sich derzeit im Status \"$1\". Es werden lokale Einstellungen verwendet. Bitte wenden Sie sich an Ihren Nextcloud-Administrator."
+  "policy_license_grace_format": {
+    "message": "Ihre Lizenz ist abgelaufen. Die Pro-Funktionen bleiben bis $1 verfügbar."
+  },
+  "policy_license_grace": {
+    "message": "Ihre Lizenz ist abgelaufen. Die Pro-Funktionen bleiben während der Nachfrist verfügbar."
+  },
+  "policy_license_expired": {
+    "message": "Ihre Lizenz ist abgelaufen und die Nachfrist ist beendet. Die Pro-Funktionen sind nicht mehr verfügbar. Sie können die Basisfunktionen weiterhin nutzen."
+  },
+  "policy_license_inactive": {
+    "message": "Ihre Lizenz ist derzeit inaktiv. Die Pro-Funktionen sind nicht verfügbar."
+  },
+  "policy_license_invalid": {
+    "message": "Ihre Lizenz ist ungültig. Die Pro-Funktionen sind nicht verfügbar."
+  },
+  "policy_license_activation_conflict": {
+    "message": "Diese Lizenz ist bereits für eine andere Nextcloud-Installation aktiviert."
+  },
+  "policy_license_activation_required": {
+    "message": "Die Lizenzaktivierung für diese Nextcloud konnte nicht bestätigt werden."
+  },
+  "policy_license_offline_expired": {
+    "message": "Die Lizenz konnte nicht rechtzeitig überprüft werden. Die Pro-Funktionen sind bis zur erfolgreichen Überprüfung nicht verfügbar."
+  },
+  "policy_license_connection_error": {
+    "message": "Die Lizenzsynchronisierung ist fehlgeschlagen. Das bedeutet nicht, dass die Lizenz ungültig ist."
+  },
+  "policy_license_last_sync_format": {
+    "message": "Letzte erfolgreiche Synchronisierung: $1."
+  },
+  "policy_license_offline_until_format": {
+    "message": "Frist für die Offline-Prüfung: $1."
+  },
+  "policy_license_admin_hint": {
+    "message": "Prüfen Sie die Lizenz in Ihrem Nextcloud-Backend."
+  },
+  "policy_license_user_hint": {
+    "message": "Bitte wenden Sie sich an Ihren Nextcloud-Administrator."
+  },
+  "policy_warning_seat_suspended": {
+    "message": "Ihr NC Connector Seat ist pausiert. Die Pro-Funktionen sind nicht verfügbar."
+  },
+  "policy_warning_seat_unavailable": {
+    "message": "Ihr zugewiesener NC Connector Seat ist derzeit nicht verfügbar."
+  },
+  "policy_warning_backend_unavailable": {
+    "message": "Der Status des Nextcloud-Backends konnte nicht abgerufen werden. Bitte prüfen Sie die Verbindung und versuchen Sie es erneut."
   },
   "options_lang_custom": {
     "message": "Benutzerdefiniert (Backend-Vorlage)"
@@ -940,9 +991,6 @@
   },
   "sharing_password_separate_no_seat_tooltip": {
     "message": "Ihr Administrator muss Ihnen für dieses Feature einen NC Connector Seat zuweisen."
-  },
-  "sharing_password_separate_paused_tooltip": {
-    "message": "Ihr NC Connector Seat ist derzeit pausiert. Bitte wenden Sie sich an Ihren Nextcloud-Administrator."
   },
   "sharing_password_delivery_mode_label": {
     "message": "Passwortzustellung"
