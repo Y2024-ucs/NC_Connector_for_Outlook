@@ -562,21 +562,27 @@ namespace NcTalkOutlookAddIn.Utilities
                     : "https://github.com/nc-connector/NC_Connector_for_Outlook/blob/main/docs/ADMIN.md#system-address-book";
             }
         }
-        internal static string PolicyWarningTitle { get { return Get("policy_warning_title", "Backend policy is currently unavailable."); } }
+        internal static string PolicyWarningTitle { get { return Get("policy_warning_title", "NC Connector status"); } }
         internal static string PolicyWarningNoSeat { get { return Get("policy_warning_no_seat", "No NC Connector seat is assigned to your account. Local settings are used. Please contact your Nextcloud administrator."); } }
-        internal static string PolicyWarningLicenseInvalid { get { return Get("policy_warning_license_invalid", "Your NC Connector license or seat is currently not valid. Local settings are used. Please contact your Nextcloud administrator."); } }
-        internal static string PolicyWarningSeatStateFormat { get { return Get("policy_warning_seat_state_format", "Your NC Connector seat is currently in state \"{0}\". Local settings are used. Please contact your Nextcloud administrator."); } }
-        internal static string PolicyWarningAdminLinkLabel { get { return Get("policy_warning_admin_link_label", "Open admin setup guide"); } }
+        internal static string PolicyWarningLicenseInvalid { get { return Get("policy_warning_license_invalid", "The backend could not confirm access to Pro features. Basic features remain available."); } }
+        internal static string PolicyWarningSeatSuspended { get { return Get("policy_warning_seat_suspended", "Your NC Connector seat is suspended. Pro features are unavailable."); } }
+        internal static string PolicyWarningSeatUnavailable { get { return Get("policy_warning_seat_unavailable", "Your assigned NC Connector seat is currently unavailable."); } }
+        internal static string PolicyWarningBackendUnavailable { get { return Get("policy_warning_backend_unavailable", "The Nextcloud backend status could not be retrieved. Please check the connection and try again."); } }
+        internal static string PolicyWarningAdminLinkLabel { get { return Get("policy_warning_admin_link_label", "Manage license in backend"); } }
+        internal static string PolicyLicenseGraceFormat { get { return Get("policy_license_grace_format", "Your license has expired. Pro features remain available until {0}."); } }
+        internal static string PolicyLicenseGrace { get { return Get("policy_license_grace", "Your license has expired. Pro features remain available during the grace period."); } }
+        internal static string PolicyLicenseExpired { get { return Get("policy_license_expired", "Your license has expired and the grace period has ended. Pro features are no longer available. You can still use the basic features."); } }
+        internal static string PolicyLicenseInactive { get { return Get("policy_license_inactive", "Your license is currently inactive. Pro features are unavailable."); } }
+        internal static string PolicyLicenseInvalid { get { return Get("policy_license_invalid", "Your license is invalid. Pro features are unavailable."); } }
+        internal static string PolicyLicenseActivationConflict { get { return Get("policy_license_activation_conflict", "This license is already activated for another Nextcloud installation."); } }
+        internal static string PolicyLicenseActivationRequired { get { return Get("policy_license_activation_required", "License activation for this Nextcloud could not be confirmed."); } }
+        internal static string PolicyLicenseOfflineExpired { get { return Get("policy_license_offline_expired", "The license could not be verified in time. Pro features are unavailable until verification succeeds."); } }
+        internal static string PolicyLicenseConnectionError { get { return Get("policy_license_connection_error", "License synchronization failed. This does not mean that the license is invalid."); } }
+        internal static string PolicyLicenseLastSyncFormat { get { return Get("policy_license_last_sync_format", "Last successful synchronization: {0}."); } }
+        internal static string PolicyLicenseOfflineUntilFormat { get { return Get("policy_license_offline_until_format", "Offline verification deadline: {0}."); } }
+        internal static string PolicyLicenseAdminHint { get { return Get("policy_license_admin_hint", "Check the license in your Nextcloud backend."); } }
+        internal static string PolicyLicenseUserHint { get { return Get("policy_license_user_hint", "Please contact your Nextcloud administrator."); } }
         internal static string PolicyAdminControlledTooltip { get { return Get("policy_admin_controlled_tooltip", "Admin controlled"); } }
-        internal static string PolicyAdminGuideUrl
-        {
-            get
-            {
-                return UsesGermanAdminGuide()
-                    ? "https://github.com/nc-connector/NC_Connector_for_Outlook/blob/main/docs/ADMIN.de.md"
-                    : "https://github.com/nc-connector/NC_Connector_for_Outlook/blob/main/docs/ADMIN.md";
-            }
-        }
         internal static string TalkVersionUnknown { get { return Get("outlook_version_unknown", "unknown"); } }
         internal static string DialogOk { get { return Get("ui_button_ok", "OK"); } }
         internal static string DialogCancel { get { return Get("ui_button_cancel", "Cancel"); } }
@@ -871,16 +877,6 @@ namespace NcTalkOutlookAddIn.Utilities
             }
         }
 
-        internal static string SharingPasswordSeparatePausedTooltip
-        {
-            get
-            {
-                return Get(
-                    "sharing_password_separate_paused_tooltip",
-                    "Your NC Connector seat is currently paused. Please contact your Nextcloud administrator.");
-            }
-        }
-
         internal static string TooltipSharingAttachmentsAlways
         {
             get
@@ -1013,6 +1009,8 @@ namespace NcTalkOutlookAddIn.Utilities
         internal static string FileLinkWizardRenameDuplicatePrompt { get { return Get("sharing_prompt_rename_duplicate", "The file \"$1\" already exists in the queue. Please enter a new name."); } }
         internal static string FileLinkWizardAttachmentModeReasonThreshold { get { return Get("sharing_attachment_mode_reason_threshold", "Attachment threshold exceeded: {0} > {1}. Last added: \"{2}\" ({3}). These attachments will be shared with NC Connector."); } }
         internal static string FileLinkWizardAttachmentModeReasonAlways { get { return Get("sharing_attachment_mode_reason_always", "Attachment mode is active. Selected attachments will be shared with NC Connector."); } }
+        internal static string AttachmentPolicyPending { get { return Get("outlook_attachment_policy_pending", "Attachment rules are being updated. Please try sending again in a moment."); } }
+        internal static string AttachmentRoutingRequired { get { return Get("outlook_attachment_routing_required", "The current attachment settings require files to be shared with NC Connector. Please use the Nextcloud sharing wizard to share these files."); } }
 
         internal static string AttachmentPromptTitle { get { return Get("sharing_attachment_prompt_title", "Attachment limit exceeded"); } }
         internal static string AttachmentPromptReason { get { return Get("sharing_attachment_prompt_reason", "The total attachment size is {0} and exceeds the configured limit of {1}. Last added: \"{2}\" ({3})."); } }
