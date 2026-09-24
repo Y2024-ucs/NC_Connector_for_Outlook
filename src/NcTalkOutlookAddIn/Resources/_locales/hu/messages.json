@@ -821,6 +821,12 @@
   "sharing_attachment_automation_locked_error": {
     "message": "A Thunderbird „Feltöltés ekkora fájlméret felett” beállítása be van kapcsolva ($1 MB). Ez ütközik az NC Connector melléklet-automatizálásával. Az alábbi mellékletopciók zárolva vannak."
   },
+  "outlook_attachment_policy_pending": {
+    "message": "A mellékletekre vonatkozó szabályok frissítése folyamatban van. Kérjük, próbálja meg egy pillanat múlva újra elküldeni az üzenetet."
+  },
+  "outlook_attachment_routing_required": {
+    "message": "A mellékletek jelenlegi beállításai megkövetelik a fájlok NC Connectoron keresztüli megosztását. Kérjük, használja a Nextcloud megosztási varázslóját ezeknek a fájloknak a megosztásához."
+  },
   "sharing_attachment_mode_reason_always": {
     "message": "A mellékletmód aktív. A kijelölt mellékletek az NC Connectoron keresztül lesznek megosztva."
   },
@@ -900,16 +906,61 @@
     "message": "Rendszergazda által vezérelt"
   },
   "policy_warning_admin_link_label": {
-    "message": "Adminisztrátori beállítási útmutató megnyitása"
+    "message": "Licenc kezelése a felügyeleti felületen"
   },
   "policy_warning_title": {
-    "message": "A háttérszabályzat jelenleg nem érhető el."
+    "message": "Az NC Connector állapota"
   },
   "policy_warning_license_invalid": {
-    "message": "Az NC Connector licence vagy a seat-hozzárendelés jelenleg nem érvényes. A helyi beállítások lesznek használva. Kérjük, forduljon a Nextcloud rendszergazdájához."
+    "message": "A kiszolgáló nem tudta megerősíteni a Pro funkciókhoz való hozzáférést. Az alapfunkciók továbbra is elérhetők."
   },
-  "policy_warning_seat_state_format": {
-    "message": "Az NC Connector seat jelenleg \"$1\" állapotban van. A helyi beállítások lesznek használva. Kérjük, forduljon a Nextcloud rendszergazdájához."
+  "policy_license_grace_format": {
+    "message": "A licence lejárt. A Pro funkciók eddig maradnak elérhetők: $1."
+  },
+  "policy_license_grace": {
+    "message": "A licence lejárt. A Pro funkciók a türelmi idő alatt továbbra is elérhetők."
+  },
+  "policy_license_expired": {
+    "message": "A licence lejárt, és a türelmi idő véget ért. A Pro funkciók már nem érhetők el. Az alapfunkciókat továbbra is használhatja."
+  },
+  "policy_license_inactive": {
+    "message": "A licence jelenleg inaktív. A Pro funkciók nem érhetők el."
+  },
+  "policy_license_invalid": {
+    "message": "A licence érvénytelen. A Pro funkciók nem érhetők el."
+  },
+  "policy_license_activation_conflict": {
+    "message": "Ez a licenc már aktiválva van egy másik Nextcloud-példányhoz."
+  },
+  "policy_license_activation_required": {
+    "message": "A licenc aktiválását nem sikerült megerősíteni ehhez a Nextcloud-példányhoz."
+  },
+  "policy_license_offline_expired": {
+    "message": "A licencet nem sikerült időben ellenőrizni. A Pro funkciók a sikeres ellenőrzésig nem érhetők el."
+  },
+  "policy_license_connection_error": {
+    "message": "A licenc szinkronizálása sikertelen volt. Ez nem jelenti azt, hogy a licenc érvénytelen."
+  },
+  "policy_license_last_sync_format": {
+    "message": "Utolsó sikeres szinkronizálás: $1."
+  },
+  "policy_license_offline_until_format": {
+    "message": "A kapcsolat nélküli ellenőrzés határideje: $1."
+  },
+  "policy_license_admin_hint": {
+    "message": "Ellenőrizze a licencet a Nextcloud felügyeleti felületén."
+  },
+  "policy_license_user_hint": {
+    "message": "Forduljon a Nextcloud rendszergazdájához."
+  },
+  "policy_warning_seat_suspended": {
+    "message": "Az Ön NC Connector-licenchelye fel van függesztve. A Pro funkciók nem érhetők el."
+  },
+  "policy_warning_seat_unavailable": {
+    "message": "Az Önhöz rendelt NC Connector-licenchely jelenleg nem érhető el."
+  },
+  "policy_warning_backend_unavailable": {
+    "message": "Nem sikerült lekérni a Nextcloud kiszolgálóoldali állapotát. Ellenőrizze a kapcsolatot, és próbálja újra."
   },
   "options_lang_custom": {
     "message": "Egyeni (backend sablon)"
@@ -919,9 +970,6 @@
   },
   "sharing_password_separate_no_seat_tooltip": {
     "message": "A rendszergazdának ehhez a funkcióhoz NC Connector seatet kell hozzárendelnie a fiókjához."
-  },
-  "sharing_password_separate_paused_tooltip": {
-    "message": "Az Ön NC Connector seatje jelenleg szünetel. Kérjük, forduljon a Nextcloud rendszergazdájához."
   },
   "options_tls_heading": {
     "message": "Átviteli biztonság (TLS)"
