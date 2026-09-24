@@ -326,6 +326,13 @@ if ($null -eq $quoteSeparatorFinder) {
     Add-Failure 'TryFindInlineQuoteSeparatorStart could not be parsed.'
 } else {
     Require-Pattern $quoteSeparatorFinder 'hasExcludedRange\s*&&\s*(?:paragraphStart\s*<\s*excludedEnd\s*&&\s*paragraphEnd\s*>\s*excludedStart|paragraphEnd\s*>\s*excludedStart\s*&&\s*paragraphStart\s*<\s*excludedEnd)[\s\S]{0,200}?continue\s*;' 'The quote-separator fallback can mistake a border inside the current signature slot for the quote boundary.'
+    Require-Pattern $SignatureInteropSource 'WordInformationWithinTable\s*=\s*12\s*;' 'Quote-separator table detection does not use Word wdWithInTable.'
+    Require-Pattern $quoteSeparatorFinder 'paragraphRange\.GetType\(\)\.InvokeMember\(\s*"Information"\s*,\s*BindingFlags\.GetProperty\s*,\s*null\s*,\s*paragraphRange\s*,\s*new\s+object\[\]\s*\{\s*WordInformationWithinTable\s*\}' 'The quote-separator fallback does not inspect the candidate paragraph table membership.'
+    Require-Pattern $quoteSeparatorFinder 'if\s*\(\s*withinTable\s*==\s*null\s*\)\s*\{\s*return\s+false\s*;' 'Unknown Word table membership does not fail closed.'
+    Require-Pattern $quoteSeparatorFinder 'if\s*\(\s*Convert\.ToBoolean\(withinTable,\s*CultureInfo\.InvariantCulture\)\s*\)\s*\{\s*continue\s*;' 'The quote-separator fallback can accept a border inside a share table.'
+    Require-Order $quoteSeparatorFinder 'Convert.ToBoolean(withinTable' 'ParagraphHasVisibleBorder(' 'Share-table paragraphs are not excluded before quote-border detection.'
+    Require-Pattern $quoteSeparatorFinder 'i\s*<=\s*count\s*&&\s*inspectedParagraphs\s*<\s*80' 'The quote-separator scan does not retain its non-table paragraph budget.'
+    Require-Order $quoteSeparatorFinder 'Convert.ToBoolean(withinTable' 'inspectedParagraphs++;' 'Share-table paragraphs consume the quote-separator scan budget.'
 }
 
 $meaningfulTextProbe = Get-CSharpMethodBlock $SignatureInteropSource 'TryHasMeaningfulEmailSignatureText'
