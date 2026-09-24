@@ -45,6 +45,7 @@ namespace NcTalkOutlookAddIn
         private readonly Dictionary<string, Outlook.ExplorerEvents_10_InlineResponseEventHandler> _inlineResponseHandlers = new Dictionary<string, Outlook.ExplorerEvents_10_InlineResponseEventHandler>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, Outlook.ExplorerEvents_10_InlineResponseCloseEventHandler> _inlineResponseCloseHandlers = new Dictionary<string, Outlook.ExplorerEvents_10_InlineResponseCloseEventHandler>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, Outlook.ExplorerEvents_10_SelectionChangeEventHandler> _explorerSelectionChangeHandlers = new Dictionary<string, Outlook.ExplorerEvents_10_SelectionChangeEventHandler>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, Outlook.ExplorerEvents_10_FolderSwitchEventHandler> _explorerFolderSwitchHandlers = new Dictionary<string, Outlook.ExplorerEvents_10_FolderSwitchEventHandler>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, MailComposeSubscription> _inlineResponseSubscriptions = new Dictionary<string, MailComposeSubscription>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, AppointmentSubscription> _subscriptionByEntryId = new Dictionary<string, AppointmentSubscription>(StringComparer.OrdinalIgnoreCase);
         private readonly MailComposeSubscriptionRegistryController _mailComposeSubscriptionRegistry = new MailComposeSubscriptionRegistryController();
