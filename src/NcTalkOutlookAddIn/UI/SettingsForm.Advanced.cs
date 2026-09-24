@@ -5,11 +5,9 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Reflection;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 using NcTalkOutlookAddIn.Services;
 using NcTalkOutlookAddIn.Models;
@@ -47,18 +45,7 @@ namespace NcTalkOutlookAddIn.UI
 
             int groupTop = _eventDescriptionLangCombo.Bottom + ScaleLogical(14);
             int groupWidth = Math.Max(ScaleLogical(320), _advancedTab.ClientSize.Width - left - rightMargin);
-            _updateSettingsGroup.SetBounds(left, groupTop, groupWidth, ScaleLogical(286));
-            int updateInnerWidth = Math.Max(ScaleLogical(220), _updateSettingsGroup.ClientSize.Width - ScaleLogical(24));
-            _updateNotifyCheckBox.Location = new Point(ScaleLogical(12), ScaleLogical(24));
-            _updateInstalledVersionLabel.SetBounds(ScaleLogical(12), ScaleLogical(54), updateInnerWidth, ScaleLogical(20));
-            _updateLatestVersionLabel.SetBounds(ScaleLogical(12), ScaleLogical(78), updateInnerWidth, ScaleLogical(20));
-            _updateLastCheckedLabel.SetBounds(ScaleLogical(12), ScaleLogical(102), updateInnerWidth, ScaleLogical(20));
-            _updateCheckButton.SetBounds(ScaleLogical(12), ScaleLogical(130), ScaleLogical(120), ScaleLogical(28));
-            _updateDownloadLink.SetBounds(_updateCheckButton.Right + ScaleLogical(16), _updateCheckButton.Top + ScaleLogical(6), Math.Max(ScaleLogical(140), updateInnerWidth - _updateCheckButton.Width - ScaleLogical(28)), ScaleLogical(22));
-            _updateChangelogLabel.Location = new Point(ScaleLogical(12), ScaleLogical(166));
-            _updateChangelogTextBox.SetBounds(ScaleLogical(12), ScaleLogical(186), updateInnerWidth, ScaleLogical(86));
-
-            int tlsTop = _updateSettingsGroup.Bottom + ScaleLogical(14);
+            int tlsTop = groupTop;
             _tlsSettingsGroup.SetBounds(left, tlsTop, groupWidth, ScaleLogical(134));
             _tlsHintLabel.MaximumSize = new Size(Math.Max(ScaleLogical(200), _tlsSettingsGroup.ClientSize.Width - ScaleLogical(20)), 0);
             _tlsHintLabel.AutoSize = true;
@@ -117,61 +104,8 @@ namespace NcTalkOutlookAddIn.UI
             PopulateLanguageOverrideCombo(_eventDescriptionLangCombo, "talk");
             _advancedTab.Controls.Add(_eventDescriptionLangCombo);
 
-            _updateSettingsGroup.Text = "Updates (IBP-Abspaltung – deaktiviert)";
-            _updateSettingsGroup.Location = new Point(24, langTop + 72);
-            _updateSettingsGroup.Size = new Size(520, 286);
-            _advancedTab.Controls.Add(_updateSettingsGroup);
-
-            _updateNotifyCheckBox.Text = "Offizielle Update-Benachrichtigungen deaktiviert";
-            _updateNotifyCheckBox.AutoSize = true;
-            _updateNotifyCheckBox.Location = new Point(12, 24);
-            _updateNotifyCheckBox.Checked = false;
-            _updateNotifyCheckBox.Enabled = false;
-            _updateSettingsGroup.Controls.Add(_updateNotifyCheckBox);
-
-            _updateInstalledVersionLabel.AutoSize = false;
-            _updateInstalledVersionLabel.Location = new Point(12, 54);
-            _updateInstalledVersionLabel.Size = new Size(480, 20);
-            _updateSettingsGroup.Controls.Add(_updateInstalledVersionLabel);
-
-            _updateLatestVersionLabel.AutoSize = false;
-            _updateLatestVersionLabel.Location = new Point(12, 78);
-            _updateLatestVersionLabel.Size = new Size(480, 20);
-            _updateSettingsGroup.Controls.Add(_updateLatestVersionLabel);
-
-            _updateLastCheckedLabel.AutoSize = false;
-            _updateLastCheckedLabel.Location = new Point(12, 102);
-            _updateLastCheckedLabel.Size = new Size(480, 20);
-            _updateSettingsGroup.Controls.Add(_updateLastCheckedLabel);
-
-            _updateCheckButton.Text = Strings.UpdateCheckNowButton;
-            _updateCheckButton.Location = new Point(12, 130);
-            _updateCheckButton.Size = new Size(120, 28);
-            _updateCheckButton.Enabled = false;
-            _updateSettingsGroup.Controls.Add(_updateCheckButton);
-
-            _updateDownloadLink.Text = "Upstream-Download deaktiviert";
-            _updateDownloadLink.Location = new Point(148, 136);
-            _updateDownloadLink.AutoSize = false;
-            _updateDownloadLink.Size = new Size(320, 22);
-            _updateDownloadLink.Enabled = false;
-            _updateSettingsGroup.Controls.Add(_updateDownloadLink);
-
-            _updateChangelogLabel.Text = Strings.UpdateChangelogHeading;
-            _updateChangelogLabel.Location = new Point(12, 166);
-            _updateChangelogLabel.AutoSize = true;
-            _updateSettingsGroup.Controls.Add(_updateChangelogLabel);
-
-            _updateChangelogTextBox.ReadOnly = true;
-            _updateChangelogTextBox.Multiline = true;
-            _updateChangelogTextBox.ScrollBars = ScrollBars.Vertical;
-            _updateChangelogTextBox.Location = new Point(12, 186);
-            _updateChangelogTextBox.Size = new Size(480, 86);
-            _updateChangelogTextBox.Text = "Die offizielle Update-Funktion ist in der IBP-Abspaltung deaktiviert, damit keine Upstream-Version die IBP-Anpassungen überschreibt.";
-            _updateSettingsGroup.Controls.Add(_updateChangelogTextBox);
-
             _tlsSettingsGroup.Text = Strings.AdvancedTlsHeading;
-            _tlsSettingsGroup.Location = new Point(24, langTop + 372);
+            _tlsSettingsGroup.Location = new Point(24, langTop + 72);
             _tlsSettingsGroup.Size = new Size(520, 132);
             _advancedTab.Controls.Add(_tlsSettingsGroup);
 
@@ -199,53 +133,6 @@ namespace NcTalkOutlookAddIn.UI
             _tlsHintLabel.Location = new Point(12, 94);
             _tlsHintLabel.ForeColor = Color.DimGray;
             _tlsSettingsGroup.Controls.Add(_tlsHintLabel);
-        }
-
-        private void UpdateUpdateCheckSection()
-        {
-            string installedVersion = AddinVersionInfo.GetVersion();
-            if (string.IsNullOrWhiteSpace(installedVersion))
-            {
-                installedVersion = Strings.TalkVersionUnknown;
-            }
-
-            _updateNotifyCheckBox.Checked = false;
-            _updateNotifyCheckBox.Enabled = false;
-            _updateInstalledVersionLabel.Text = string.Format(Strings.UpdateInstalledVersionFormat, installedVersion);
-            _updateLatestVersionLabel.Text = "Neueste Version: Upstream-Prüfung deaktiviert";
-            _updateLastCheckedLabel.Text = "Letzte Prüfung: deaktiviert";
-            _updateOpenUrl = string.Empty;
-            _updateDownloadLink.Text = "Upstream-Download deaktiviert";
-            _updateDownloadLink.Enabled = false;
-            _updateCheckButton.Enabled = false;
-            _updateChangelogTextBox.Text = "Die offizielle Update-Funktion ist in der IBP-Abspaltung deaktiviert, damit keine Upstream-Version die IBP-Anpassungen überschreibt.";
-        }
-
-        private static string FormatUpdateCheckedAt(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                return Strings.UpdateNotChecked;
-            }
-
-            DateTime parsed;
-            if (DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out parsed))
-            {
-                return parsed.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
-            }
-
-            return Strings.UpdateNotChecked;
-        }
-
-        private async void OnUpdateCheckButtonClick(object sender, EventArgs e)
-        {
-            await Task.Yield();
-            SetStatus("Offizielle Updates sind in der IBP-Abspaltung deaktiviert.", false);
-        }
-
-        private void OnUpdateDownloadLinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
-        {
-            SetStatus("Offizielle Updates sind in der IBP-Abspaltung deaktiviert.", false);
         }
 
         private void UpdateTlsOptionsState()
