@@ -34,17 +34,6 @@ namespace NcTalkOutlookAddIn.Settings
             TransportTlsUseSystemDefault = false;
             TransportTlsEnable12 = true;
             TransportTlsEnable13 = false;
-            UpdateNotifyEnabled = false;
-            UpdateInstallId = string.Empty;
-            UpdateLastCheckedAtUtc = string.Empty;
-            UpdateLatestVersion = string.Empty;
-            UpdateReleaseUrl = string.Empty;
-            UpdateDownloadUrl = string.Empty;
-            UpdatePublishedAt = string.Empty;
-            UpdateChangelogTitle = string.Empty;
-            UpdateChangelogText = string.Empty;
-            UpdateLastNotifiedVersion = string.Empty;
-            UpdateLastNotifiedDateUtc = string.Empty;
             FileLinkBasePath = DefaultFileLinkBasePath;
             SharingDefaultShareName = Strings.SharingDefaultShareNameLabel;
             SharingDefaultPermCreate = false;
@@ -104,33 +93,6 @@ namespace NcTalkOutlookAddIn.Settings
         public bool TransportTlsEnable12 { get; set; }
 
         public bool TransportTlsEnable13 { get; set; }
-
-        // IBP fork: official upstream update notifications are intentionally disabled.
-        public bool UpdateNotifyEnabled
-        {
-            get { return false; }
-            set { }
-        }
-
-        public string UpdateInstallId { get; set; }
-
-        public string UpdateLastCheckedAtUtc { get; set; }
-
-        public string UpdateLatestVersion { get; set; }
-
-        public string UpdateReleaseUrl { get; set; }
-
-        public string UpdateDownloadUrl { get; set; }
-
-        public string UpdatePublishedAt { get; set; }
-
-        public string UpdateChangelogTitle { get; set; }
-
-        public string UpdateChangelogText { get; set; }
-
-        public string UpdateLastNotifiedVersion { get; set; }
-
-        public string UpdateLastNotifiedDateUtc { get; set; }
 
         public string FileLinkBasePath { get; set; }
 
