@@ -31,6 +31,7 @@ namespace NcTalkOutlookAddIn.Utilities
 {
     internal static class DiagnosticsLogger
     {
+        internal static bool IsEnabled { get { return false; } }
         internal static void Log(string category, string message) { }
         internal static void LogApi(string message) { }
         internal static void LogException(string category, string message, Exception ex) { }
@@ -93,6 +94,7 @@ internal static class OutlookUtilityTests
         TestBackendPolicyStatus();
         TestHtmlToPlainText();
         TestEmailSignatureSlotPlacement();
+        TestEmailSignatureQuoteSeparator();
         TestSecretsCrypto();
         TestOutlookUiSynchronizationContext();
 
@@ -1271,8 +1273,6 @@ internal static class OutlookUtilityTests
             true,
             true,
             true,
-            false,
-            "",
             "policy",
             "policy_active",
             true,
@@ -1352,6 +1352,157 @@ internal static class OutlookUtilityTests
             "New mail does not apply reply quote correction",
             EmailSignatureSlotPlacementDecision.KeepExistingSlot,
             EmailSignatureSlotPlacementPolicy.Resolve(false, 140, 180, 100, 100, false));
+    }
+
+    private static void TestEmailSignatureQuoteSeparator()
+    {
+        var shareRow = new QuoteTestParagraph(5, 15, true, true);
+        var nestedPermissionCell = new QuoteTestParagraph(15, 25, true, true);
+        var signature = new QuoteTestParagraph(30, 50, false, true);
+        var quote = new QuoteTestParagraph(60, 80, false, true);
+        int separator;
+        Check(
+            "Reply quote scan accepts the divider after a bordered share and signature",
+            SignatureQuoteSeparatorHarness.TryFind(
+                new QuoteTestDocument(shareRow, nestedPermissionCell, signature, quote),
+                true, 30, 50, out separator));
+        Equal("Share permission borders cannot become the quote boundary", 60, separator);
+        Equal("Outer share table borders are not read", 0, shareRow.BorderReads);
+        Equal("Nested permission cell borders are not read", 0, nestedPermissionCell.BorderReads);
+        Equal("Existing signature remains excluded from quote-border detection", 0, signature.BorderReads);
+        Equal(
+            "Send-time placement retains the signature below the share",
+            EmailSignatureSlotPlacementDecision.KeepExistingSlot,
+            EmailSignatureSlotPlacementPolicy.Resolve(true, 30, 50, separator, separator, false));
+
+        Check(
+            "Table-only reply has no safe quote boundary",
+            !SignatureQuoteSeparatorHarness.TryFind(
+                new QuoteTestDocument(shareRow, nestedPermissionCell),
+                false, 0, 0, out separator));
+
+        var paragraphs = new List<QuoteTestParagraph>();
+        for (int index = 0; index < 100; index++)
+        {
+            paragraphs.Add(new QuoteTestParagraph(index * 10, index * 10 + 10, true, true));
+        }
+        paragraphs.Add(new QuoteTestParagraph(1000, 1020, false, true));
+        Check(
+            "Multiple shares do not exhaust the quote-divider paragraph budget",
+            SignatureQuoteSeparatorHarness.TryFind(
+                new QuoteTestDocument(paragraphs.ToArray()), false, 0, 0, out separator));
+        Equal("Divider after more than eighty table paragraphs is retained", 1000, separator);
+
+        var unavailable = new QuoteTestParagraph(5, 15, false, true);
+        unavailable.Range.ThrowOnInformation = true;
+        Check(
+            "Failed Word table membership stops quote detection without guessing",
+            !SignatureQuoteSeparatorHarness.TryFind(
+                new QuoteTestDocument(unavailable, quote), false, 0, 0, out separator));
+        Equal("Failed table membership cannot reach border detection", 0, unavailable.BorderReads);
+        unavailable.Range.ThrowOnInformation = false;
+        unavailable.Range.WithinTable = null;
+        Check(
+            "Unknown Word table membership also fails closed",
+            !SignatureQuoteSeparatorHarness.TryFind(
+                new QuoteTestDocument(unavailable, quote), false, 0, 0, out separator));
+
+        paragraphs.Clear();
+        for (int index = 0; index < 80; index++)
+        {
+            paragraphs.Add(new QuoteTestParagraph(index * 10, index * 10 + 10, false, false));
+        }
+        paragraphs.Add(new QuoteTestParagraph(800, 820, false, true));
+        Check(
+            "Quote scan still stops after eighty eligible non-table paragraphs",
+            !SignatureQuoteSeparatorHarness.TryFind(
+                new QuoteTestDocument(paragraphs.ToArray()), false, 0, 0, out separator));
+    }
+
+    public sealed class QuoteTestDocument
+    {
+        public QuoteTestRange Content { get; private set; }
+
+        public QuoteTestDocument(params QuoteTestParagraph[] paragraphs)
+        {
+            Content = new QuoteTestRange(0, paragraphs.Max(paragraph => paragraph.Range.End), false);
+            Content.Paragraphs = new QuoteTestParagraphs(paragraphs);
+        }
+
+        public QuoteTestRange Range(int start, int end) { return Content; }
+    }
+
+    public sealed class QuoteTestRange
+    {
+        public int Start { get; private set; }
+        public int End { get; private set; }
+        public object WithinTable { get; set; }
+        public bool ThrowOnInformation { get; set; }
+        public QuoteTestParagraphs Paragraphs { get; set; }
+
+        public QuoteTestRange(int start, int end, bool withinTable)
+        {
+            Start = start;
+            End = end;
+            WithinTable = withinTable;
+        }
+
+        [System.Runtime.CompilerServices.IndexerName("Information")]
+        public object this[int information]
+        {
+            get
+            {
+                if (ThrowOnInformation || information != 12)
+                {
+                    throw new InvalidOperationException("Word table membership unavailable.");
+                }
+                return WithinTable;
+            }
+        }
+    }
+
+    public sealed class QuoteTestParagraphs
+    {
+        private readonly QuoteTestParagraph[] paragraphs;
+        public int Count { get { return paragraphs.Length; } }
+        public QuoteTestParagraphs(QuoteTestParagraph[] values) { paragraphs = values; }
+        public QuoteTestParagraph Item(int index) { return paragraphs[index - 1]; }
+    }
+
+    public sealed class QuoteTestParagraph
+    {
+        private readonly QuoteTestBorders borders;
+        public QuoteTestRange Range { get; private set; }
+        public int BorderReads { get; private set; }
+        public QuoteTestBorders Borders
+        {
+            get
+            {
+                BorderReads++;
+                return borders;
+            }
+        }
+
+        public QuoteTestParagraph(int start, int end, bool withinTable, bool visibleBorder)
+        {
+            Range = new QuoteTestRange(start, end, withinTable);
+            borders = new QuoteTestBorders(visibleBorder);
+        }
+    }
+
+    public sealed class QuoteTestBorders
+    {
+        private readonly bool visible;
+        public QuoteTestBorders(bool value) { visible = value; }
+        public QuoteTestBorder Item(int index)
+        {
+            return new QuoteTestBorder { LineStyle = visible && index == -1 ? 1 : 0 };
+        }
+    }
+
+    public sealed class QuoteTestBorder
+    {
+        public int LineStyle { get; set; }
     }
 
     private static void TestSecretsCrypto()
@@ -1434,6 +1585,38 @@ internal static class OutlookUtilityTests
 }
 '@ | Set-Content -Path $testSource -Encoding UTF8
 
+    $signatureInteropSource = Get-Content -Raw -LiteralPath (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Controllers\ManagedEmailSignatureController.cs")
+    $signatureQuoteParts = @()
+    foreach ($methodName in @('TryFindInlineQuoteSeparatorStart', 'ParagraphHasVisibleBorder', 'BorderAtIndexIsVisible')) {
+        $method = [regex]::Match($signatureInteropSource, "(?ms)^        private static bool $methodName\(.*?^        }")
+        if (-not $method.Success) {
+            throw "Could not isolate production signature quote method '$methodName'."
+        }
+        $signatureQuoteParts += $method.Value
+    }
+    $tableInformationConstant = [regex]::Match($signatureInteropSource, '(?m)^        private const int WordInformationWithinTable = \d+;')
+    if (-not $tableInformationConstant.Success) {
+        throw "Could not isolate the Word table information constant."
+    }
+    $signatureQuoteSource = Join-Path $TempRoot "SignatureQuoteSeparatorHarness.cs"
+    @"
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Reflection;
+using NcTalkOutlookAddIn.Utilities;
+
+internal static class SignatureQuoteSeparatorHarness
+{
+$($tableInformationConstant.Value)
+    internal static bool TryFind(object document, bool hasExcludedRange, int excludedStart, int excludedEnd, out int position)
+    {
+        return TryFindInlineQuoteSeparatorStart(document, 0, hasExcludedRange, excludedStart, excludedEnd, out position);
+    }
+$($signatureQuoteParts -join "`r`n")
+}
+"@ | Set-Content -LiteralPath $signatureQuoteSource -Encoding UTF8
+
     $csc = Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\csc.exe"
     if (-not (Test-Path $csc)) {
         throw "csc.exe not found at $csc"
@@ -1441,6 +1624,8 @@ internal static class OutlookUtilityTests
 
     $sources = @(
         $testSource,
+        $signatureQuoteSource,
+        (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\ComInteropScope.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Models\FileLinkSelection.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Models\FileLinkQueueNode.cs"),
         (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Models\NextcloudStorageEntry.cs"),
