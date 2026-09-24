@@ -141,6 +141,8 @@ namespace NcTalkOutlookAddIn
                 () => OnExplorerInlineResponseClose(explorerKey);
             Outlook.ExplorerEvents_10_SelectionChangeEventHandler selectionChangeHandler =
                 () => OnExplorerSelectionChanged(explorerKey);
+            Outlook.ExplorerEvents_10_FolderSwitchEventHandler folderSwitchHandler =
+                () => OnExplorerFolderSwitched(explorerKey);
 
             explorerEvents.InlineResponse += inlineResponseHandler;
             try
@@ -166,51 +168,167 @@ namespace NcTalkOutlookAddIn
                     ex);
                 return false;
             }
-            bool selectionChangeHooked = false;
             try
             {
-                explorerEvents.SelectionChange += selectionChangeHandler;
-                selectionChangeHooked = true;
+                explorerEvents.FolderSwitch += folderSwitchHandler;
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    explorerEvents.InlineResponseClose -= inlineResponseCloseHandler;
+                    explorerEvents.InlineResponse -= inlineResponseHandler;
+                }
+                catch (Exception rollbackEx)
+                {
+                    DiagnosticsLogger.LogException(
+                        LogCategories.Core,
+                        "Failed to roll back Explorer hooks after FolderSwitch failure (explorerKey=" + explorerKey + ").",
+                        rollbackEx);
+                }
+                DiagnosticsLogger.LogException(
+                    LogCategories.Core,
+                    "Failed to hook Explorer.FolderSwitch (explorerKey=" + explorerKey + ").",
+                    ex);
+                return false;
+            }
+
+            _hookedExplorerEvents[explorerKey] = explorerEvents;
+            _inlineResponseHandlers[explorerKey] = inlineResponseHandler;
+            _inlineResponseCloseHandlers[explorerKey] = inlineResponseCloseHandler;
+            _explorerFolderSwitchHandlers[explorerKey] = folderSwitchHandler;
+            _hookedExplorers[explorerKey] = explorer;
+
+            UpdateExplorerSelectionHook(explorerKey, selectionChangeHandler);
+
+            LogCore(
+                "Explorer lifecycle hooked (explorerKey="
+                + explorerKey
+                + ", calendarSelection="
+                + _explorerSelectionChangeHandlers.ContainsKey(explorerKey)
+                + ").");
+            return true;
+        }
+
+        private void OnExplorerFolderSwitched(string explorerKey)
+        {
+            try
+            {
+                UpdateExplorerSelectionHook(explorerKey, null);
+                RefreshCardDavRibbon();
             }
             catch (Exception ex)
             {
                 DiagnosticsLogger.LogException(
                     LogCategories.Core,
-                    "Failed to hook Explorer.SelectionChange (explorerKey=" + explorerKey + ").",
+                    "Failed to process Explorer.FolderSwitch (explorerKey=" + (explorerKey ?? string.Empty) + ").",
                     ex);
             }
+        }
 
-            try { explorerEvents.FolderSwitch += RefreshCardDavRibbon; }
-            catch (Exception ex)
+        private void UpdateExplorerSelectionHook(
+            string explorerKey,
+            Outlook.ExplorerEvents_10_SelectionChangeEventHandler preferredHandler)
+        {
+            Outlook.Explorer explorer;
+            Outlook.ExplorerEvents_10_Event explorerEvents;
+            if (string.IsNullOrWhiteSpace(explorerKey)
+                || !_hookedExplorers.TryGetValue(explorerKey, out explorer)
+                || explorer == null
+                || !_hookedExplorerEvents.TryGetValue(explorerKey, out explorerEvents)
+                || explorerEvents == null)
             {
-                DiagnosticsLogger.LogException(LogCategories.Core, "Failed to hook Explorer.FolderSwitch.", ex);
+                return;
             }
-            _hookedExplorerEvents[explorerKey] = explorerEvents;
-            _inlineResponseHandlers[explorerKey] = inlineResponseHandler;
-            _inlineResponseCloseHandlers[explorerKey] = inlineResponseCloseHandler;
-            if (selectionChangeHooked)
+
+            bool shouldHook = IsCalendarExplorer(explorer);
+            Outlook.ExplorerEvents_10_SelectionChangeEventHandler existingHandler;
+            bool isHooked = _explorerSelectionChangeHandlers.TryGetValue(
+                explorerKey,
+                out existingHandler);
+
+            if (shouldHook && !isHooked)
             {
-                _explorerSelectionChangeHandlers[explorerKey] = selectionChangeHandler;
+                Outlook.ExplorerEvents_10_SelectionChangeEventHandler handler =
+                    preferredHandler ?? (() => OnExplorerSelectionChanged(explorerKey));
+                try
+                {
+                    explorerEvents.SelectionChange += handler;
+                    _explorerSelectionChangeHandlers[explorerKey] = handler;
+                    OnExplorerSelectionChanged(explorerKey);
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticsLogger.LogException(
+                        LogCategories.Core,
+                        "Failed to hook calendar Explorer.SelectionChange (explorerKey=" + explorerKey + ").",
+                        ex);
+                }
+                return;
             }
-            _hookedExplorers[explorerKey] = explorer;
-            OnExplorerSelectionChanged(explorerKey);
-            LogCore(
-                "Explorer lifecycle hooked (explorerKey="
-                + explorerKey
-                + ", calendarSelection="
-                + selectionChangeHooked
-                + ").");
-            return true;
+
+            if (!shouldHook && isHooked)
+            {
+                try
+                {
+                    explorerEvents.SelectionChange -= existingHandler;
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticsLogger.LogException(
+                        LogCategories.Core,
+                        "Failed to unhook non-calendar Explorer.SelectionChange (explorerKey=" + explorerKey + ").",
+                        ex);
+                }
+                _explorerSelectionChangeHandlers.Remove(explorerKey);
+            }
+        }
+
+        private static bool IsCalendarExplorer(Outlook.Explorer explorer)
+        {
+            if (explorer == null)
+            {
+                return false;
+            }
+
+            Outlook.MAPIFolder folder = null;
+            try
+            {
+                folder = explorer.CurrentFolder;
+                return folder != null
+                    && folder.DefaultItemType == Outlook.OlItemType.olAppointmentItem;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(
+                    folder,
+                    LogCategories.Core,
+                    "Failed to release Explorer.CurrentFolder while checking calendar selection hook.");
+            }
         }
 
         private void UnhookExplorerHooks()
         {
             foreach (var pair in _hookedExplorerEvents)
             {
-                try { pair.Value.FolderSwitch -= RefreshCardDavRibbon; }
-                catch (Exception ex)
+                Outlook.ExplorerEvents_10_FolderSwitchEventHandler folderSwitchHandler;
+                if (_explorerFolderSwitchHandlers.TryGetValue(pair.Key, out folderSwitchHandler))
                 {
-                    DiagnosticsLogger.LogException(LogCategories.Core, "Failed to unhook Explorer.FolderSwitch.", ex);
+                    try
+                    {
+                        pair.Value.FolderSwitch -= folderSwitchHandler;
+                    }
+                    catch (Exception ex)
+                    {
+                        DiagnosticsLogger.LogException(
+                            LogCategories.Core,
+                            "Failed to unhook Explorer.FolderSwitch (explorerKey=" + pair.Key + ").",
+                            ex);
+                    }
                 }
                 Outlook.ExplorerEvents_10_InlineResponseEventHandler inlineResponseHandler;
                 if (_inlineResponseHandlers.TryGetValue(pair.Key, out inlineResponseHandler))
@@ -264,6 +382,7 @@ namespace NcTalkOutlookAddIn
             _inlineResponseHandlers.Clear();
             _inlineResponseCloseHandlers.Clear();
             _explorerSelectionChangeHandlers.Clear();
+            _explorerFolderSwitchHandlers.Clear();
             _inlineResponseSubscriptions.Clear();
 
             foreach (var pair in _hookedExplorers)
