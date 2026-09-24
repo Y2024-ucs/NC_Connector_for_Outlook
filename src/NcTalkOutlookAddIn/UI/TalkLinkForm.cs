@@ -286,10 +286,7 @@ namespace NcTalkOutlookAddIn.UI
                 string.Empty,
                 Strings.PolicyWarningAdminLinkLabel);
             _policyWarningLinkLabel.LinkClicked += (s, e) =>
-                BrowserLauncher.OpenUrl(
-                    Strings.PolicyAdminGuideUrl,
-                    LogCategories.Talk,
-                    "Failed to open policy admin guide URL.");
+                PolicyUiHelper.OpenLicenseAdministration(_policyWarningLinkLabel, LogCategories.Talk);
 
             _okButton.Text = Strings.DialogOk;
             _okButton.AutoSize = false;
@@ -342,6 +339,12 @@ namespace NcTalkOutlookAddIn.UI
             checkBox.Text = text ?? string.Empty;
             checkBox.AutoSize = true;
             _settingsGroup.Controls.Add(checkBox);
+        }
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            ApplyDialogLayout(true);
         }
 
         protected override void OnSizeChanged(EventArgs e)
@@ -633,7 +636,10 @@ namespace NcTalkOutlookAddIn.UI
             PolicyUiHelper.ApplyPolicyWarningState(
                 _backendPolicyStatus,
                 _policyWarningPanel,
-                _policyWarningTextLabel);
+                _policyWarningTextLabel,
+                _policyWarningTitleLabel,
+                _policyWarningLinkLabel,
+                _configuration != null ? _configuration.BaseUrl : string.Empty);
         }
 
         private void ApplyPolicyLockState()
