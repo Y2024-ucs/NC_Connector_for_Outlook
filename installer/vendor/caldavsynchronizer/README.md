@@ -8,7 +8,7 @@
 | SHA-256 (ZIP) | `46AE790A0518936AD1E58D3C6723F53497136D35E88B1AF56C1DFE299686846C` |
 | Download | https://github.com/aluxnimm/outlookcaldavsynchronizer/releases/tag/v4.7.1 |
 | Quellcode | https://github.com/aluxnimm/outlookcaldavsynchronizer |
-| Lizenz | GNU Affero General Public License v3.0 (https://www.gnu.org/licenses/agpl-3.0.html) |
+| Lizenz | GNU Affero General Public License v3.0, Text in `LICENSE.txt` (aus dem Upstream-Tag v4.7.1) |
 | Voraussetzungen | .NET Framework 4.8, Visual Studio Tools for Office Runtime (in Office 2016 / Microsoft 365 enthalten) |
 
 Das Paket wird nicht verändert. NC Connector richtet beim ersten Outlook-Start das Kalender-Profil

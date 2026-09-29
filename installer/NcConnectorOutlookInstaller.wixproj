@@ -7,8 +7,8 @@
     <InstallerPlatform>x64</InstallerPlatform>
 
     <BuildOutputDir Condition=" '$(BuildOutputDir)' == '' ">$(MSBuildProjectDirectory)\..\src\NcTalkOutlookAddIn\bin\Release\</BuildOutputDir>
-    <ProductVersion Condition=" '$(ProductVersion)' == '' ">3.4.11</ProductVersion>
-    <AssemblyVersion Condition=" '$(AssemblyVersion)' == '' ">3.4.11.0</AssemblyVersion>
+    <ProductVersion Condition=" '$(ProductVersion)' == '' ">3.5.0</ProductVersion>
+    <AssemblyVersion Condition=" '$(AssemblyVersion)' == '' ">3.5.0.0</AssemblyVersion>
 
     <DefineConstants>BuildOutputDir=$(BuildOutputDir);ProductVersion=$(ProductVersion);AssemblyVersion=$(AssemblyVersion)</DefineConstants>
   </PropertyGroup>

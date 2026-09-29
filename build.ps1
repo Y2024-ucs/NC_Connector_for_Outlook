@@ -219,5 +219,6 @@ Copy-Item -Force $calDavMsi (Join-Path $gpoDir "CalDavSynchronizer.Setup.msi")
     -MsiPath $calDavMsi `
     -TransformPath (Join-Path $gpoDir "CalDavSynchronizer-AllUsers.mst")
 Copy-Item -Force (Join-Path $ProjectFolder "installer\vendor\caldavsynchronizer\README.md") (Join-Path $gpoDir "CalDavSynchronizer-LIESMICH.md")
+Copy-Item -Force (Join-Path $ProjectFolder "installer\vendor\caldavsynchronizer\LICENSE.txt") (Join-Path $gpoDir "CalDavSynchronizer-LICENSE.txt")
 Write-Host "GPO-Paket erstellt: $gpoDir"
 
