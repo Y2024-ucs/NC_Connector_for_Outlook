@@ -4,7 +4,7 @@ All notable changes to **NC Connector for Outlook** will be documented in this f
 
 This project follows the principles of **Keep a Changelog** and **Semantic Versioning**.
 
-## [Unreleased]
+## [3.4.10] - 2026-09-29
 
 ### Added
 
