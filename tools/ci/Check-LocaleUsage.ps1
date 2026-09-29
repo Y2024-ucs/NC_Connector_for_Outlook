@@ -39,11 +39,13 @@ foreach ($key in $usedKeys) {
         $failures.Add("Code uses locale key '$key', but en/messages.json does not define it.")
     }
 }
-$unusedKeyAllowList = @(
-    "options_update_heading" # Updater UI is intentionally removed in the IBP fork.
+# Updater UI is intentionally removed in the IBP fork; its strings stay to keep upstream merges clean.
+$unusedKeyAllowPrefixes = @(
+    "options_update_"
 )
 foreach ($key in $englishKeys) {
-    if (-not $usedKeys.Contains($key) -and $key -notin $unusedKeyAllowList) {
+    $allowed = @($unusedKeyAllowPrefixes | Where-Object { $key.StartsWith($_, [StringComparison]::Ordinal) }).Count -gt 0
+    if (-not $usedKeys.Contains($key) -and -not $allowed) {
         $failures.Add("en/messages.json defines locale key '$key', but the code does not use it.")
     }
 }
