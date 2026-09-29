@@ -263,6 +263,9 @@ namespace NcTalkOutlookAddIn
                                         return;
                                     }
 
+                                    // Before any sync starts, so the release notes do not overlap other dialogs.
+                                    ShowWhatsNewIfUpdated();
+
                                     // Start the recurring timer before the first network attempt.
                                     // If the server is unavailable now, the next 15-minute run retries automatically.
                                     CardDavBackgroundSyncManager.EnsureStarted(
@@ -336,6 +339,31 @@ namespace NcTalkOutlookAddIn
             catch (Exception ex)
             {
                 DiagnosticsLogger.LogException(LogCategories.Core, "Failed to dispose CardDAV sync status window.", ex);
+            }
+        }
+
+        /// <summary>
+        /// Shows the release notes once after an update to a version that has notes.
+        /// </summary>
+        private void ShowWhatsNewIfUpdated()
+        {
+            try
+            {
+                ReleaseNote note = ReleaseNotes.Pending(AddinVersionInfo.GetVersion());
+                if (note == null)
+                {
+                    return;
+                }
+                // Mark first: a crash inside the dialog must not show it on every start.
+                ReleaseNotes.MarkShown(note);
+                using (var form = new WhatsNewForm(note))
+                {
+                    form.ShowDialog();
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsLogger.LogException(LogCategories.Core, "Failed to show release notes.", ex);
             }
         }
 
