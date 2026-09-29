@@ -759,6 +759,47 @@ namespace NcTalkOutlookAddIn.Services
             }
         }
 
+        /// <summary>
+        /// Removes the add-in's group folders for a full rebuild. A folder that also holds the user's own
+        /// items keeps them and only loses the managed copies. Unreadable markers are left alone.
+        /// </summary>
+        internal static int RemoveManagedFolders(Outlook.NameSpace session, Outlook.MAPIFolder parent)
+        {
+            GroupFolderState state = GroupFolderState.Load(parent.EntryID);
+            string storeId = parent.StoreID;
+            int removed = 0;
+            foreach (SubfolderInfo info in ScanSubfolders(parent))
+            {
+                if (info.Mark != FolderMark.Managed && state.GroupFor(info.EntryId).Length == 0) continue;
+                Outlook.MAPIFolder folder = TryGetFolder(session, info.EntryId, storeId);
+                if (folder == null) continue;
+                try
+                {
+                    if (ContainsOnlyManagedItems(folder))
+                    {
+                        folder.Delete();
+                        removed++;
+                    }
+                    else
+                    {
+                        ClearManagedCopies(folder);
+                        DeleteManagedDistributionLists(folder);
+                        WriteFolderProperty(folder, ManagedFolderSignatureProperty, string.Empty);
+                        DiagnosticsLogger.Log(
+                            LogCategories.Core,
+                            "CardDAV group folder kept during reset because it contains own items (folder=" + info.Name + ").");
+                    }
+                }
+                finally
+                {
+                    ComInteropScope.TryRelease(folder, LogCategories.Core, "Failed to release CardDAV group folder during reset.");
+                }
+            }
+            state.Clear();
+            state.Save();
+            return removed;
+        }
+
         internal static bool IsManagedGroupFolder(Outlook.MAPIFolder folder)
         {
             string groupName;
@@ -881,6 +922,12 @@ namespace NcTalkOutlookAddIn.Services
                 if (string.IsNullOrWhiteSpace(groupName) || string.IsNullOrWhiteSpace(entryId)) return;
                 if (string.Equals(Get(groupName), entryId, StringComparison.Ordinal)) return;
                 _entryIds[groupName] = entryId;
+                _dirty = true;
+            }
+
+            internal void Clear()
+            {
+                _entryIds.Clear();
                 _dirty = true;
             }
 

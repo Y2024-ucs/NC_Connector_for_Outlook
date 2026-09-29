@@ -8,6 +8,7 @@ This project follows the principles of **Keep a Changelog** and **Semantic Versi
 
 ### Added
 
+- Settings button "Kontakte-Sync zurücksetzen und neu aufbauen": removes the imported contacts, group folders and group distribution lists (to "Deleted Items") and downloads everything again. Own contacts and the "Kunden" folder are not touched.
 - Two-way customer sync: the Outlook contacts subfolder "Kunden" (reused if present, never deleted) is synchronized with the Nextcloud address book "IBP-Kunden", which is created when missing. New, changed and deleted contacts are applied in both directions, Outlook wins conflicting edits, unmapped cloud properties are preserved on upload, and mass deletions are held back.
 
 ### Fixed

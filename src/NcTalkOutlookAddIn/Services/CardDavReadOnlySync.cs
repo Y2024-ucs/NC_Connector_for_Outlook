@@ -435,6 +435,91 @@ namespace NcTalkOutlookAddIn.Services
             }
         }
 
+        /// <summary>
+        /// Forgets all known versions, so the next download fetches every contact again.
+        /// </summary>
+        internal static void ClearKnownEtags()
+        {
+            lock (KnownEtagsSyncRoot)
+            {
+                KnownEtags.Clear();
+                _knownEtagsUseDefaultContactsFolder = null;
+            }
+        }
+
+        /// <summary>
+        /// EntryIDs of contacts imported by this sync, in the default folder and the separate destination
+        /// folders. Own contacts (no marker), group copies and the customer folder are not included.
+        /// </summary>
+        internal static List<string> CollectImportedContactIds(Outlook.MAPIFolder root)
+        {
+            var result = new List<string>();
+            CollectImportedContactIds(root, result);
+            Outlook.Folders folders = null;
+            try
+            {
+                folders = root.Folders;
+                int count = folders != null ? folders.Count : 0;
+                for (int index = 1; index <= count; index++)
+                {
+                    Outlook.MAPIFolder folder = null;
+                    try
+                    {
+                        folder = folders[index];
+                        if (folder != null
+                            && IsSeparateDestinationFolderName(folder.Name)
+                            && !CardDavCustomerSync.IsCustomerFolderName(folder.Name))
+                        {
+                            CollectImportedContactIds(folder, result);
+                        }
+                    }
+                    finally
+                    {
+                        ComInteropScope.TryRelease(folder, LogCategories.Core, "Failed to release contacts subfolder during CardDAV reset scan.");
+                    }
+                }
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(folders, LogCategories.Core, "Failed to release contacts folders during CardDAV reset scan.");
+            }
+            return result;
+        }
+
+        private static void CollectImportedContactIds(Outlook.MAPIFolder folder, List<string> result)
+        {
+            Outlook.Items items = null;
+            try
+            {
+                items = folder.Items;
+                int count = items != null ? items.Count : 0;
+                for (int index = 1; index <= count; index++)
+                {
+                    object raw = null;
+                    try
+                    {
+                        raw = items[index];
+                        var contact = raw as Outlook.ContactItem;
+                        if (contact == null) continue;
+                        if (ReadUserProperty(contact, HrefPropertyName).Trim().Length > 0
+                            && ReadUserProperty(contact, GroupCopyPropertyName).Trim().Length == 0
+                            && !string.IsNullOrWhiteSpace(contact.EntryID))
+                        {
+                            result.Add(contact.EntryID);
+                        }
+                    }
+                    finally
+                    {
+                        ComInteropScope.TryRelease(raw, LogCategories.Core, "Failed to release item during CardDAV reset scan.");
+                    }
+                }
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(items, LogCategories.Core, "Failed to release items during CardDAV reset scan.");
+            }
+        }
+
         internal static void RememberKnownEtag(string href, string etag)
         {
             if (string.IsNullOrWhiteSpace(href) || string.IsNullOrWhiteSpace(etag))

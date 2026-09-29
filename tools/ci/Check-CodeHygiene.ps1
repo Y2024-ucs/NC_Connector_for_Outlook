@@ -64,6 +64,7 @@ $asyncVoidAllowList = @(
     'OnLoginFlowButtonClick',
     'OnTestButtonClick',
     'OnCardDavSyncNowClick',
+    'OnCardDavResetClick',
     'HandleFileListViewDragDrop'
 )
 

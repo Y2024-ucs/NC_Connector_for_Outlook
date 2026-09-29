@@ -24,6 +24,7 @@ namespace NcTalkOutlookAddIn.UI
         private readonly RadioButton _cardDavDefaultContactsRadio = new RadioButton();
         private readonly CheckBox _cardDavCustomersCheckBox = new CheckBox();
         private readonly Button _cardDavSyncNowButton = new Button();
+        private readonly Button _cardDavResetButton = new Button();
         private CardDavSyncPreferences _cardDavPreferences;
 
         protected override void OnLoad(EventArgs e)
@@ -66,7 +67,7 @@ namespace NcTalkOutlookAddIn.UI
 
             _cardDavSyncGroup.Text = "Nextcloud-Kontakte";
             _cardDavSyncGroup.Location = new Point(18, 20);
-            _cardDavSyncGroup.Size = new Size(700, 262);
+            _cardDavSyncGroup.Size = new Size(700, 292);
             _cardDavSyncGroup.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             _cardDavTab.Controls.Add(_cardDavSyncGroup);
 
@@ -125,11 +126,17 @@ namespace NcTalkOutlookAddIn.UI
             _cardDavSyncNowButton.Click += OnCardDavSyncNowClick;
             _cardDavSyncGroup.Controls.Add(_cardDavSyncNowButton);
 
+            _cardDavResetButton.Text = "Kontakte-Sync zurücksetzen und neu aufbauen";
+            _cardDavResetButton.Location = new Point(210, 219);
+            _cardDavResetButton.Size = new Size(290, 28);
+            _cardDavResetButton.Click += OnCardDavResetClick;
+            _cardDavSyncGroup.Controls.Add(_cardDavResetButton);
+
             var hint = new Label
             {
                 Text = "Kontakte nur lesend, Kunden beidseitig · nur Änderungen · automatisch alle 15 Minuten",
                 AutoSize = true,
-                Location = new Point(215, 226)
+                Location = new Point(30, 258)
             };
             _cardDavSyncGroup.Controls.Add(hint);
 
@@ -149,6 +156,9 @@ namespace NcTalkOutlookAddIn.UI
             _cardDavSeparateFoldersRadio.Enabled = enabled;
             _cardDavDefaultContactsRadio.Enabled = enabled;
             _cardDavSyncNowButton.Enabled = enabled && hasSelection && !_isBusy;
+            _cardDavResetButton.Enabled = enabled
+                && (_cardDavCompanyCheckBox.Checked || _cardDavPersonalCheckBox.Checked)
+                && !_isBusy;
         }
 
         private async void OnCardDavSyncNowClick(object sender, EventArgs e)
@@ -217,20 +227,97 @@ namespace NcTalkOutlookAddIn.UI
             }
         }
 
+        private async void OnCardDavResetClick(object sender, EventArgs e)
+        {
+            if (_isBusy || _outlookApplication == null)
+            {
+                return;
+            }
+
+            var configuration = new TalkServiceConfiguration(
+                _serverUrlTextBox.Text.Trim(),
+                _usernameTextBox.Text.Trim(),
+                _appPasswordTextBox.Text ?? string.Empty);
+            if (!configuration.IsComplete())
+            {
+                SetStatus("Nextcloud-Zugangsdaten sind unvollständig.", true);
+                return;
+            }
+
+            bool syncCompany = _cardDavCompanyCheckBox.Checked;
+            bool syncPersonal = _cardDavPersonalCheckBox.Checked;
+            if (!syncCompany && !syncPersonal)
+            {
+                SetStatus("Es ist kein Kontaktbereich zur Synchronisation ausgewählt.", true);
+                return;
+            }
+
+            DialogResult answer = MessageBox.Show(
+                this,
+                "Alle aus Nextcloud importierten Kontakte, die Gruppenordner und die Gruppen-Verteilerlisten werden "
+                + "aus Outlook entfernt (sie landen in \"Gelöschte Elemente\") und danach vollständig neu geladen."
+                + Environment.NewLine + Environment.NewLine
+                + "Eigene Outlook-Kontakte und der Ordner \"" + CardDavCustomerSync.FolderName + "\" bleiben unverändert."
+                + Environment.NewLine + Environment.NewLine
+                + "Fortfahren?",
+                "Kontakte-Sync zurücksetzen",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2);
+            if (answer != DialogResult.Yes)
+            {
+                return;
+            }
+
+            if (!CardDavBackgroundSyncManager.TryBeginSync())
+            {
+                SetStatus("Die Kontaktsynchronisation läuft bereits.", false);
+                return;
+            }
+            SetBusy(true);
+            UpdateCardDavSettingsState();
+            try
+            {
+                SetStatus("Kontakte-Sync wird zurückgesetzt ...", false);
+                CardDavContactsResetResult reset = await CardDavContactsReset.RunAsync(
+                    _outlookApplication,
+                    RunOnSettingsUiThreadAsync,
+                    () => Task.Delay(20));
+                SetStatus("Kontakte werden neu geladen ...", false);
+                string status = await RunCardDavReadOnlySyncAsync(configuration, syncCompany, syncPersonal, true);
+                SetStatus("Zurückgesetzt: " + reset.Contacts + " Kontakte, " + reset.DistributionLists
+                    + " Verteilerlisten und " + reset.GroupFolders + " Gruppenordner entfernt. " + status, false);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsLogger.LogException(LogCategories.Core, "CardDAV contact sync reset failed.", ex);
+                SetStatus("Zurücksetzen fehlgeschlagen: " + ex.Message, true);
+            }
+            finally
+            {
+                CardDavBackgroundSyncManager.EndSync();
+                SetBusy(false);
+                UpdateCardDavSettingsState();
+            }
+        }
+
         private async Task<string> RunCardDavReadOnlySyncAsync(
             TalkServiceConfiguration configuration,
             bool syncCompany,
-            bool syncPersonal)
+            bool syncPersonal,
+            bool includeGroups = false)
         {
             bool useDefaultContactsFolder = _cardDavDefaultContactsRadio.Checked;
             Dictionary<string, string> knownEtags = CardDavReadOnlySync.LoadKnownEtagsFromOutlook(
                 _outlookApplication,
                 useDefaultContactsFolder);
             var sync = new CardDavReadOnlySync(configuration);
+            IList<CardDavAddressBook> syncedAddressBooks = null;
             List<CardDavContactRecord> contacts = await Task.Run(() =>
             {
                 IList<CardDavAddressBook> addressBooks = CardDavCustomerSync.WithoutCustomerAddressBook(
                     new DavDiscoveryService(configuration).DiscoverAddressBooks());
+                syncedAddressBooks = addressBooks;
                 var result = new List<CardDavContactRecord>();
                 foreach (CardDavAddressBook addressBook in addressBooks)
                 {
@@ -250,7 +337,21 @@ namespace NcTalkOutlookAddIn.UI
 
             int count = sync.ImportIntoOutlook(_outlookApplication, contacts,
                 useDefaultContactsFolder);
-            return "Nextcloud-Kontakte synchronisiert: " + count + " geändert/neu, " + sync.DeletedCount + " gelöscht.";
+            if (!includeGroups)
+            {
+                return "Nextcloud-Kontakte synchronisiert: " + count + " geändert/neu, " + sync.DeletedCount + " gelöscht.";
+            }
+
+            var preferences = new CardDavSyncPreferences
+            {
+                Enabled = true,
+                SyncCompanyDirectory = syncCompany,
+                SyncPersonalContacts = syncPersonal,
+                UseDefaultContactsFolder = useDefaultContactsFolder
+            };
+            int groups = CardDavContactGroupSync.Reconcile(configuration, _outlookApplication, syncedAddressBooks, preferences);
+            int groupFolders = CardDavContactFolderSync.Reconcile(configuration, _outlookApplication, syncedAddressBooks, preferences);
+            return "Neu geladen: " + count + " Kontakte, " + groups + " Gruppen und " + groupFolders + " Gruppenordner.";
         }
 
         /// <summary>

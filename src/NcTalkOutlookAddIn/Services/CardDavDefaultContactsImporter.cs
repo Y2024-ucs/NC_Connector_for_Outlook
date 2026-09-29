@@ -356,6 +356,17 @@ namespace NcTalkOutlookAddIn.Services
             }
         }
 
+        /// <summary>
+        /// Removes the add-in's distribution lists from <paramref name="folder"/> for a full rebuild.
+        /// </summary>
+        internal static int RemoveManagedGroups(Outlook.MAPIFolder folder)
+        {
+            int count = CountManagedGroups(folder);
+            DeleteManagedGroups(folder);
+            WriteFolderProperty(folder, ManagedGroupSnapshotProperty, string.Empty);
+            return count;
+        }
+
         private static Dictionary<string, List<string>> LoadRemoteCategories(
             TalkServiceConfiguration configuration,
             IEnumerable<CardDavAddressBook> addressBooks,
