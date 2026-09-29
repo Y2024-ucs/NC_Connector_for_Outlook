@@ -6,9 +6,14 @@ This project follows the principles of **Keep a Changelog** and **Semantic Versi
 
 ## [Unreleased]
 
+### Added
+
+- Two-way customer sync: the Outlook contacts subfolder "Kunden" (reused if present, never deleted) is synchronized with the Nextcloud address book "IBP-Kunden", which is created when missing. New, changed and deleted contacts are applied in both directions, Outlook wins conflicting edits, unmapped cloud properties are preserved on upload, and mass deletions are held back.
+
 ### Fixed
 
 - Contact group folders are no longer duplicated or deleted when Outlook fails to read a folder marker. Group folders are remembered by EntryID, names ignore Outlook's "(Nur dieser Computer)" suffix, and existing duplicates that only hold add-in copies are removed.
+- CardDAV import keeps escaped semicolons inside company names and addresses, maps `TEL;TYPE=OTHER` to the other phone number, and prefers the work address over home addresses.
 
 ## [3.4.9] - 2026-09-24
 

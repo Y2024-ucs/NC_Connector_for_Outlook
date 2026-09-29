@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Xml.Linq;
 using NcTalkOutlookAddIn.Models;
 using NcTalkOutlookAddIn.Utilities;
@@ -998,7 +999,7 @@ namespace NcTalkOutlookAddIn.Services
             {
                 CardDavSyncPreferences preferences = CardDavSyncPreferences.Load();
                 if (!preferences.Enabled
-                    || (!preferences.SyncCompanyDirectory && !preferences.SyncPersonalContacts))
+                    || (!preferences.SyncCompanyDirectory && !preferences.SyncPersonalContacts && !preferences.SyncCustomers))
                 {
                     Interlocked.Exchange(ref _running, 0);
                     return;
@@ -1024,7 +1025,11 @@ namespace NcTalkOutlookAddIn.Services
                 }
 
                 var sync = new CardDavReadOnlySync(configuration);
-                IList<CardDavAddressBook> addressBooks = new DavDiscoveryService(configuration).DiscoverAddressBooks();
+                bool syncReadOnly = preferences.SyncCompanyDirectory || preferences.SyncPersonalContacts;
+                IList<CardDavAddressBook> addressBooks = syncReadOnly
+                    ? CardDavCustomerSync.WithoutCustomerAddressBook(
+                        new DavDiscoveryService(configuration).DiscoverAddressBooks())
+                    : new List<CardDavAddressBook>();
                 var contacts = new List<CardDavContactRecord>();
 
                 foreach (CardDavAddressBook addressBook in addressBooks)
@@ -1041,8 +1046,14 @@ namespace NcTalkOutlookAddIn.Services
                 uiContext.Post(
                     delegate
                     {
+                        bool customerSyncStarted = false;
                         try
                         {
+                            if (!syncReadOnly)
+                            {
+                                return;
+                            }
+
                             int count = sync.ImportIntoOutlook(
                                 outlookApplication,
                                 contacts,
@@ -1067,7 +1078,15 @@ namespace NcTalkOutlookAddIn.Services
                         }
                         finally
                         {
-                            Interlocked.Exchange(ref _running, 0);
+                            // A started customer sync releases the flag when it completes.
+                            if (preferences.SyncCustomers)
+                            {
+                                customerSyncStarted = StartCustomerSync(configuration, outlookApplication, uiContext);
+                            }
+                            if (!customerSyncStarted)
+                            {
+                                Interlocked.Exchange(ref _running, 0);
+                            }
                         }
                     },
                     null);
@@ -1077,6 +1096,49 @@ namespace NcTalkOutlookAddIn.Services
                 Interlocked.Exchange(ref _running, 0);
                 DiagnosticsLogger.LogException(LogCategories.Core, "CardDAV background sync failed.", ex);
             }
+        }
+
+        /// <summary>
+        /// Starts the customer sync; it marshals its own Outlook slices, so the UI thread is not blocked.
+        /// Returns false when it could not start, so the caller releases the running flag.
+        /// </summary>
+        private static bool StartCustomerSync(
+            TalkServiceConfiguration configuration,
+            Outlook.Application outlookApplication,
+            OutlookUiSynchronizationContext uiContext)
+        {
+            Task<CardDavCustomerSyncResult> task;
+            try
+            {
+                task = new CardDavCustomerSync(
+                    configuration,
+                    outlookApplication,
+                    callback => uiContext.InvokeAsync(() =>
+                    {
+                        callback();
+                        return true;
+                    }),
+                    () => Task.Delay(20)).RunAsync();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsLogger.LogException(LogCategories.Core, "CardDAV background customer sync could not start.", ex);
+                return false;
+            }
+
+            task.ContinueWith(
+                completed =>
+                {
+                    if (completed.IsFaulted)
+                    {
+                        DiagnosticsLogger.LogException(LogCategories.Core, "CardDAV background customer sync failed.", completed.Exception);
+                    }
+                    Interlocked.Exchange(ref _running, 0);
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.None,
+                TaskScheduler.Default);
+            return true;
         }
 
         private static bool IsSystemAddressBook(CardDavAddressBook addressBook)

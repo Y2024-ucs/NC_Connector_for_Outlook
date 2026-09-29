@@ -20,6 +20,7 @@ namespace NcTalkOutlookAddIn.Services
             SyncCompanyDirectory = false;
             SyncPersonalContacts = true;
             UseDefaultContactsFolder = true;
+            SyncCustomers = true;
         }
 
         internal bool Configured { get; set; }
@@ -27,6 +28,8 @@ namespace NcTalkOutlookAddIn.Services
         internal bool SyncCompanyDirectory { get; set; }
         internal bool SyncPersonalContacts { get; set; }
         internal bool UseDefaultContactsFolder { get; set; }
+        // Two-way sync of the Outlook folder "Kunden" with the Nextcloud address book "IBP-Kunden".
+        internal bool SyncCustomers { get; set; }
 
         internal static CardDavSyncPreferences Load()
         {
@@ -52,6 +55,7 @@ namespace NcTalkOutlookAddIn.Services
                 preferences.SyncCompanyDirectory = ReadBool(root, "SyncCompanyDirectory", false);
                 preferences.SyncPersonalContacts = ReadBool(root, "SyncPersonalContacts", true);
                 preferences.UseDefaultContactsFolder = ReadBool(root, "UseDefaultContactsFolder", true);
+                preferences.SyncCustomers = ReadBool(root, "SyncCustomers", true);
             }
             catch (Exception ex)
             {
@@ -73,6 +77,7 @@ namespace NcTalkOutlookAddIn.Services
                 AppendBool(document, root, "SyncCompanyDirectory", SyncCompanyDirectory);
                 AppendBool(document, root, "SyncPersonalContacts", SyncPersonalContacts);
                 AppendBool(document, root, "UseDefaultContactsFolder", UseDefaultContactsFolder);
+                AppendBool(document, root, "SyncCustomers", SyncCustomers);
 
                 var settings = new XmlWriterSettings
                 {

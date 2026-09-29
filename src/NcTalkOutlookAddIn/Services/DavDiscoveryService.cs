@@ -41,6 +41,66 @@ namespace NcTalkOutlookAddIn.Services
             return DiscoverAddressBooks(addressBookHome);
         }
 
+        /// <summary>
+        /// Returns the user's address book matching <paramref name="match"/>, creating it via MKCOL when missing.
+        /// </summary>
+        internal CardDavAddressBook EnsureAddressBook(
+            string slug,
+            string displayName,
+            Func<CardDavAddressBook, bool> match)
+        {
+            if (!_configuration.IsComplete())
+            {
+                throw new InvalidOperationException("Nextcloud configuration is incomplete.");
+            }
+
+            Uri addressBookHome = DiscoverAddressBookHome(DiscoverPrincipal());
+            CardDavAddressBook existing = DiscoverAddressBooks(addressBookHome).FirstOrDefault(match);
+            if (existing != null)
+            {
+                return existing;
+            }
+
+            Uri target = new Uri(new Uri(addressBookHome.AbsoluteUri.TrimEnd('/') + "/"), slug + "/");
+            string body = "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
+                + "<d:mkcol xmlns:d=\"DAV:\" xmlns:card=\"urn:ietf:params:xml:ns:carddav\"><d:set><d:prop>"
+                + "<d:resourcetype><d:collection/><card:addressbook/></d:resourcetype>"
+                + "<d:displayname>" + System.Security.SecurityElement.Escape(displayName) + "</d:displayname>"
+                + "</d:prop></d:set></d:mkcol>";
+            NcHttpResponse response = new NcHttpClient(_configuration).Send(new NcHttpRequestOptions
+            {
+                Method = "MKCOL",
+                Url = target.AbsoluteUri,
+                Payload = body,
+                Accept = "application/xml, text/xml",
+                ContentType = "application/xml; charset=utf-8",
+                IncludeOcsApiHeader = false,
+                ParseJson = false
+            });
+            // 405: the collection exists already (e.g. renamed by the user); find it again below.
+            if (!response.HasHttpResponse
+                || ((int)response.StatusCode != 201 && response.StatusCode != HttpStatusCode.MethodNotAllowed))
+            {
+                throw new InvalidOperationException(
+                    "CardDAV address book '" + displayName + "' could not be created ("
+                    + (response.HasHttpResponse ? ((int)response.StatusCode).ToString() : "no response") + ").");
+            }
+            Utilities.DiagnosticsLogger.Log(
+                Utilities.LogCategories.Core,
+                "CardDAV address book ensured (name=" + displayName + ", status=" + (int)response.StatusCode + ").");
+
+            CardDavAddressBook created = DiscoverAddressBooks(addressBookHome).FirstOrDefault(
+                book => match(book) || string.Equals(
+                    book.Href.TrimEnd('/'),
+                    target.AbsoluteUri.TrimEnd('/'),
+                    StringComparison.OrdinalIgnoreCase));
+            if (created == null)
+            {
+                throw new InvalidOperationException("CardDAV address book '" + displayName + "' was not found after creation.");
+            }
+            return created;
+        }
+
         private Uri DiscoverPrincipal()
         {
             // This is a Nextcloud-specific add-in, so use the canonical DAV root

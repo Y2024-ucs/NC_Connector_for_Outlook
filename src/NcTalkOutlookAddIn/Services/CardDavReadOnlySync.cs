@@ -575,7 +575,9 @@ namespace NcTalkOutlookAddIn.Services
                     try
                     {
                         folder = folders[index];
-                        if (folder.DefaultItemType == Outlook.OlItemType.olContactItem)
+                        // The customer folder has its own two-way sync; copied read-only markers must not delete there.
+                        if (folder.DefaultItemType == Outlook.OlItemType.olContactItem
+                            && !CardDavCustomerSync.IsCustomerFolderName(folder.Name))
                             DeletedCount += ReconcileFolder(folder);
                     }
                     finally
@@ -797,6 +799,19 @@ namespace NcTalkOutlookAddIn.Services
 
         private static void ApplyContact(Outlook.ContactItem target, CardDavContactRecord source)
         {
+            ApplyContactFields(target, source);
+            WriteUserProperty(target, UidPropertyName, source.Uid);
+            WriteUserProperty(target, HrefPropertyName, source.Href);
+            WriteUserProperty(target, ETagPropertyName, source.ETag);
+            WriteUserProperty(target, ImportSchemaPropertyName, CurrentImportSchema);
+            CardDavVCardSupport.ApplyPhoto(target, source.Href);
+        }
+
+        /// <summary>
+        /// Copies the mapped vCard fields only; sync markers are left to the caller.
+        /// </summary>
+        internal static void ApplyContactFields(Outlook.ContactItem target, CardDavContactRecord source)
+        {
             target.FullName = source.FullName ?? string.Empty;
             target.FirstName = source.FirstName ?? string.Empty;
             target.LastName = source.LastName ?? string.Empty;
@@ -822,12 +837,6 @@ namespace NcTalkOutlookAddIn.Services
             target.BusinessAddressPostalCode = source.BusinessAddressPostalCode ?? string.Empty;
             target.BusinessAddressCountry = source.BusinessAddressCountry ?? string.Empty;
             target.Body = source.Notes ?? string.Empty;
-
-            WriteUserProperty(target, UidPropertyName, source.Uid);
-            WriteUserProperty(target, HrefPropertyName, source.Href);
-            WriteUserProperty(target, ETagPropertyName, source.ETag);
-            WriteUserProperty(target, ImportSchemaPropertyName, CurrentImportSchema);
-            CardDavVCardSupport.ApplyPhoto(target, source.Href);
         }
 
         private static string ResolveContactFileAs(CardDavContactRecord source)
@@ -882,7 +891,7 @@ namespace NcTalkOutlookAddIn.Services
             return string.Empty;
         }
 
-        private static string ReadUserProperty(Outlook.ContactItem item, string name)
+        internal static string ReadUserProperty(Outlook.ContactItem item, string name)
         {
             Outlook.UserProperties properties = null;
             Outlook.UserProperty property = null;
@@ -901,7 +910,7 @@ namespace NcTalkOutlookAddIn.Services
             }
         }
 
-        private static void WriteUserProperty(Outlook.ContactItem item, string name, string value)
+        internal static void WriteUserProperty(Outlook.ContactItem item, string name, string value)
         {
             Outlook.UserProperties properties = null;
             Outlook.UserProperty property = null;
@@ -961,7 +970,7 @@ namespace NcTalkOutlookAddIn.Services
             return result;
         }
 
-        private static Outlook.MAPIFolder EnsureSubFolder(Outlook.MAPIFolder parent, string name)
+        internal static Outlook.MAPIFolder EnsureSubFolder(Outlook.MAPIFolder parent, string name)
         {
             Outlook.Folders folders = null;
             try
@@ -1102,11 +1111,12 @@ namespace NcTalkOutlookAddIn.Services
             return document;
         }
 
-        private static CardDavContactRecord ParseVCard(string raw)
+        internal static CardDavContactRecord ParseVCard(string raw)
         {
             List<string> lines = UnfoldVCard(raw);
             Dictionary<string, string> groupLabels = ReadVCardGroupLabels(lines);
             var result = new CardDavContactRecord();
+            bool hasBusinessAddress = false;
             foreach (string line in lines)
             {
                 int colon = line.IndexOf(':');
@@ -1117,7 +1127,10 @@ namespace NcTalkOutlookAddIn.Services
 
                 string left = line.Substring(0, colon);
                 string upperLeft = left.ToUpperInvariant();
-                string value = DecodeVCardValue(left, line.Substring(colon + 1));
+                string rawValue = line.Substring(colon + 1);
+                string value = DecodeVCardValue(left, rawValue);
+                // Structured values are split before unescaping, so an escaped ";" stays inside its component.
+                string structuredValue = DecodeQuotedPrintableValue(left, rawValue);
                 string name = NormalizeVCardPropertyName(left);
 
                 switch (name)
@@ -1125,12 +1138,12 @@ namespace NcTalkOutlookAddIn.Services
                     case "UID": result.Uid = value; break;
                     case "FN": result.FullName = value; break;
                     case "N":
-                        string[] n = SplitVCardComponents(value);
+                        string[] n = SplitVCardComponents(structuredValue);
                         result.LastName = n.Length > 0 ? n[0] : string.Empty;
                         result.FirstName = n.Length > 1 ? n[1] : string.Empty;
                         break;
                     case "ORG":
-                        string[] organization = SplitVCardComponents(value);
+                        string[] organization = SplitVCardComponents(structuredValue);
                         result.Company = organization.Length > 0 ? organization[0] : string.Empty;
                         break;
                     case "TITLE": result.JobTitle = value; break;
@@ -1148,7 +1161,11 @@ namespace NcTalkOutlookAddIn.Services
                         AssignTelephone(result, value, upperLeft, groupLabel);
                         break;
                     case "ADR":
-                        string[] address = SplitVCardComponents(value);
+                        // Outlook maps one business address: a work/untyped ADR wins over home and other ones.
+                        bool privateAddress = upperLeft.Contains("HOME") || upperLeft.Contains("OTHER");
+                        if (privateAddress && hasBusinessAddress) break;
+                        if (!privateAddress) hasBusinessAddress = true;
+                        string[] address = SplitVCardComponents(structuredValue);
                         if (address.Length > 2) result.BusinessAddressStreet = address[2];
                         if (address.Length > 3) result.BusinessAddressCity = address[3];
                         if (address.Length > 4) result.BusinessAddressState = address[4];
@@ -1343,6 +1360,15 @@ namespace NcTalkOutlookAddIn.Services
                 return;
             }
 
+            if (type.Contains("OTHER"))
+            {
+                if (TryAssignPhoneValue(contact.OtherPhone, value, out assigned))
+                {
+                    contact.OtherPhone = assigned;
+                }
+                return;
+            }
+
             if (TryAssignPhoneValue(contact.BusinessPhone, value, out assigned))
             {
                 contact.BusinessPhone = assigned;
@@ -1436,13 +1462,18 @@ namespace NcTalkOutlookAddIn.Services
 
         private static string DecodeVCardValue(string fieldDefinition, string value)
         {
+            return DecodeVCardText(DecodeQuotedPrintableValue(fieldDefinition, value));
+        }
+
+        private static string DecodeQuotedPrintableValue(string fieldDefinition, string value)
+        {
             string decoded = value ?? string.Empty;
             if (!string.IsNullOrWhiteSpace(fieldDefinition)
                 && fieldDefinition.IndexOf("QUOTED-PRINTABLE", StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 decoded = DecodeQuotedPrintableUtf8(decoded);
             }
-            return DecodeVCardText(decoded);
+            return decoded;
         }
 
         private static string DecodeQuotedPrintableUtf8(string value)

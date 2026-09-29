@@ -391,7 +391,7 @@ namespace NcTalkOutlookAddIn
             }
 
             if (!preferences.Enabled
-                || (!preferences.SyncCompanyDirectory && !preferences.SyncPersonalContacts))
+                || (!preferences.SyncCompanyDirectory && !preferences.SyncPersonalContacts && !preferences.SyncCustomers))
             {
                 DiagnosticsLogger.Log(LogCategories.Core, "CardDAV read-only sync disabled by user settings.");
                 if (userInitiated) MessageBox.Show("Bitte die Kontaktsynchronisation und einen Kontaktbereich in den Einstellungen aktivieren.", "Kontakte synchronisieren");
@@ -417,8 +417,8 @@ namespace NcTalkOutlookAddIn
                 ShowCardDavSyncStatus("NC Connector: Serverdaten werden geladen ...");
                 List<CardDavContactRecord> contacts = await Task.Run(() =>
                 {
-                    IList<CardDavAddressBook> addressBooks =
-                        new DavDiscoveryService(configuration).DiscoverAddressBooks();
+                    IList<CardDavAddressBook> addressBooks = CardDavCustomerSync.WithoutCustomerAddressBook(
+                        new DavDiscoveryService(configuration).DiscoverAddressBooks());
                     syncedAddressBooks = addressBooks;
                     var result = new List<CardDavContactRecord>();
                     foreach (CardDavAddressBook addressBook in addressBooks)
@@ -493,6 +493,30 @@ namespace NcTalkOutlookAddIn
                         "CardDAV Outlook write phases skipped because no remote contact changes were detected.");
                 }
 
+                string customerSummary = string.Empty;
+                if (preferences.SyncCustomers)
+                {
+                    await RunOnOutlookUiThreadAsync(() =>
+                    {
+                        ShowCardDavSyncStatus("NC Connector: Kunden werden abgeglichen ...");
+                    }).ConfigureAwait(false);
+                    try
+                    {
+                        CardDavCustomerSyncResult customers = await new CardDavCustomerSync(
+                            configuration,
+                            _outlookApplication,
+                            callback => RunOnOutlookUiThreadAsync(callback),
+                            WaitForCardDavUiWindowAsync).RunAsync().ConfigureAwait(false);
+                        customerSummary = Environment.NewLine + customers.Summary();
+                    }
+                    catch (Exception ex)
+                    {
+                        // The read-only contact sync above stays valid; report the customer part separately.
+                        DiagnosticsLogger.LogException(LogCategories.Core, "CardDAV customer sync failed.", ex);
+                        customerSummary = Environment.NewLine + "Kunden-Abgleich fehlgeschlagen: " + ex.Message;
+                    }
+                }
+
                 await RunOnOutlookUiThreadAsync(() =>
                 {
                     DiagnosticsLogger.Log(LogCategories.Core, "CardDAV sync completed (changedContacts="
@@ -503,7 +527,7 @@ namespace NcTalkOutlookAddIn
                         userInitiated ? 900 : 2200);
                     if (userInitiated) MessageBox.Show("Nextcloud-Kontakte synchronisiert: " + count
                         + " geändert/neu, " + sync.DeletedCount + " gelöscht, " + groups
-                        + " Gruppen und " + groupFolders + " Gruppenordner aktualisiert.", "Kontakte synchronisieren");
+                        + " Gruppen und " + groupFolders + " Gruppenordner aktualisiert." + customerSummary, "Kontakte synchronisieren");
                 }).ConfigureAwait(false);
             }
             catch (Exception ex)

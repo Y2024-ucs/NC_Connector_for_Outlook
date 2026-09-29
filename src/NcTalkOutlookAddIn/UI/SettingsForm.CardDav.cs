@@ -22,6 +22,7 @@ namespace NcTalkOutlookAddIn.UI
         private readonly CheckBox _cardDavPersonalCheckBox = new CheckBox();
         private readonly RadioButton _cardDavSeparateFoldersRadio = new RadioButton();
         private readonly RadioButton _cardDavDefaultContactsRadio = new RadioButton();
+        private readonly CheckBox _cardDavCustomersCheckBox = new CheckBox();
         private readonly Button _cardDavSyncNowButton = new Button();
         private CardDavSyncPreferences _cardDavPreferences;
 
@@ -65,7 +66,7 @@ namespace NcTalkOutlookAddIn.UI
 
             _cardDavSyncGroup.Text = "Nextcloud-Kontakte";
             _cardDavSyncGroup.Location = new Point(18, 20);
-            _cardDavSyncGroup.Size = new Size(700, 230);
+            _cardDavSyncGroup.Size = new Size(700, 262);
             _cardDavSyncGroup.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             _cardDavTab.Controls.Add(_cardDavSyncGroup);
 
@@ -110,17 +111,25 @@ namespace NcTalkOutlookAddIn.UI
             _cardDavDefaultContactsRadio.Checked = _cardDavPreferences.UseDefaultContactsFolder;
             _cardDavSyncGroup.Controls.Add(_cardDavDefaultContactsRadio);
 
+            _cardDavCustomersCheckBox.Text = "Outlook-Ordner \"" + CardDavCustomerSync.FolderName
+                + "\" beidseitig mit Nextcloud-Adressbuch \"" + CardDavCustomerSync.AddressBookDisplayName + "\" abgleichen";
+            _cardDavCustomersCheckBox.AutoSize = true;
+            _cardDavCustomersCheckBox.Location = new Point(30, 189);
+            _cardDavCustomersCheckBox.Checked = _cardDavPreferences.SyncCustomers;
+            _cardDavCustomersCheckBox.CheckedChanged += delegate { UpdateCardDavSettingsState(); };
+            _cardDavSyncGroup.Controls.Add(_cardDavCustomersCheckBox);
+
             _cardDavSyncNowButton.Text = "Jetzt synchronisieren";
-            _cardDavSyncNowButton.Location = new Point(30, 187);
+            _cardDavSyncNowButton.Location = new Point(30, 219);
             _cardDavSyncNowButton.Size = new Size(170, 28);
             _cardDavSyncNowButton.Click += OnCardDavSyncNowClick;
             _cardDavSyncGroup.Controls.Add(_cardDavSyncNowButton);
 
             var hint = new Label
             {
-                Text = "Nur lesend: Nextcloud → Outlook · nur geänderte Kontakte · Hintergrundaktualisierung alle 15 Minuten",
+                Text = "Kontakte nur lesend, Kunden beidseitig · nur Änderungen · automatisch alle 15 Minuten",
                 AutoSize = true,
-                Location = new Point(215, 194)
+                Location = new Point(215, 226)
             };
             _cardDavSyncGroup.Controls.Add(hint);
 
@@ -131,8 +140,11 @@ namespace NcTalkOutlookAddIn.UI
         private void UpdateCardDavSettingsState()
         {
             bool enabled = _cardDavEnabledCheckBox.Checked;
-            bool hasSelection = _cardDavCompanyCheckBox.Checked || _cardDavPersonalCheckBox.Checked;
+            bool hasSelection = _cardDavCompanyCheckBox.Checked
+                || _cardDavPersonalCheckBox.Checked
+                || _cardDavCustomersCheckBox.Checked;
             _cardDavCompanyCheckBox.Enabled = enabled;
+            _cardDavCustomersCheckBox.Enabled = enabled;
             _cardDavPersonalCheckBox.Enabled = enabled;
             _cardDavSeparateFoldersRadio.Enabled = enabled;
             _cardDavDefaultContactsRadio.Enabled = enabled;
@@ -158,7 +170,8 @@ namespace NcTalkOutlookAddIn.UI
 
             bool syncCompany = _cardDavCompanyCheckBox.Checked;
             bool syncPersonal = _cardDavPersonalCheckBox.Checked;
-            if (!syncCompany && !syncPersonal)
+            bool syncCustomers = _cardDavCustomersCheckBox.Checked;
+            if (!syncCompany && !syncPersonal && !syncCustomers)
             {
                 SetStatus("Es ist kein Kontaktbereich zur Synchronisation ausgewählt.", true);
                 return;
@@ -174,35 +187,22 @@ namespace NcTalkOutlookAddIn.UI
             SetStatus("Nextcloud-Kontakte werden auf Änderungen geprüft ...", false);
             try
             {
-                bool useDefaultContactsFolder = _cardDavDefaultContactsRadio.Checked;
-                Dictionary<string, string> knownEtags = CardDavReadOnlySync.LoadKnownEtagsFromOutlook(
-                    _outlookApplication,
-                    useDefaultContactsFolder);
-                var sync = new CardDavReadOnlySync(configuration);
-                List<CardDavContactRecord> contacts = await Task.Run(() =>
+                string status = string.Empty;
+                if (syncCompany || syncPersonal)
                 {
-                    IList<CardDavAddressBook> addressBooks =
-                        new DavDiscoveryService(configuration).DiscoverAddressBooks();
-                    var result = new List<CardDavContactRecord>();
-                    foreach (CardDavAddressBook addressBook in addressBooks)
-                    {
-                        bool isSystem = addressBook != null
-                            && !string.IsNullOrWhiteSpace(addressBook.Href)
-                            && addressBook.Href.IndexOf(
-                                "z-server-generated--system",
-                                StringComparison.OrdinalIgnoreCase) >= 0;
-                        if ((isSystem && !syncCompany) || (!isSystem && !syncPersonal))
-                        {
-                            continue;
-                        }
-                        result.AddRange(sync.DownloadContacts(addressBook, knownEtags));
-                    }
-                    return result;
-                });
-
-                int count = sync.ImportIntoOutlook(_outlookApplication, contacts,
-                    useDefaultContactsFolder);
-                SetStatus("Nextcloud-Kontakte synchronisiert: " + count + " geändert/neu, " + sync.DeletedCount + " gelöscht.", false);
+                    status = await RunCardDavReadOnlySyncAsync(configuration, syncCompany, syncPersonal);
+                }
+                if (syncCustomers)
+                {
+                    SetStatus("Kunden werden abgeglichen ...", false);
+                    CardDavCustomerSyncResult customers = await new CardDavCustomerSync(
+                        configuration,
+                        _outlookApplication,
+                        RunOnSettingsUiThreadAsync,
+                        () => Task.Delay(20)).RunAsync();
+                    status = (status + " " + customers.Summary()).Trim();
+                }
+                SetStatus(status, false);
             }
             catch (Exception ex)
             {
@@ -215,6 +215,78 @@ namespace NcTalkOutlookAddIn.UI
                 SetBusy(false);
                 UpdateCardDavSettingsState();
             }
+        }
+
+        private async Task<string> RunCardDavReadOnlySyncAsync(
+            TalkServiceConfiguration configuration,
+            bool syncCompany,
+            bool syncPersonal)
+        {
+            bool useDefaultContactsFolder = _cardDavDefaultContactsRadio.Checked;
+            Dictionary<string, string> knownEtags = CardDavReadOnlySync.LoadKnownEtagsFromOutlook(
+                _outlookApplication,
+                useDefaultContactsFolder);
+            var sync = new CardDavReadOnlySync(configuration);
+            List<CardDavContactRecord> contacts = await Task.Run(() =>
+            {
+                IList<CardDavAddressBook> addressBooks = CardDavCustomerSync.WithoutCustomerAddressBook(
+                    new DavDiscoveryService(configuration).DiscoverAddressBooks());
+                var result = new List<CardDavContactRecord>();
+                foreach (CardDavAddressBook addressBook in addressBooks)
+                {
+                    bool isSystem = addressBook != null
+                        && !string.IsNullOrWhiteSpace(addressBook.Href)
+                        && addressBook.Href.IndexOf(
+                            "z-server-generated--system",
+                            StringComparison.OrdinalIgnoreCase) >= 0;
+                    if ((isSystem && !syncCompany) || (!isSystem && !syncPersonal))
+                    {
+                        continue;
+                    }
+                    result.AddRange(sync.DownloadContacts(addressBook, knownEtags));
+                }
+                return result;
+            });
+
+            int count = sync.ImportIntoOutlook(_outlookApplication, contacts,
+                useDefaultContactsFolder);
+            return "Nextcloud-Kontakte synchronisiert: " + count + " geändert/neu, " + sync.DeletedCount + " gelöscht.";
+        }
+
+        /// <summary>
+        /// The customer sync resumes on pool threads; its Outlook slices must return to this form's thread.
+        /// </summary>
+        private Task RunOnSettingsUiThreadAsync(Action callback)
+        {
+            var completion = new TaskCompletionSource<bool>();
+            Action run = () =>
+            {
+                try
+                {
+                    callback();
+                    completion.TrySetResult(true);
+                }
+                catch (Exception ex)
+                {
+                    completion.TrySetException(ex);
+                }
+            };
+
+            if (!InvokeRequired)
+            {
+                run();
+                return completion.Task;
+            }
+            try
+            {
+                BeginInvoke(run);
+            }
+            catch (Exception ex)
+            {
+                // The form was closed while the sync was still running.
+                completion.TrySetException(ex);
+            }
+            return completion.Task;
         }
 
         private void OnCardDavSettingsFormClosed(object sender, FormClosedEventArgs e)
@@ -231,6 +303,7 @@ namespace NcTalkOutlookAddIn.UI
                 _cardDavPreferences.SyncCompanyDirectory = _cardDavCompanyCheckBox.Checked;
                 _cardDavPreferences.SyncPersonalContacts = _cardDavPersonalCheckBox.Checked;
                 _cardDavPreferences.UseDefaultContactsFolder = _cardDavDefaultContactsRadio.Checked;
+                _cardDavPreferences.SyncCustomers = _cardDavCustomersCheckBox.Checked;
                 _cardDavPreferences.Save();
             }
             catch (Exception ex)

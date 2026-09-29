@@ -149,6 +149,8 @@
     <Compile Include="Services\CardDavDefaultContactsImporter.cs" />
     <Compile Include="Services\CardDavSyncPreferences.cs" />
     <Compile Include="Services\CardDavVCardSupport.cs" />
+    <Compile Include="Services\CardDavCustomerPlanner.cs" />
+    <Compile Include="Services\CardDavCustomerSync.cs" />
     <Compile Include="Services\NextcloudCapabilitiesService.cs" />
     <Compile Include="Services\NextcloudUserIdentityService.cs" />
     <Compile Include="Services\TalkService.cs" />
