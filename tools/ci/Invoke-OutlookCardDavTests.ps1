@@ -65,8 +65,17 @@ internal static class CardDavTests
         catch (InvalidOperationException) { invalidRoot = true; }
         Check(invalidRoot, "Non-DAV response blocks deletion");
         VCardChecks();
+        FolderNameChecks();
         Console.WriteLine("CardDAV safety checks passed: " + checks);
     }
+    private static void FolderNameChecks()
+    {
+        Check(NcTalkOutlookAddIn.Utilities.OutlookFolderNames.Matches("Sifa (Nur dieser Computer)", "Sifa"), "Local-only suffix names the same folder");
+        Check(NcTalkOutlookAddIn.Utilities.OutlookFolderNames.Matches("kunden (This computer only)", "Kunden"), "English local-only suffix is ignored");
+        Check(!NcTalkOutlookAddIn.Utilities.OutlookFolderNames.Matches("Sifa (Nextcloud)", "Sifa"), "Collision folder stays a different folder");
+        Check(NcTalkOutlookAddIn.Utilities.OutlookFolderNames.Normalize("IBP - Firmenverzeichnis (Nur dieser Computer)").EndsWith(" - Firmenverzeichnis"), "Destination suffix survives normalization");
+    }
+
     private static void VCardChecks()
     {
         string folded = CardDavVCardSupport.Normalize("BEGIN:VCARD\r\nNOTE:Erster Teil\r\n  Termin am 01.02. um 10:30\r\nEND:VCARD");
@@ -146,8 +155,9 @@ internal static class CardDavTests
         "    }"
         "}"
     ) | Set-Content -Path $vcardTestSource -Encoding UTF8
+    $folderNamesSource = Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\OutlookFolderNames.cs"
     $uriValidatorSource = Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\NextcloudUriValidator.cs"
-    & $csc /nologo /target:exe "/out:$exe" /r:System.Core.dll /r:System.Xml.Linq.dll $testSource $snapshotTestSource $vcardTestSource $uriValidatorSource
+    & $csc /nologo /target:exe "/out:$exe" /r:System.Core.dll /r:System.Xml.Linq.dll $testSource $snapshotTestSource $vcardTestSource $folderNamesSource $uriValidatorSource
     if ($LASTEXITCODE -ne 0) { throw "CardDAV test compilation failed." }
     & $exe
     if ($LASTEXITCODE -ne 0) { throw "CardDAV safety tests failed." }

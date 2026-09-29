@@ -4,6 +4,12 @@ All notable changes to **NC Connector for Outlook** will be documented in this f
 
 This project follows the principles of **Keep a Changelog** and **Semantic Versioning**.
 
+## [Unreleased]
+
+### Fixed
+
+- Contact group folders are no longer duplicated or deleted when Outlook fails to read a folder marker. Group folders are remembered by EntryID, names ignore Outlook's "(Nur dieser Computer)" suffix, and existing duplicates that only hold add-in copies are removed.
+
 ## [3.4.9] - 2026-09-24
 
 ### Added

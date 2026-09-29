@@ -368,7 +368,7 @@ namespace NcTalkOutlookAddIn.Services
 
         private static bool IsSeparateDestinationFolderName(string folderName)
         {
-            string name = folderName ?? string.Empty;
+            string name = OutlookFolderNames.Normalize(folderName);
             return name.EndsWith(CompanyFolderSuffix, StringComparison.OrdinalIgnoreCase)
                 || name.EndsWith(PersonalFolderSuffix, StringComparison.OrdinalIgnoreCase);
         }
@@ -975,7 +975,7 @@ namespace NcTalkOutlookAddIn.Services
                     {
                         folder = folders[index];
                         if (folder != null
-                            && string.Equals(folder.Name, name, StringComparison.OrdinalIgnoreCase))
+                            && OutlookFolderNames.Matches(folder.Name, name))
                         {
                             Outlook.MAPIFolder match = folder;
                             folder = null;

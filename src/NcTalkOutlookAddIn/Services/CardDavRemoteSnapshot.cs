@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -134,7 +135,9 @@ namespace NcTalkOutlookAddIn.Services
                 session = outlookApplication.Session;
                 defaultContacts = session.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderContacts);
                 Dictionary<string, SourceContactReference> sourceContacts = LoadSourceContacts(defaultContacts);
-                DeleteObsoleteManagedFolders(defaultContacts, activeGroups);
+                GroupFolderState state = GroupFolderState.Load(defaultContacts.EntryID);
+                List<SubfolderInfo> subfolders = ScanSubfolders(defaultContacts);
+                DeleteObsoleteManagedFolders(session, defaultContacts.StoreID, subfolders, activeGroups, state);
 
                 int folderCount = 0;
                 foreach (string groupName in activeGroups.OrderBy(name => name, StringComparer.CurrentCultureIgnoreCase))
@@ -142,7 +145,7 @@ namespace NcTalkOutlookAddIn.Services
                     Outlook.MAPIFolder groupFolder = null;
                     try
                     {
-                        groupFolder = EnsureManagedGroupFolder(defaultContacts, groupName);
+                        groupFolder = EnsureManagedGroupFolder(session, defaultContacts, groupName, subfolders, state);
                         if (groupFolder == null) continue;
 
                         DeleteManagedDistributionLists(groupFolder);
@@ -183,6 +186,7 @@ namespace NcTalkOutlookAddIn.Services
                     }
                 }
 
+                state.Save();
                 DiagnosticsLogger.Log(
                     LogCategories.Core,
                     "CardDAV contact group folder reconciliation completed (folders=" + folderCount + ").");
@@ -468,10 +472,26 @@ namespace NcTalkOutlookAddIn.Services
             }
         }
 
-        private static Outlook.MAPIFolder EnsureManagedGroupFolder(Outlook.MAPIFolder parent, string groupName)
+        private enum FolderMark
         {
+            Unmanaged,
+            Managed,
+            // Outlook sometimes fails to return folder properties; such a folder is neither ours nor foreign.
+            Unknown
+        }
+
+        private sealed class SubfolderInfo
+        {
+            internal string EntryId { get; set; }
+            internal string Name { get; set; }
+            internal FolderMark Mark { get; set; }
+            internal string GroupName { get; set; }
+        }
+
+        private static List<SubfolderInfo> ScanSubfolders(Outlook.MAPIFolder parent)
+        {
+            var result = new List<SubfolderInfo>();
             Outlook.Folders folders = null;
-            Outlook.MAPIFolder exactUnmanagedMatch = null;
             try
             {
                 folders = parent.Folders;
@@ -483,106 +503,414 @@ namespace NcTalkOutlookAddIn.Services
                     {
                         folder = folders[index];
                         if (folder == null) continue;
-
-                        string managedName = ReadFolderProperty(folder, ManagedFolderNameProperty);
-                        if (IsManagedGroupFolder(folder)
-                            && string.Equals(managedName, groupName, StringComparison.OrdinalIgnoreCase))
+                        string groupName;
+                        FolderMark mark = ReadFolderMark(folder, out groupName);
+                        result.Add(new SubfolderInfo
                         {
-                            Outlook.MAPIFolder match = folder;
-                            folder = null;
-                            return match;
-                        }
-
-                        if (!IsManagedGroupFolder(folder)
-                            && string.Equals(folder.Name, groupName, StringComparison.OrdinalIgnoreCase)
-                            && exactUnmanagedMatch == null)
-                        {
-                            exactUnmanagedMatch = folder;
-                            folder = null;
-                        }
+                            EntryId = folder.EntryID,
+                            Name = folder.Name ?? string.Empty,
+                            Mark = mark,
+                            GroupName = groupName
+                        });
                     }
                     finally
                     {
-                        ComInteropScope.TryRelease(folder, LogCategories.Core, "Failed to release contact folder while locating CardDAV group folder.");
+                        ComInteropScope.TryRelease(folder, LogCategories.Core, "Failed to release contact folder while scanning CardDAV group folders.");
                     }
                 }
-
-                string folderName = SanitizeFolderName(groupName);
-                if (exactUnmanagedMatch != null)
-                {
-                    folderName = SanitizeFolderName(groupName + " (Nextcloud)");
-                    DiagnosticsLogger.Log(
-                        LogCategories.Core,
-                        "CardDAV group folder name collision; using alternate folder (group=" + groupName
-                        + ", folder=" + folderName + ").");
-                }
-
-                Outlook.MAPIFolder created = folders.Add(folderName, Outlook.OlDefaultFolders.olFolderContacts);
-                WriteFolderProperty(created, ManagedFolderProperty, "1");
-                WriteFolderProperty(created, ManagedFolderNameProperty, groupName);
-                return created;
             }
             finally
             {
-                ComInteropScope.TryRelease(exactUnmanagedMatch, LogCategories.Core, "Failed to release unmanaged folder name collision reference.");
-                ComInteropScope.TryRelease(folders, LogCategories.Core, "Failed to release folders collection after CardDAV group folder creation.");
+                ComInteropScope.TryRelease(folders, LogCategories.Core, "Failed to release folders collection after CardDAV group folder scan.");
             }
+            return result;
         }
 
-        private static void DeleteObsoleteManagedFolders(Outlook.MAPIFolder parent, ISet<string> activeGroups)
+        /// <summary>
+        /// Finds the group's folder without trusting a single property read: the remembered EntryID wins,
+        /// then the marker, then a same-named folder whose marker could not be read. Creates one only
+        /// when none of these exist, and removes duplicates left by earlier failed lookups.
+        /// </summary>
+        private static Outlook.MAPIFolder EnsureManagedGroupFolder(
+            Outlook.NameSpace session,
+            Outlook.MAPIFolder parent,
+            string groupName,
+            List<SubfolderInfo> subfolders,
+            GroupFolderState state)
         {
+            string storeId = parent.StoreID;
+            string rememberedId = state.Get(groupName);
+            List<SubfolderInfo> marked = subfolders
+                .Where(f => f.Mark == FolderMark.Managed
+                    && string.Equals(f.GroupName, groupName, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            SubfolderInfo chosen = subfolders.FirstOrDefault(f => rememberedId.Length > 0
+                && string.Equals(f.EntryId, rememberedId, StringComparison.Ordinal));
+            bool owned = chosen != null || marked.Count > 0;
+            if (chosen == null) chosen = marked.FirstOrDefault();
+            if (chosen == null)
+            {
+                chosen = subfolders.FirstOrDefault(f => f.Mark == FolderMark.Unknown
+                    && (OutlookFolderNames.Matches(f.Name, groupName)
+                        || OutlookFolderNames.Matches(f.Name, groupName + " (Nextcloud)")));
+                if (chosen != null)
+                {
+                    DiagnosticsLogger.Log(
+                        LogCategories.Core,
+                        "CardDAV group folder marker unreadable; reusing same-named folder instead of creating a duplicate (group="
+                        + groupName + ").");
+                }
+            }
+
+            Outlook.MAPIFolder result = null;
+            if (chosen != null)
+            {
+                result = TryGetFolder(session, chosen.EntryId, storeId);
+            }
+            if (result == null)
+            {
+                result = CreateManagedGroupFolder(parent, groupName, subfolders);
+                owned = result != null;
+                if (result != null)
+                {
+                    subfolders.Add(new SubfolderInfo
+                    {
+                        EntryId = result.EntryID,
+                        Name = result.Name,
+                        Mark = FolderMark.Managed,
+                        GroupName = groupName
+                    });
+                }
+            }
+            if (result == null) return null;
+
+            if (owned)
+            {
+                state.Set(groupName, result.EntryID);
+                RemoveDuplicateGroupFolders(session, storeId, groupName, result.EntryID, marked, subfolders);
+            }
+            return result;
+        }
+
+        private static Outlook.MAPIFolder CreateManagedGroupFolder(
+            Outlook.MAPIFolder parent,
+            string groupName,
+            IEnumerable<SubfolderInfo> subfolders)
+        {
+            string folderName = SanitizeFolderName(groupName);
+            if (subfolders.Any(f => OutlookFolderNames.Matches(f.Name, folderName)))
+            {
+                folderName = SanitizeFolderName(groupName + " (Nextcloud)");
+                DiagnosticsLogger.Log(
+                    LogCategories.Core,
+                    "CardDAV group folder name collision; using alternate folder (group=" + groupName
+                    + ", folder=" + folderName + ").");
+            }
+            if (subfolders.Any(f => OutlookFolderNames.Matches(f.Name, folderName)))
+            {
+                // Both names are taken by folders we cannot identify; skip rather than fail or duplicate.
+                DiagnosticsLogger.Log(
+                    LogCategories.Core,
+                    "CardDAV group folder skipped because its names are taken (group=" + groupName + ").");
+                return null;
+            }
+
             Outlook.Folders folders = null;
             try
             {
                 folders = parent.Folders;
-                for (int index = folders.Count; index >= 1; index--)
-                {
-                    Outlook.MAPIFolder folder = null;
-                    try
-                    {
-                        folder = folders[index];
-                        if (folder == null || !IsManagedGroupFolder(folder)) continue;
-
-                        string groupName = ReadFolderProperty(folder, ManagedFolderNameProperty);
-                        if (string.IsNullOrWhiteSpace(groupName) || !activeGroups.Contains(groupName))
-                        {
-                            folder.Delete();
-                        }
-                    }
-                    finally
-                    {
-                        ComInteropScope.TryRelease(folder, LogCategories.Core, "Failed to release obsolete CardDAV group folder.");
-                    }
-                }
+                Outlook.MAPIFolder created = folders.Add(folderName, Outlook.OlDefaultFolders.olFolderContacts);
+                WriteFolderProperty(created, ManagedFolderProperty, "1");
+                WriteFolderProperty(created, ManagedFolderNameProperty, groupName);
+                DiagnosticsLogger.Log(
+                    LogCategories.Core,
+                    "CardDAV group folder created (group=" + groupName + ", folder=" + folderName + ").");
+                return created;
             }
             finally
             {
-                ComInteropScope.TryRelease(folders, LogCategories.Core, "Failed to release folders collection after CardDAV group folder cleanup.");
+                ComInteropScope.TryRelease(folders, LogCategories.Core, "Failed to release folders collection after CardDAV group folder creation.");
             }
         }
 
-        private static bool IsManagedGroupFolder(Outlook.MAPIFolder folder)
+        /// <summary>
+        /// Deletes extra folders of the same group, but only when they hold nothing except managed copies.
+        /// Deleted folders go to "Deleted Items".
+        /// </summary>
+        private static void RemoveDuplicateGroupFolders(
+            Outlook.NameSpace session,
+            string storeId,
+            string groupName,
+            string keepEntryId,
+            IEnumerable<SubfolderInfo> marked,
+            List<SubfolderInfo> subfolders)
         {
-            return string.Equals(ReadFolderProperty(folder, ManagedFolderProperty), "1", StringComparison.Ordinal);
+            foreach (SubfolderInfo duplicate in marked.Where(f => !string.Equals(f.EntryId, keepEntryId, StringComparison.Ordinal)).ToList())
+            {
+                Outlook.MAPIFolder folder = TryGetFolder(session, duplicate.EntryId, storeId);
+                if (folder == null) continue;
+                try
+                {
+                    if (!ContainsOnlyManagedItems(folder))
+                    {
+                        DiagnosticsLogger.Log(
+                            LogCategories.Core,
+                            "CardDAV duplicate group folder kept because it contains own items (group=" + groupName + ").");
+                        continue;
+                    }
+                    folder.Delete();
+                    subfolders.Remove(duplicate);
+                    DiagnosticsLogger.Log(
+                        LogCategories.Core,
+                        "CardDAV duplicate group folder removed (group=" + groupName + ", folder=" + duplicate.Name + ").");
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticsLogger.LogException(LogCategories.Core, "Failed to remove duplicate CardDAV group folder.", ex);
+                }
+                finally
+                {
+                    ComInteropScope.TryRelease(folder, LogCategories.Core, "Failed to release duplicate CardDAV group folder.");
+                }
+            }
+        }
+
+        private static bool ContainsOnlyManagedItems(Outlook.MAPIFolder folder)
+        {
+            Outlook.Folders children = null;
+            Outlook.Items items = null;
+            try
+            {
+                children = folder.Folders;
+                if (children != null && children.Count > 0) return false;
+                items = folder.Items;
+                int count = items != null ? items.Count : 0;
+                for (int index = 1; index <= count; index++)
+                {
+                    object raw = null;
+                    try
+                    {
+                        raw = items[index];
+                        var contact = raw as Outlook.ContactItem;
+                        var list = raw as Outlook.DistListItem;
+                        bool managed = contact != null
+                            ? string.Equals(ReadContactProperty(contact, GroupCopyPropertyName), "1", StringComparison.Ordinal)
+                            : list != null
+                                && string.Equals(ReadDistributionListProperty(list, ManagedDistributionListPropertyName), "1", StringComparison.Ordinal);
+                        if (!managed) return false;
+                    }
+                    finally
+                    {
+                        ComInteropScope.TryRelease(raw, LogCategories.Core, "Failed to release item while checking duplicate CardDAV group folder.");
+                    }
+                }
+                return true;
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(items, LogCategories.Core, "Failed to release items while checking duplicate CardDAV group folder.");
+                ComInteropScope.TryRelease(children, LogCategories.Core, "Failed to release subfolders while checking duplicate CardDAV group folder.");
+            }
+        }
+
+        private static Outlook.MAPIFolder TryGetFolder(Outlook.NameSpace session, string entryId, string storeId)
+        {
+            if (string.IsNullOrWhiteSpace(entryId)) return null;
+            try
+            {
+                return session.GetFolderFromID(entryId, storeId);
+            }
+            catch (System.Runtime.InteropServices.COMException)
+            {
+                return null;
+            }
+        }
+
+        private static void DeleteObsoleteManagedFolders(
+            Outlook.NameSpace session,
+            string storeId,
+            List<SubfolderInfo> subfolders,
+            ISet<string> activeGroups,
+            GroupFolderState state)
+        {
+            foreach (SubfolderInfo info in subfolders.ToList())
+            {
+                string groupName = state.GroupFor(info.EntryId);
+                if (groupName.Length == 0 && info.Mark == FolderMark.Managed) groupName = info.GroupName;
+                // Without a known group name the folder cannot be proven obsolete, so it stays.
+                if (groupName.Length == 0 || activeGroups.Contains(groupName)) continue;
+
+                Outlook.MAPIFolder folder = TryGetFolder(session, info.EntryId, storeId);
+                if (folder == null) continue;
+                try
+                {
+                    folder.Delete();
+                    subfolders.Remove(info);
+                    state.Remove(groupName);
+                    DiagnosticsLogger.Log(
+                        LogCategories.Core,
+                        "CardDAV obsolete group folder removed (group=" + groupName + ").");
+                }
+                finally
+                {
+                    ComInteropScope.TryRelease(folder, LogCategories.Core, "Failed to release obsolete CardDAV group folder.");
+                }
+            }
+        }
+
+        internal static bool IsManagedGroupFolder(Outlook.MAPIFolder folder)
+        {
+            string groupName;
+            return ReadFolderMark(folder, out groupName) == FolderMark.Managed;
+        }
+
+        private static FolderMark ReadFolderMark(Outlook.MAPIFolder folder, out string groupName)
+        {
+            groupName = string.Empty;
+            string managed;
+            if (!TryReadFolderProperty(folder, ManagedFolderProperty, out managed)) return FolderMark.Unknown;
+            if (!string.Equals(managed, "1", StringComparison.Ordinal)) return FolderMark.Unmanaged;
+            string name;
+            if (!TryReadFolderProperty(folder, ManagedFolderNameProperty, out name) || string.IsNullOrWhiteSpace(name))
+            {
+                return FolderMark.Unknown;
+            }
+            groupName = name.Trim();
+            return FolderMark.Managed;
         }
 
         private static string ReadFolderProperty(Outlook.MAPIFolder folder, string schemaName)
         {
+            string value;
+            return TryReadFolderProperty(folder, schemaName, out value) ? value : string.Empty;
+        }
+
+        /// <summary>
+        /// Returns false when Outlook failed to read the property; a missing property is a successful empty read.
+        /// </summary>
+        private static bool TryReadFolderProperty(Outlook.MAPIFolder folder, string schemaName, out string value)
+        {
+            const int MapiNotFound = unchecked((int)0x8004010F);
+            value = string.Empty;
             Outlook.PropertyAccessor accessor = null;
             try
             {
                 accessor = folder != null ? folder.PropertyAccessor : null;
-                if (accessor == null) return string.Empty;
-                object value = accessor.GetProperty(schemaName);
-                return value != null ? Convert.ToString(value) ?? string.Empty : string.Empty;
+                if (accessor == null) return false;
+                object raw = accessor.GetProperty(schemaName);
+                value = raw != null ? Convert.ToString(raw) ?? string.Empty : string.Empty;
+                return true;
             }
-            catch
+            catch (Exception ex)
             {
-                return string.Empty;
+                var com = ex as System.Runtime.InteropServices.COMException;
+                if (com != null && com.ErrorCode == MapiNotFound)
+                {
+                    return true;
+                }
+                DiagnosticsLogger.LogException(
+                    LogCategories.Core,
+                    "CardDAV group folder property could not be read (property=" + schemaName.Substring(schemaName.LastIndexOf('/') + 1) + ").",
+                    ex);
+                return false;
             }
             finally
             {
                 ComInteropScope.TryRelease(accessor, LogCategories.Core, "Failed to release CardDAV group folder property accessor.");
+            }
+        }
+
+        /// <summary>
+        /// Remembers which folder belongs to which group, so identification does not depend on folder properties.
+        /// </summary>
+        private sealed class GroupFolderState
+        {
+            private const string FileName = "carddav-group-folders.xml";
+            private readonly string _parentEntryId;
+            private readonly Dictionary<string, string> _entryIds = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            private bool _dirty;
+
+            private GroupFolderState(string parentEntryId)
+            {
+                _parentEntryId = parentEntryId ?? string.Empty;
+            }
+
+            internal static GroupFolderState Load(string parentEntryId)
+            {
+                var state = new GroupFolderState(parentEntryId);
+                try
+                {
+                    string path = GetPath();
+                    if (!File.Exists(path)) return state;
+                    XElement root = XDocument.Load(path).Root;
+                    // Another default contacts folder (new profile or store) starts from the folder markers.
+                    if (root == null || !string.Equals((string)root.Attribute("parent"), state._parentEntryId, StringComparison.Ordinal))
+                    {
+                        return state;
+                    }
+                    foreach (XElement folder in root.Elements("Folder"))
+                    {
+                        string group = ((string)folder.Attribute("group") ?? string.Empty).Trim();
+                        string entryId = ((string)folder.Attribute("entryId") ?? string.Empty).Trim();
+                        if (group.Length > 0 && entryId.Length > 0) state._entryIds[group] = entryId;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticsLogger.LogException(LogCategories.Core, "Failed to load CardDAV group folder state.", ex);
+                }
+                return state;
+            }
+
+            internal string Get(string groupName)
+            {
+                string entryId;
+                return _entryIds.TryGetValue(groupName ?? string.Empty, out entryId) ? entryId : string.Empty;
+            }
+
+            internal string GroupFor(string entryId)
+            {
+                return _entryIds.Where(pair => string.Equals(pair.Value, entryId, StringComparison.Ordinal))
+                    .Select(pair => pair.Key)
+                    .FirstOrDefault() ?? string.Empty;
+            }
+
+            internal void Set(string groupName, string entryId)
+            {
+                if (string.IsNullOrWhiteSpace(groupName) || string.IsNullOrWhiteSpace(entryId)) return;
+                if (string.Equals(Get(groupName), entryId, StringComparison.Ordinal)) return;
+                _entryIds[groupName] = entryId;
+                _dirty = true;
+            }
+
+            internal void Remove(string groupName)
+            {
+                if (_entryIds.Remove(groupName ?? string.Empty)) _dirty = true;
+            }
+
+            internal void Save()
+            {
+                if (!_dirty) return;
+                try
+                {
+                    var root = new XElement("CardDavGroupFolders", new XAttribute("parent", _parentEntryId));
+                    foreach (KeyValuePair<string, string> pair in _entryIds.OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase))
+                    {
+                        root.Add(new XElement("Folder", new XAttribute("group", pair.Key), new XAttribute("entryId", pair.Value)));
+                    }
+                    new XDocument(root).Save(GetPath());
+                    _dirty = false;
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticsLogger.LogException(LogCategories.Core, "Failed to save CardDAV group folder state.", ex);
+                }
+            }
+
+            private static string GetPath()
+            {
+                return Path.Combine(AppDataPaths.EnsureLocalRootDirectory(), FileName);
             }
         }
 
