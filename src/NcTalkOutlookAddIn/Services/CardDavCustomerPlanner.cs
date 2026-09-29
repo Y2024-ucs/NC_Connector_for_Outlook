@@ -4,9 +4,14 @@
 
 using System;
 using System.Collections.Generic;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace NcTalkOutlookAddIn.Services
@@ -23,6 +28,8 @@ namespace NcTalkOutlookAddIn.Services
         internal string StoredHash { get; set; }
         internal string CurrentHash { get; set; }
         internal CardDavContactRecord Fields { get; set; }
+        // Contact picture as stored in Outlook; null when the contact has none.
+        internal byte[] Photo { get; set; }
 
         internal bool LocallyChanged
         {
@@ -250,12 +257,25 @@ namespace NcTalkOutlookAddIn.Services
             new[] { "VERSION", "UID", "FN", "N", "ORG", "TITLE", "EMAIL", "TEL", "NOTE", "REV", "PRODID" },
             StringComparer.OrdinalIgnoreCase);
 
-        internal static string ComputeHash(CardDavContactRecord record)
+        internal const int PhotoMaxSize = 512;
+
+        /// <summary>
+        /// Hash of the mapped fields and, when present, the picture. Without a picture the hash equals
+        /// the one of earlier versions, so existing customers are not uploaded again after an update.
+        /// </summary>
+        internal static string ComputeHash(CardDavContactRecord record, byte[] photo = null)
         {
             var builder = new StringBuilder();
             foreach (string value in FieldValues(record))
             {
                 builder.Append(Clean(value).Replace("\r\n", "\n")).Append('\u001f');
+            }
+            if (photo != null && photo.Length > 0)
+            {
+                using (SHA256 photoSha = SHA256.Create())
+                {
+                    builder.Append("photo:").Append(Convert.ToBase64String(photoSha.ComputeHash(photo)));
+                }
             }
             using (SHA256 sha = SHA256.Create())
             {
@@ -264,7 +284,52 @@ namespace NcTalkOutlookAddIn.Services
             }
         }
 
-        internal static string Build(CardDavContactRecord record, string uid, string existingRaw, DateTime utcNow)
+        /// <summary>
+        /// Converts an Outlook picture to a JPEG of at most <see cref="PhotoMaxSize"/> pixels per side.
+        /// Returns null when the bytes are not a readable image.
+        /// </summary>
+        internal static byte[] PrepareJpeg(byte[] image)
+        {
+            if (image == null || image.Length == 0) return null;
+            try
+            {
+                using (var input = new MemoryStream(image))
+                using (Image source = Image.FromStream(input))
+                {
+                    double scale = Math.Min(1.0, (double)PhotoMaxSize / Math.Max(source.Width, source.Height));
+                    int width = Math.Max(1, (int)Math.Round(source.Width * scale));
+                    int height = Math.Max(1, (int)Math.Round(source.Height * scale));
+                    using (var target = new Bitmap(width, height))
+                    {
+                        using (Graphics graphics = Graphics.FromImage(target))
+                        {
+                            graphics.Clear(Color.White);
+                            graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                            graphics.DrawImage(source, 0, 0, width, height);
+                        }
+                        ImageCodecInfo jpeg = ImageCodecInfo.GetImageEncoders().First(c => c.FormatID == ImageFormat.Jpeg.Guid);
+                        using (var parameters = new EncoderParameters(1))
+                        using (var output = new MemoryStream())
+                        {
+                            parameters.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 85L);
+                            target.Save(output, jpeg, parameters);
+                            return output.ToArray();
+                        }
+                    }
+                }
+            }
+            catch (ArgumentException)
+            {
+                return null;
+            }
+            catch (ExternalException)
+            {
+                return null;
+            }
+        }
+
+        /// <param name="photoJpeg">Outlook picture as JPEG; replaces the server photo. Null keeps the server photo.</param>
+        internal static string Build(CardDavContactRecord record, string uid, string existingRaw, DateTime utcNow, byte[] photoJpeg = null)
         {
             record = record ?? new CardDavContactRecord();
             var output = new List<string>();
@@ -307,7 +372,12 @@ namespace NcTalkOutlookAddIn.Services
             }
             AddIfPresent(output, "NOTE", record.Notes);
 
-            output.AddRange(PreservedLines(existingRaw));
+            bool replacePhoto = photoJpeg != null && photoJpeg.Length > 0;
+            output.AddRange(PreservedLines(existingRaw, replacePhoto));
+            if (replacePhoto)
+            {
+                output.Add("PHOTO;ENCODING=b;TYPE=JPEG:" + Convert.ToBase64String(photoJpeg));
+            }
             output.Add("REV:" + utcNow.ToUniversalTime().ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture));
             output.Add("END:VCARD");
 
@@ -323,7 +393,7 @@ namespace NcTalkOutlookAddIn.Services
         /// Lines of the server vCard that Outlook does not own. Business/untyped addresses and
         /// labels of dropped grouped properties are replaced; everything else is kept verbatim.
         /// </summary>
-        private static IEnumerable<string> PreservedLines(string existingRaw)
+        private static IEnumerable<string> PreservedLines(string existingRaw, bool replacePhoto)
         {
             if (string.IsNullOrWhiteSpace(existingRaw)) yield break;
 
@@ -356,6 +426,7 @@ namespace NcTalkOutlookAddIn.Services
                     continue;
                 }
                 if (depth != 1 || IsReplaced(name, line)) continue;
+                if (replacePhoto && string.Equals(name, "PHOTO", StringComparison.OrdinalIgnoreCase)) continue;
                 if (group.Length > 0 && droppedGroups.Contains(group)) continue;
                 yield return line;
             }

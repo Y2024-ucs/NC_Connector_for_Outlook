@@ -370,7 +370,8 @@ namespace NcTalkOutlookAddIn.Services
                 action.Local != null ? action.Local.Fields : null,
                 action.Uid,
                 existingRaw,
-                DateTime.UtcNow);
+                DateTime.UtcNow,
+                action.Local != null ? CardDavCustomerVCard.PrepareJpeg(action.Local.Photo) : null);
         }
 
         private HttpStatusCode Put(string href, string vcard, string ifMatch)
@@ -522,6 +523,7 @@ namespace NcTalkOutlookAddIn.Services
             try
             {
                 CardDavContactRecord fields = ReadFields(contact);
+                byte[] photo = ReadPhoto(contact);
                 return new CardDavCustomerLocalEntry
                 {
                     EntryId = entryId,
@@ -529,8 +531,9 @@ namespace NcTalkOutlookAddIn.Services
                     Href = CardDavReadOnlySync.ReadUserProperty(contact, HrefPropertyName),
                     StoredEtag = CardDavReadOnlySync.ReadUserProperty(contact, ETagPropertyName),
                     StoredHash = CardDavReadOnlySync.ReadUserProperty(contact, HashPropertyName),
-                    CurrentHash = CardDavCustomerVCard.ComputeHash(fields),
-                    Fields = fields
+                    CurrentHash = CardDavCustomerVCard.ComputeHash(fields, photo),
+                    Fields = fields,
+                    Photo = photo
                 };
             }
             finally
@@ -568,6 +571,86 @@ namespace NcTalkOutlookAddIn.Services
                 BusinessAddressCountry = contact.BusinessAddressCountry,
                 Notes = contact.Body
             };
+        }
+
+        private static string ComputeLocalHash(Outlook.ContactItem contact)
+        {
+            return CardDavCustomerVCard.ComputeHash(ReadFields(contact), ReadPhoto(contact));
+        }
+
+        /// <summary>
+        /// Reads the Outlook contact picture, a hidden attachment. Returns null when there is none or it
+        /// cannot be read; the cloud photo is then kept.
+        /// </summary>
+        private static byte[] ReadPhoto(Outlook.ContactItem contact)
+        {
+            Outlook.Attachments attachments = null;
+            try
+            {
+                if (!contact.HasPicture) return null;
+                attachments = contact.Attachments;
+                int count = attachments != null ? attachments.Count : 0;
+                for (int index = 1; index <= count; index++)
+                {
+                    Outlook.Attachment attachment = null;
+                    try
+                    {
+                        attachment = attachments[index];
+                        if (!IsContactPicture(attachment)) continue;
+                        string path = Path.Combine(Path.GetTempPath(), "nc4ol-kunde-" + Guid.NewGuid().ToString("N") + ".jpg");
+                        try
+                        {
+                            attachment.SaveAsFile(path);
+                            return File.ReadAllBytes(path);
+                        }
+                        finally
+                        {
+                            try
+                            {
+                                if (File.Exists(path)) File.Delete(path);
+                            }
+                            catch (IOException)
+                            {
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        ComInteropScope.TryRelease(attachment, LogCategories.Core, "Failed to release customer contact picture attachment.");
+                    }
+                }
+                return null;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsLogger.LogException(LogCategories.Core, "Failed to read customer contact picture.", ex);
+                return null;
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(attachments, LogCategories.Core, "Failed to release customer contact attachments.");
+            }
+        }
+
+        private static bool IsContactPicture(Outlook.Attachment attachment)
+        {
+            const string ContactPhotoProperty = "http://schemas.microsoft.com/mapi/proptag/0x7FFF000B";
+            Outlook.PropertyAccessor accessor = null;
+            try
+            {
+                accessor = attachment.PropertyAccessor;
+                object value = accessor.GetProperty(ContactPhotoProperty);
+                if (value is bool) return (bool)value;
+            }
+            catch (System.Runtime.InteropServices.COMException)
+            {
+                // Property missing: fall back to the name Outlook gives contact pictures.
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(accessor, LogCategories.Core, "Failed to release customer attachment property accessor.");
+            }
+            return string.Equals(attachment.FileName, "ContactPicture.jpg", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string SmtpOrEmpty(string address, string addressType)
@@ -653,7 +736,7 @@ namespace NcTalkOutlookAddIn.Services
                     contact = CardDavReadOnlySync.TryGetContactById(session, action.Local.EntryId, storeId);
                     // Deleted or edited in Outlook since the scan: leave it, the next run decides again.
                     if (contact == null
-                        || !string.Equals(CardDavCustomerVCard.ComputeHash(ReadFields(contact)), action.Local.CurrentHash, StringComparison.Ordinal))
+                        || !string.Equals(ComputeLocalHash(contact), action.Local.CurrentHash, StringComparison.Ordinal))
                     {
                         return false;
                     }
@@ -671,7 +754,9 @@ namespace NcTalkOutlookAddIn.Services
                 CardDavReadOnlySync.WriteUserProperty(contact, UidPropertyName, action.Downloaded.Uid);
                 CardDavReadOnlySync.WriteUserProperty(contact, HrefPropertyName, action.Href);
                 CardDavReadOnlySync.WriteUserProperty(contact, ETagPropertyName, action.RemoteEtag);
-                CardDavReadOnlySync.WriteUserProperty(contact, HashPropertyName, CardDavCustomerVCard.ComputeHash(ReadFields(contact)));
+                // Save first: the picture attachment is readable only once stored, and Outlook re-encodes it.
+                contact.Save();
+                CardDavReadOnlySync.WriteUserProperty(contact, HashPropertyName, ComputeLocalHash(contact));
                 contact.Save();
                 return true;
             }
@@ -690,7 +775,7 @@ namespace NcTalkOutlookAddIn.Services
             try
             {
                 // Edited since the scan: keep it, the next run uploads it again (Outlook wins).
-                if (!string.Equals(CardDavCustomerVCard.ComputeHash(ReadFields(contact)), action.Local.CurrentHash, StringComparison.Ordinal))
+                if (!string.Equals(ComputeLocalHash(contact), action.Local.CurrentHash, StringComparison.Ordinal))
                 {
                     return false;
                 }

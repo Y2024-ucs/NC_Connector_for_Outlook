@@ -70,6 +70,8 @@ internal static class CardDavTests
         CustomerPlannerChecks();
         CustomerVCardChecks();
         FolderNameChecks();
+        CustomerPhotoChecks();
+        PreferenceChecks();
         Console.WriteLine("CardDAV safety checks passed: " + checks);
     }
     private static void VCardChecks()
@@ -185,6 +187,55 @@ internal static class CardDavTests
         locals = knownHrefs.Skip(4).Select(h => Local(h, "\"e\"", false)).ToList();
         plan = Plan(locals, many, knownHrefs.ToArray());
         Check(!plan.DeletionsBlocked && plan.Actions.Count(x => x.Kind == CardDavCustomerActionKind.DeleteRemote) == 4, "Few deletions pass the mass deletion guard");
+    }
+
+    private static void CustomerPhotoChecks()
+    {
+        var record = new CardDavContactRecord { FullName = "Foto Kunde", LastName = "Kunde" };
+        byte[] png;
+        using (var bitmap = new System.Drawing.Bitmap(1024, 512))
+        using (var stream = new System.IO.MemoryStream())
+        {
+            using (var graphics = System.Drawing.Graphics.FromImage(bitmap)) graphics.Clear(System.Drawing.Color.SteelBlue);
+            bitmap.Save(stream, System.Drawing.Imaging.ImageFormat.Png);
+            png = stream.ToArray();
+        }
+        Check(CardDavCustomerVCard.ComputeHash(record) == CardDavCustomerVCard.ComputeHash(record, null)
+            && CardDavCustomerVCard.ComputeHash(record) == CardDavCustomerVCard.ComputeHash(record, new byte[0]), "Contacts without photo keep their previous hash");
+        Check(CardDavCustomerVCard.ComputeHash(record, png) != CardDavCustomerVCard.ComputeHash(record), "A new Outlook photo marks the customer as changed");
+
+        byte[] jpeg = CardDavCustomerVCard.PrepareJpeg(png);
+        Check(jpeg != null && jpeg[0] == 0xFF && jpeg[1] == 0xD8, "Outlook photo is converted to JPEG");
+        using (var stream = new System.IO.MemoryStream(jpeg))
+        using (var image = System.Drawing.Image.FromStream(stream))
+        {
+            Check(image.Width == 512 && image.Height == 256, "Large photo is scaled to 512 pixels keeping the aspect ratio");
+        }
+        Check(CardDavCustomerVCard.PrepareJpeg(new byte[] { 1, 2, 3 }) == null, "Unreadable photo is skipped");
+
+        string existing = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:u\r\nFN:Alt\r\nPHOTO;ENCODING=b;TYPE=PNG:QUJD\r\nBDAY:1980-01-01\r\nEND:VCARD\r\n";
+        string withPhoto = CardDavCustomerVCard.Build(record, "u", existing, DateTime.UtcNow, jpeg).Replace("\r\n ", "");
+        string[] lines = withPhoto.Split(new[] { "\r\n" }, StringSplitOptions.None);
+        Check(lines.Count(l => l.StartsWith("PHOTO")) == 1 && lines.Any(l => l == "PHOTO;ENCODING=b;TYPE=JPEG:" + Convert.ToBase64String(jpeg)), "Outlook photo replaces the cloud photo");
+        Check(lines.Contains("BDAY:1980-01-01"), "Other cloud properties survive a photo upload");
+        string withoutPhoto = CardDavCustomerVCard.Build(record, "u", existing, DateTime.UtcNow, null);
+        Check(withoutPhoto.Contains("PHOTO;ENCODING=b;TYPE=PNG:QUJD"), "Without an Outlook photo the cloud photo is kept");
+    }
+
+    private static void PreferenceChecks()
+    {
+        var all = new CardDavSyncPreferences();
+        var book = new NcTalkOutlookAddIn.Models.CardDavAddressBook { Href = "https://cloud.example/remote.php/dav/addressbooks/users/stefan/ibp-kontakte/", DisplayName = "IBP-Kontakte" };
+        var other = new NcTalkOutlookAddIn.Models.CardDavAddressBook { Href = "https://cloud.example/remote.php/dav/addressbooks/users/stefan/contacts/", DisplayName = "Kontakte" };
+        var company = new NcTalkOutlookAddIn.Models.CardDavAddressBook { Href = "https://cloud.example/remote.php/dav/addressbooks/system/system/z-server-generated--system/", DisplayName = "Firma" };
+        var customers = new NcTalkOutlookAddIn.Models.CardDavAddressBook { Href = "https://cloud.example/remote.php/dav/addressbooks/users/stefan/ibp-kunden/", DisplayName = "IBP-Kunden" };
+        Check(all.IncludesAddressBook(book) && all.IncludesAddressBook(other), "Without a selection all personal books are synced");
+        Check(!all.IncludesAddressBook(company), "The company directory is never synced");
+        Check(!all.IncludesAddressBook(customers), "The two-way customer book is not part of the read-only sync");
+        var selected = new CardDavSyncPreferences { PersonalAddressBookHref = "https://cloud.example/remote.php/dav/addressbooks/users/stefan/ibp-kontakte" };
+        Check(selected.IncludesAddressBook(book) && !selected.IncludesAddressBook(other), "Only the selected personal book is synced");
+        var off = new CardDavSyncPreferences { SyncPersonalContacts = false };
+        Check(!off.IncludesAddressBook(book), "Disabled personal sync includes no book");
     }
 
     private static void FolderNameChecks()
@@ -319,9 +370,49 @@ internal static class CardDavTests
         "}"
     ) | Set-Content -Path $parserTestSource -Encoding UTF8
     $plannerSource = Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\CardDavCustomerPlanner.cs"
+    # Preferences are compiled with minimal stand-ins for the types they reference.
+    $prefsSource = Get-Content -LiteralPath (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\CardDavSyncPreferences.cs") -Raw
+    $prefsClass = [regex]::Match($prefsSource, '(?ms)^    internal sealed class CardDavSyncPreferences.*?^    }')
+    if (-not $prefsClass.Success) {
+        throw "CardDavSyncPreferences could not be isolated for the preference test."
+    }
+    $customerSource = Get-Content -LiteralPath (Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\CardDavCustomerSync.cs") -Raw
+    $customerMethod = [regex]::Match($customerSource, '(?ms)^        internal static bool IsCustomerAddressBook\(.*?^        }')
+    $slugConst = [regex]::Match($customerSource, 'internal const string AddressBookSlug = "[^"]+";')
+    $nameConst = [regex]::Match($customerSource, 'internal const string AddressBookDisplayName = "[^"]+";')
+    if (-not ($customerMethod.Success -and $slugConst.Success -and $nameConst.Success)) {
+        throw "CardDavCustomerSync.IsCustomerAddressBook could not be isolated for the preference test."
+    }
+    $modelSource = Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Models\CardDavAddressBook.cs"
+    $prefsTestSource = Join-Path $TempRoot "CardDavPreferences.TestSource.cs"
+    @(
+        "using System;"
+        "using System.IO;"
+        "using System.Linq;"
+        "using System.Xml;"
+        "using NcTalkOutlookAddIn.Models;"
+        ""
+        "namespace NcTalkOutlookAddIn.Utilities"
+        "{"
+        "    internal static class LogCategories { internal const string Core = ""CORE""; }"
+        "    internal static class DiagnosticsLogger { internal static void LogException(string c, string m, Exception e) { } }"
+        "    internal static class AppDataPaths { internal static string EnsureLocalRootDirectory() { return Path.GetTempPath(); } }"
+        "}"
+        "namespace NcTalkOutlookAddIn.Services"
+        "{"
+        "    using NcTalkOutlookAddIn.Utilities;"
+        "    internal sealed class CardDavCustomerSync"
+        "    {"
+        ("        " + $slugConst.Value)
+        ("        " + $nameConst.Value)
+        $customerMethod.Value
+        "    }"
+        $prefsClass.Value
+        "}"
+    ) | Set-Content -Path $prefsTestSource -Encoding UTF8
     $folderNamesSource = Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\OutlookFolderNames.cs"
     $uriValidatorSource = Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\NextcloudUriValidator.cs"
-    & $csc /nologo /target:exe "/out:$exe" /r:System.Core.dll /r:System.Xml.Linq.dll $testSource $snapshotTestSource $vcardTestSource $parserTestSource $plannerSource $folderNamesSource $uriValidatorSource
+    & $csc /nologo /target:exe "/out:$exe" /r:System.Core.dll /r:System.Xml.dll /r:System.Xml.Linq.dll /r:System.Drawing.dll $testSource $snapshotTestSource $vcardTestSource $parserTestSource $plannerSource $folderNamesSource $prefsTestSource $modelSource $uriValidatorSource
     if ($LASTEXITCODE -ne 0) { throw "CardDAV test compilation failed." }
     & $exe
     if ($LASTEXITCODE -ne 0) { throw "CardDAV safety tests failed." }

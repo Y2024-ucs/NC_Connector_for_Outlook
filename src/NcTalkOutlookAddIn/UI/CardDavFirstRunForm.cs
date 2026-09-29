@@ -12,7 +12,6 @@ namespace NcTalkOutlookAddIn.UI
     internal sealed class CardDavFirstRunForm : ScaledForm
     {
         private readonly CheckBox _enabledCheckBox = new CheckBox();
-        private readonly CheckBox _companyCheckBox = new CheckBox();
         private readonly CheckBox _personalCheckBox = new CheckBox();
         private readonly RadioButton _separateFoldersRadio = new RadioButton();
         private readonly RadioButton _defaultContactsRadio = new RadioButton();
@@ -53,15 +52,9 @@ namespace NcTalkOutlookAddIn.UI
             _enabledCheckBox.CheckedChanged += delegate { UpdateState(); };
             Controls.Add(_enabledCheckBox);
 
-            _companyCheckBox.Text = "Firmenverzeichnis synchronisieren";
-            _companyCheckBox.AutoSize = true;
-            _companyCheckBox.Location = new Point(42, 140);
-            _companyCheckBox.Checked = preferences == null || preferences.SyncCompanyDirectory;
-            Controls.Add(_companyCheckBox);
-
-            _personalCheckBox.Text = "Persönliche Kontakte synchronisieren";
+            _personalCheckBox.Text = "Persönliche Kontakte synchronisieren (Adressbuch in den Einstellungen wählbar)";
             _personalCheckBox.AutoSize = true;
-            _personalCheckBox.Location = new Point(42, 168);
+            _personalCheckBox.Location = new Point(42, 140);
             _personalCheckBox.Checked = preferences == null || preferences.SyncPersonalContacts;
             Controls.Add(_personalCheckBox);
 
@@ -125,7 +118,6 @@ namespace NcTalkOutlookAddIn.UI
             }
 
             preferences.Enabled = _enabledCheckBox.Checked;
-            preferences.SyncCompanyDirectory = _companyCheckBox.Checked;
             preferences.SyncPersonalContacts = _personalCheckBox.Checked;
             preferences.UseDefaultContactsFolder = _defaultContactsRadio.Checked;
         }
@@ -133,7 +125,6 @@ namespace NcTalkOutlookAddIn.UI
         private void UpdateState()
         {
             bool enabled = _enabledCheckBox.Checked;
-            _companyCheckBox.Enabled = enabled;
             _personalCheckBox.Enabled = enabled;
             _separateFoldersRadio.Enabled = enabled;
             _defaultContactsRadio.Enabled = enabled;

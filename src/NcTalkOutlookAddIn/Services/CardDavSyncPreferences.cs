@@ -5,6 +5,7 @@
 using System;
 using System.IO;
 using System.Xml;
+using NcTalkOutlookAddIn.Models;
 using NcTalkOutlookAddIn.Utilities;
 
 namespace NcTalkOutlookAddIn.Services
@@ -12,24 +13,62 @@ namespace NcTalkOutlookAddIn.Services
     internal sealed class CardDavSyncPreferences
     {
         private const string FileName = "carddav-sync.xml";
+        private const string SystemAddressBookMarker = "z-server-generated--system";
 
         internal CardDavSyncPreferences()
         {
             Configured = false;
             Enabled = true;
-            SyncCompanyDirectory = false;
             SyncPersonalContacts = true;
+            PersonalAddressBookHref = string.Empty;
+            PersonalAddressBookName = string.Empty;
             UseDefaultContactsFolder = true;
             SyncCustomers = true;
         }
 
         internal bool Configured { get; set; }
         internal bool Enabled { get; set; }
-        internal bool SyncCompanyDirectory { get; set; }
         internal bool SyncPersonalContacts { get; set; }
+        // Empty: all personal address books. Otherwise only the book with this href.
+        internal string PersonalAddressBookHref { get; set; }
+        // Display name of the selected book, shown while the server list is not loaded.
+        internal string PersonalAddressBookName { get; set; }
         internal bool UseDefaultContactsFolder { get; set; }
         // Two-way sync of the Outlook folder "Kunden" with the Nextcloud address book "IBP-Kunden".
         internal bool SyncCustomers { get; set; }
+
+        /// <summary>
+        /// Whether the read-only sync imports this address book. The company directory (system address
+        /// book) and the two-way customer book are never part of it.
+        /// </summary>
+        internal bool IncludesAddressBook(CardDavAddressBook addressBook)
+        {
+            if (!SyncPersonalContacts || addressBook == null || string.IsNullOrWhiteSpace(addressBook.Href))
+            {
+                return false;
+            }
+            if (IsSystemAddressBook(addressBook) || CardDavCustomerSync.IsCustomerAddressBook(addressBook))
+            {
+                return false;
+            }
+            return string.IsNullOrWhiteSpace(PersonalAddressBookHref)
+                || SameCollection(addressBook.Href, PersonalAddressBookHref);
+        }
+
+        internal static bool IsSystemAddressBook(CardDavAddressBook addressBook)
+        {
+            return addressBook != null
+                && !string.IsNullOrWhiteSpace(addressBook.Href)
+                && addressBook.Href.IndexOf(SystemAddressBookMarker, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        internal static bool SameCollection(string left, string right)
+        {
+            return string.Equals(
+                (left ?? string.Empty).Trim().TrimEnd('/'),
+                (right ?? string.Empty).Trim().TrimEnd('/'),
+                StringComparison.OrdinalIgnoreCase);
+        }
 
         internal static CardDavSyncPreferences Load()
         {
@@ -52,8 +91,9 @@ namespace NcTalkOutlookAddIn.Services
 
                 preferences.Configured = ReadBool(root, "Configured", false);
                 preferences.Enabled = ReadBool(root, "Enabled", true);
-                preferences.SyncCompanyDirectory = ReadBool(root, "SyncCompanyDirectory", false);
                 preferences.SyncPersonalContacts = ReadBool(root, "SyncPersonalContacts", true);
+                preferences.PersonalAddressBookHref = ReadString(root, "PersonalAddressBookHref");
+                preferences.PersonalAddressBookName = ReadString(root, "PersonalAddressBookName");
                 preferences.UseDefaultContactsFolder = ReadBool(root, "UseDefaultContactsFolder", true);
                 preferences.SyncCustomers = ReadBool(root, "SyncCustomers", true);
             }
@@ -74,8 +114,9 @@ namespace NcTalkOutlookAddIn.Services
                 document.AppendChild(root);
                 AppendBool(document, root, "Configured", Configured);
                 AppendBool(document, root, "Enabled", Enabled);
-                AppendBool(document, root, "SyncCompanyDirectory", SyncCompanyDirectory);
                 AppendBool(document, root, "SyncPersonalContacts", SyncPersonalContacts);
+                AppendString(document, root, "PersonalAddressBookHref", PersonalAddressBookHref);
+                AppendString(document, root, "PersonalAddressBookName", PersonalAddressBookName);
                 AppendBool(document, root, "UseDefaultContactsFolder", UseDefaultContactsFolder);
                 AppendBool(document, root, "SyncCustomers", SyncCustomers);
 
@@ -108,10 +149,23 @@ namespace NcTalkOutlookAddIn.Services
             return element != null && bool.TryParse(element.InnerText, out value) ? value : fallback;
         }
 
+        private static string ReadString(XmlElement root, string name)
+        {
+            XmlElement element = root[name];
+            return element != null ? (element.InnerText ?? string.Empty).Trim() : string.Empty;
+        }
+
         private static void AppendBool(XmlDocument document, XmlElement root, string name, bool value)
         {
             XmlElement element = document.CreateElement(name);
             element.InnerText = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            root.AppendChild(element);
+        }
+
+        private static void AppendString(XmlDocument document, XmlElement root, string name, string value)
+        {
+            XmlElement element = document.CreateElement(name);
+            element.InnerText = value ?? string.Empty;
             root.AppendChild(element);
         }
     }

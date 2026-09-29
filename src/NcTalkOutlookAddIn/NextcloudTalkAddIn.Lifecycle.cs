@@ -391,7 +391,7 @@ namespace NcTalkOutlookAddIn
             }
 
             if (!preferences.Enabled
-                || (!preferences.SyncCompanyDirectory && !preferences.SyncPersonalContacts && !preferences.SyncCustomers))
+                || (!preferences.SyncPersonalContacts && !preferences.SyncCustomers))
             {
                 DiagnosticsLogger.Log(LogCategories.Core, "CardDAV read-only sync disabled by user settings.");
                 if (userInitiated) MessageBox.Show("Bitte die Kontaktsynchronisation und einen Kontaktbereich in den Einstellungen aktivieren.", "Kontakte synchronisieren");
@@ -423,9 +423,7 @@ namespace NcTalkOutlookAddIn
                     var result = new List<CardDavContactRecord>();
                     foreach (CardDavAddressBook addressBook in addressBooks)
                     {
-                        bool systemAddressBook = IsSystemCardDavAddressBook(addressBook);
-                        if ((systemAddressBook && !preferences.SyncCompanyDirectory)
-                            || (!systemAddressBook && !preferences.SyncPersonalContacts)) continue;
+                        if (!preferences.IncludesAddressBook(addressBook)) continue;
                         result.AddRange(sync.DownloadContacts(addressBook, knownEtags));
                     }
                     return result;
@@ -641,14 +639,6 @@ namespace NcTalkOutlookAddIn
             }
         }
 
-        private static bool IsSystemCardDavAddressBook(CardDavAddressBook addressBook)
-        {
-            return addressBook != null
-                && !string.IsNullOrWhiteSpace(addressBook.Href)
-                && addressBook.Href.IndexOf(
-                    "z-server-generated--system",
-                    StringComparison.OrdinalIgnoreCase) >= 0;
-        }
 
         private void TryApplyOfficeUiLanguage()
         {

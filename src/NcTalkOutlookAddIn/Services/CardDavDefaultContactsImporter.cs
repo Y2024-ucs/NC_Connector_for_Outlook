@@ -310,7 +310,6 @@ namespace NcTalkOutlookAddIn.Services
         private const string HrefPropertyName = "NC-CardDAV-HREF";
         private const string ManagedGroupPropertyName = "NC-CardDAV-GROUP";
         private const string ManagedGroupNamePropertyName = "NC-CardDAV-GROUP-NAME";
-        private const string GeneratedSystemAddressBookMarker = "z-server-generated--system";
         private const string PublicStringsBase = "http://schemas.microsoft.com/mapi/string/{00020329-0000-0000-C000-000000000046}/";
         private const string ManagedGroupSnapshotProperty = PublicStringsBase + "NC-CardDAV-GROUP-SNAPSHOT";
         private static readonly XNamespace Dav = "DAV:";
@@ -375,9 +374,7 @@ namespace NcTalkOutlookAddIn.Services
             var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
             foreach (CardDavAddressBook addressBook in addressBooks)
             {
-                bool isSystem = IsSystemAddressBook(addressBook);
-                if ((isSystem && !preferences.SyncCompanyDirectory)
-                    || (!isSystem && !preferences.SyncPersonalContacts))
+                if (!preferences.IncludesAddressBook(addressBook))
                 {
                     continue;
                 }
@@ -925,14 +922,6 @@ namespace NcTalkOutlookAddIn.Services
             }
         }
 
-        private static bool IsSystemAddressBook(CardDavAddressBook addressBook)
-        {
-            return addressBook != null
-                && !string.IsNullOrWhiteSpace(addressBook.Href)
-                && addressBook.Href.IndexOf(
-                    GeneratedSystemAddressBookMarker,
-                    StringComparison.OrdinalIgnoreCase) >= 0;
-        }
 
         private static bool IsSuccessfulStatus(string status)
         {
@@ -1010,7 +999,7 @@ namespace NcTalkOutlookAddIn.Services
             {
                 CardDavSyncPreferences preferences = CardDavSyncPreferences.Load();
                 if (!preferences.Enabled
-                    || (!preferences.SyncCompanyDirectory && !preferences.SyncPersonalContacts && !preferences.SyncCustomers))
+                    || (!preferences.SyncPersonalContacts && !preferences.SyncCustomers))
                 {
                     Interlocked.Exchange(ref _running, 0);
                     return;
@@ -1036,7 +1025,7 @@ namespace NcTalkOutlookAddIn.Services
                 }
 
                 var sync = new CardDavReadOnlySync(configuration);
-                bool syncReadOnly = preferences.SyncCompanyDirectory || preferences.SyncPersonalContacts;
+                bool syncReadOnly = preferences.SyncPersonalContacts;
                 IList<CardDavAddressBook> addressBooks = syncReadOnly
                     ? CardDavCustomerSync.WithoutCustomerAddressBook(
                         new DavDiscoveryService(configuration).DiscoverAddressBooks())
@@ -1045,9 +1034,7 @@ namespace NcTalkOutlookAddIn.Services
 
                 foreach (CardDavAddressBook addressBook in addressBooks)
                 {
-                    bool isSystem = IsSystemAddressBook(addressBook);
-                    if ((isSystem && !preferences.SyncCompanyDirectory)
-                        || (!isSystem && !preferences.SyncPersonalContacts))
+                    if (!preferences.IncludesAddressBook(addressBook))
                     {
                         continue;
                     }
@@ -1152,13 +1139,5 @@ namespace NcTalkOutlookAddIn.Services
             return true;
         }
 
-        private static bool IsSystemAddressBook(CardDavAddressBook addressBook)
-        {
-            return addressBook != null
-                && !string.IsNullOrWhiteSpace(addressBook.Href)
-                && addressBook.Href.IndexOf(
-                    "z-server-generated--system",
-                    StringComparison.OrdinalIgnoreCase) >= 0;
-        }
     }
 }
