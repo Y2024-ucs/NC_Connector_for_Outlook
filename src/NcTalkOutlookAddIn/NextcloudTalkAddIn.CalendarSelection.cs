@@ -23,9 +23,17 @@ namespace NcTalkOutlookAddIn
                 return;
             }
 
+            Outlook.MAPIFolder folder = null;
             Outlook.Selection selection = null;
             try
             {
+                folder = explorer.CurrentFolder;
+                if (folder == null
+                    || folder.DefaultItemType != Outlook.OlItemType.olAppointmentItem)
+                {
+                    return;
+                }
+
                 selection = explorer.Selection;
                 int count = selection != null ? selection.Count : 0;
                 for (int index = 1; index <= count; index++)
@@ -76,6 +84,10 @@ namespace NcTalkOutlookAddIn
                     selection,
                     LogCategories.Talk,
                     "Failed to release the Explorer Selection COM object.");
+                ComInteropScope.TryRelease(
+                    folder,
+                    LogCategories.Talk,
+                    "Failed to release Explorer.CurrentFolder after calendar selection processing.");
             }
         }
     }

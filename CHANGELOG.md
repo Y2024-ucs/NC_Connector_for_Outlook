@@ -4,6 +4,41 @@ All notable changes to **NC Connector for Outlook** will be documented in this f
 
 This project follows the principles of **Keep a Changelog** and **Semantic Versioning**.
 
+## [3.4.11] - 2026-09-29
+
+### Added
+
+- Settings button "Kontakte-Sync zurücksetzen und neu aufbauen": removes the imported contacts, group folders and group distribution lists (to "Deleted Items") and downloads everything again. Own contacts and the "Kunden" folder are not touched.
+- Customer sync uploads Outlook contact pictures (as JPEG, at most 512 px) and replaces the cloud photo; without an Outlook picture the cloud photo is kept.
+
+### Changed
+
+- The company directory option is removed; the read-only sync imports personal address books only.
+- Settings let you choose which personal Nextcloud address book is synchronized (or all of them). The default is the IBP book (`fritzbox-kontakte` / "IBP-Kontakte"); accounts without it sync all personal books.
+
+## [3.4.10] - 2026-09-29
+
+### Added
+
+- Two-way customer sync: the Outlook contacts subfolder "Kunden" (reused if present, never deleted) is synchronized with the Nextcloud address book "IBP-Kunden", which is created when missing. New, changed and deleted contacts are applied in both directions, Outlook wins conflicting edits, unmapped cloud properties are preserved on upload, and mass deletions are held back.
+
+### Fixed
+
+- Contact group folders are no longer duplicated or deleted when Outlook fails to read a folder marker. Group folders are remembered by EntryID, names ignore Outlook's "(Nur dieser Computer)" suffix, and existing duplicates that only hold add-in copies are removed.
+- CardDAV import keeps escaped semicolons inside company names and addresses, maps `TEL;TYPE=OTHER` to the other phone number, and prefers the work address over home addresses.
+
+## [3.4.9] - 2026-09-24
+
+### Added
+
+- CardDAV contact synchronization for personal contacts and the company directory, including incremental ETag updates, managed deletion reconciliation, groups, and Outlook group folders.
+- Outlook ribbon action for manually synchronizing contacts and CardDAV first-run/settings controls.
+
+### Changed
+
+- Integrated upstream 3.4.1 changes while retaining the IBP branding and the IBP-specific CardDAV behavior.
+- The built-in upstream update checker remains intentionally removed from the IBP-managed deployment.
+
 ## [3.4.1] - 2026-09-18
 
 ### Changed

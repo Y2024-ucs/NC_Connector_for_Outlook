@@ -120,15 +120,6 @@ namespace NcTalkOutlookAddIn.UI
         private readonly CheckBox _emailSignatureOnReplyCheckBox = new CheckBox();
         private readonly CheckBox _emailSignatureOnForwardCheckBox = new CheckBox();
         private readonly GroupBox _tlsSettingsGroup = new GroupBox();
-        private readonly GroupBox _updateSettingsGroup = new GroupBox();
-        private readonly CheckBox _updateNotifyCheckBox = new CheckBox();
-        private readonly Label _updateInstalledVersionLabel = new Label();
-        private readonly Label _updateLatestVersionLabel = new Label();
-        private readonly Label _updateLastCheckedLabel = new Label();
-        private readonly Button _updateCheckButton = new Button();
-        private readonly LinkLabel _updateDownloadLink = new LinkLabel();
-        private readonly Label _updateChangelogLabel = new Label();
-        private readonly TextBox _updateChangelogTextBox = new TextBox();
         private readonly CheckBox _tlsUseSystemDefaultCheckBox = new CheckBox();
         private readonly CheckBox _tlsEnable12CheckBox = new CheckBox();
         private readonly CheckBox _tlsEnable13CheckBox = new CheckBox();
@@ -153,7 +144,6 @@ namespace NcTalkOutlookAddIn.UI
         private readonly IfbAddressBookCache _addressBookCache;
         private readonly IfbAddressBookCache.SystemAddressbookStatus _initialAddressbookStatus;
         private BackendPolicyStatus _backendPolicyStatus;
-        private string _updateOpenUrl = string.Empty;
 
         internal AddinSettings Result
         {
@@ -407,7 +397,6 @@ namespace NcTalkOutlookAddIn.UI
                 _tlsUseSystemDefaultCheckBox.Checked = Result.TransportTlsUseSystemDefault;
                 _tlsEnable12CheckBox.Checked = Result.TransportTlsEnable12;
                 _tlsEnable13CheckBox.Checked = Result.TransportTlsEnable13;
-                _updateNotifyCheckBox.Checked = Result.UpdateNotifyEnabled;
                 _fileLinkBaseTextBox.Text = Result.FileLinkBasePath ?? string.Empty;
                 _sharingDefaultShareNameTextBox.Text = Result.SharingDefaultShareName ?? string.Empty;
                 _sharingDefaultPermCreateCheckBox.Checked = Result.SharingDefaultPermCreate;
@@ -462,7 +451,6 @@ namespace NcTalkOutlookAddIn.UI
                 RefreshLanguageOverrideCombos(Result.ShareBlockLang, Result.EventDescriptionLang);
                 UpdateDebugPathLabel();
                 UpdateAboutTab();
-                UpdateUpdateCheckSection();
                 RefreshSharingAttachmentLockState();
                 UpdateSharingAttachmentOptionsState();
                 UpdateTlsOptionsState();
@@ -574,7 +562,6 @@ namespace NcTalkOutlookAddIn.UI
             Result.TransportTlsUseSystemDefault = _tlsUseSystemDefaultCheckBox.Checked;
             Result.TransportTlsEnable12 = _tlsEnable12CheckBox.Checked;
             Result.TransportTlsEnable13 = _tlsEnable13CheckBox.Checked;
-            Result.UpdateNotifyEnabled = _updateNotifyCheckBox.Checked;
             Result.FileLinkBasePath = _fileLinkBaseTextBox.Text.Trim();
             Result.SharingDefaultShareName = _sharingDefaultShareNameTextBox.Text.Trim();
             Result.SharingDefaultPermCreate = _sharingDefaultPermCreateCheckBox.Checked;
@@ -1047,9 +1034,6 @@ namespace NcTalkOutlookAddIn.UI
             _debugAnonymizeCheckBox.Enabled = !_isBusy;
             _debugOpenLink.Enabled = !_isBusy;
             _tlsUseSystemDefaultCheckBox.Enabled = !_isBusy;
-            _updateNotifyCheckBox.Enabled = !_isBusy;
-            _updateCheckButton.Enabled = !_isBusy;
-            _updateDownloadLink.Enabled = !_isBusy && !string.IsNullOrWhiteSpace(_updateOpenUrl);
 
             bool lockShareBase = IsPolicyLocked("share", "share_base_directory");
             bool lockShareName = IsPolicyLocked("share", "share_name_template");

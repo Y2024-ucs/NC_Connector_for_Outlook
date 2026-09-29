@@ -50,13 +50,14 @@ $summary = $productXml.SelectSingleNode("//w:SummaryInformation", $namespaceMana
 if ($descriptions.Count -ne 2) {
     $failures.Add("Both Outlook registry views must provide an add-in description.")
 }
-foreach ($description in $descriptions) {
-    if ($description.Value -ne "Nextcloud integration for Outlook") {
-        $failures.Add("Outlook registry descriptions must use the same neutral English wording.")
+if ($null -eq $summary -or [string]::IsNullOrWhiteSpace($summary.Description)) {
+    $failures.Add("The MSI summary must provide a non-empty description.")
+} else {
+    foreach ($description in $descriptions) {
+        if ($description.Value -ne $summary.Description) {
+            $failures.Add("Outlook registry descriptions must match the MSI summary description.")
+        }
     }
-}
-if ($null -eq $summary -or $summary.Description -ne "Nextcloud integration for Outlook") {
-    $failures.Add("The MSI summary must use the same neutral English description.")
 }
 
 foreach ($fileName in $requiredFiles) {
