@@ -24,7 +24,7 @@ namespace NcTalkOutlookAddIn.UI
             SetStyle(ControlStyles.OptimizedDoubleBuffer, true);
             SetStyle(ControlStyles.ResizeRedraw, true);
 
-            BackColor = BrandingAssets.BrandBlue;
+            BackColor = BrandingAssets.HeaderBackColor;
         }
 
         internal static void AttachToParent(BrandedHeader header, Control.ControlCollection controls, int height)

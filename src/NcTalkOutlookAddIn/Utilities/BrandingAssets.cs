@@ -30,6 +30,26 @@ namespace NcTalkOutlookAddIn.Utilities
             get { return HeaderBanner.Value; }
         }
 
+        /// <summary>
+        /// Background behind the header banner: the banner's own corner color when it is opaque, so a
+        /// replacement banner on another background (e.g. white) does not sit as a box in a blue bar.
+        /// </summary>
+        internal static Color HeaderBackColor
+        {
+            get { return HeaderBack.Value; }
+        }
+
+        private static readonly Lazy<Color> HeaderBack = new Lazy<Color>(() =>
+        {
+            var bitmap = HeaderBanner.Value as Bitmap;
+            if (bitmap == null || bitmap.Width == 0 || bitmap.Height == 0)
+            {
+                return BrandBlue;
+            }
+            Color corner = bitmap.GetPixel(0, 0);
+            return corner.A == 255 ? corner : BrandBlue;
+        });
+
         internal static Image AppIconPng
         {
             get { return AppIconImage.Value; }

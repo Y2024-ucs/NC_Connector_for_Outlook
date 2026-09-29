@@ -2,6 +2,9 @@
 <Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
+    <IbpBrandingDir Condition=" '$(IbpBrandingDir)' == '' ">$(MSBuildProjectDirectory)\..\..\branding\ibp\</IbpBrandingDir>
+  </PropertyGroup>
+  <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{F5F857C5-4103-445B-B121-5E0CF10D8D57}</ProjectGuid>
@@ -260,8 +263,15 @@
     <Compile Include="UI\BrandedHeader.cs" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Resources\app.png" />
-    <EmbeddedResource Include="Resources\header-solid-blue-164x48.png" />
+    <!-- Private IBP branding from branding\ibp (git-ignored) replaces the public images when present. -->
+    <EmbeddedResource Include="Resources\app.png" Condition="!Exists('$(IbpBrandingDir)app.png')" />
+    <EmbeddedResource Include="$(IbpBrandingDir)app.png" Condition="Exists('$(IbpBrandingDir)app.png')">
+      <LogicalName>NcTalkOutlookAddIn.Resources.app.png</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\header-solid-blue-164x48.png" Condition="!Exists('$(IbpBrandingDir)header.png')" />
+    <EmbeddedResource Include="$(IbpBrandingDir)header.png" Condition="Exists('$(IbpBrandingDir)header.png')">
+      <LogicalName>NcTalkOutlookAddIn.Resources.header-solid-blue-164x48.png</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\header-transparent-164x48.png" />
     <EmbeddedResource Include="Resources\_locales\**\messages.json" />
   </ItemGroup>

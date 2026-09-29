@@ -25,3 +25,6 @@ dist/
 # Local NuGet package cache (machine-specific)
 packages/
 .ci/
+
+# Private IBP branding (logos, banners). Never published; builds use it when present.
+/branding/
