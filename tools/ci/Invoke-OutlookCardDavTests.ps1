@@ -64,7 +64,39 @@ internal static class CardDavTests
         try { CardDavRemoteSnapshot.Parse(Book, XDocument.Parse("<html/>")); }
         catch (InvalidOperationException) { invalidRoot = true; }
         Check(invalidRoot, "Non-DAV response blocks deletion");
+        VCardChecks();
         Console.WriteLine("CardDAV safety checks passed: " + checks);
+    }
+    private static void VCardChecks()
+    {
+        string folded = CardDavVCardSupport.Normalize("BEGIN:VCARD\r\nNOTE:Erster Teil\r\n  Termin am 01.02. um 10:30\r\nEND:VCARD");
+        Check(folded.Contains("\r\n  Termin am 01.02. um 10:30\r\n"), "Folded continuation line stays intact");
+        string grouped = CardDavVCardSupport.Normalize("item1.TEL:+49 1\r\nitem1.X-ABLabel:_$!<Mobile>!$_\r\nitem2.EMAIL;TYPE=WORK:mailto:a@b.example");
+        Check(grouped.Contains("item1.TEL:+49 1") && grouped.Contains("item1.X-ABLabel:"), "Group prefixes survive normalization");
+        Check(grouped.Contains("item2.EMAIL;TYPE=WORK:a@b.example"), "Grouped mailto prefix is removed");
+
+        string value;
+        string uri;
+        string jpeg = Convert.ToBase64String(new byte[] { 0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46 });
+        Check(jpeg.StartsWith("/9j/"), "JPEG base64 fixture starts with a slash");
+        byte[] photo = CardDavVCardSupport.TryExtractEmbeddedPhoto("PHOTO;ENCODING=b;TYPE=JPEG:" + jpeg, out value, out uri);
+        Check(CardDavVCardSupport.IsSupportedImage(photo) && uri.Length == 0, "Embedded JPEG is decoded, not fetched");
+        photo = CardDavVCardSupport.TryExtractEmbeddedPhoto("PHOTO;ENCODING=b:" + jpeg.Substring(0, 4) + "\r\n " + jpeg.Substring(4), out value, out uri);
+        Check(CardDavVCardSupport.IsSupportedImage(photo), "Folded embedded JPEG is decoded");
+        photo = CardDavVCardSupport.TryExtractEmbeddedPhoto("PHOTO:data:image/jpeg;base64," + jpeg, out value, out uri);
+        Check(CardDavVCardSupport.IsSupportedImage(photo) && uri.Length == 0, "Data URI JPEG is decoded");
+        photo = CardDavVCardSupport.TryExtractEmbeddedPhoto("PHOTO;VALUE=uri:https://cloud.example/p.jpg", out value, out uri);
+        Check(photo == null && uri == "https://cloud.example/p.jpg", "Absolute photo URI is kept as URI");
+        photo = CardDavVCardSupport.TryExtractEmbeddedPhoto("PHOTO;VALUE=uri:/remote.php/dav/p.jpg", out value, out uri);
+        Check(photo == null && uri == "/remote.php/dav/p.jpg", "Relative photo URI is kept as URI");
+
+        var configuration = new TalkServiceConfiguration { BaseUrl = "https://cloud.example/nextcloud" };
+        Check(CardDavVCardSupport.ResolvePhotoUrl("https://cloud.example/nextcloud/p.jpg", configuration) == "https://cloud.example/nextcloud/p.jpg", "Same-origin photo URL is accepted");
+        Check(CardDavVCardSupport.ResolvePhotoUrl("/remote.php/dav/p.jpg", configuration) == "https://cloud.example/nextcloud/remote.php/dav/p.jpg", "Relative photo URL resolves below base path");
+        Check(CardDavVCardSupport.ResolvePhotoUrl("https://attacker.example/p.jpg", configuration) == "", "Foreign photo host is rejected");
+        Check(CardDavVCardSupport.ResolvePhotoUrl("http://cloud.example/nextcloud/p.jpg", configuration) == "", "Plain HTTP photo URL is rejected");
+        Check(CardDavVCardSupport.ResolvePhotoUrl("https://cloud.example:8443/p.jpg", configuration) == "", "Other port is rejected");
+        Check(CardDavVCardSupport.ResolvePhotoUrl("https://user@cloud.example/p.jpg", configuration) == "", "User info in photo URL is rejected");
     }
 }
 '@ | Set-Content -Path $testSource -Encoding UTF8
@@ -90,7 +122,32 @@ internal static class CardDavTests
         $snapshotClass.Value
         "}"
     ) | Set-Content -Path $snapshotTestSource -Encoding UTF8
-    & $csc /nologo /target:exe "/out:$exe" /r:System.Core.dll /r:System.Xml.Linq.dll $testSource $snapshotTestSource
+    $vcardSourcePath = Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Services\CardDavVCardSupport.cs"
+    $vcardSource = Get-Content -LiteralPath $vcardSourcePath -Raw
+    $vcardMethods = foreach ($methodName in @("Normalize", "TryExtractEmbeddedPhoto", "TryDecodeBase64", "ResolvePhotoUrl", "LooksLikePhotoUri", "IsSupportedImage")) {
+        $method = [regex]::Match($vcardSource, "(?ms)^        (?:private|internal) static [^\r\n]*? $methodName\(.*?^        }")
+        if (-not $method.Success) {
+            throw "CardDavVCardSupport.$methodName could not be isolated for the vCard test."
+        }
+        $method.Value -replace '^        private static', '        internal static'
+    }
+    $vcardTestSource = Join-Path $TempRoot "CardDavVCardSupport.TestSource.cs"
+    @(
+        "using System;"
+        "using System.Text;"
+        "using NcTalkOutlookAddIn.Utilities;"
+        ""
+        "namespace NcTalkOutlookAddIn.Services"
+        "{"
+        "    internal sealed class TalkServiceConfiguration { internal string BaseUrl { get; set; } }"
+        "    internal static class CardDavVCardSupport"
+        "    {"
+        $vcardMethods
+        "    }"
+        "}"
+    ) | Set-Content -Path $vcardTestSource -Encoding UTF8
+    $uriValidatorSource = Join-Path $ProjectRoot "src\NcTalkOutlookAddIn\Utilities\NextcloudUriValidator.cs"
+    & $csc /nologo /target:exe "/out:$exe" /r:System.Core.dll /r:System.Xml.Linq.dll $testSource $snapshotTestSource $vcardTestSource $uriValidatorSource
     if ($LASTEXITCODE -ne 0) { throw "CardDAV test compilation failed." }
     & $exe
     if ($LASTEXITCODE -ne 0) { throw "CardDAV safety tests failed." }

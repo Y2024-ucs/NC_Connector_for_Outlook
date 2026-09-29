@@ -32,27 +32,28 @@ namespace NcTalkOutlookAddIn.Services
             foreach (string sourceLine in lines)
             {
                 string line = sourceLine ?? string.Empty;
-                int colon = line.IndexOf(':');
+                // Folded continuation lines carry value text only and must stay untouched.
+                bool isContinuation = line.StartsWith(" ", StringComparison.Ordinal)
+                    || line.StartsWith("\t", StringComparison.Ordinal);
+                int colon = isContinuation ? -1 : line.IndexOf(':');
                 if (colon > 0)
                 {
                     string left = line.Substring(0, colon);
                     string value = line.Substring(colon + 1);
                     int semicolon = left.IndexOf(';');
                     string propertyName = semicolon >= 0 ? left.Substring(0, semicolon) : left;
-                    string parameters = semicolon >= 0 ? left.Substring(semicolon) : string.Empty;
                     int dot = propertyName.LastIndexOf('.');
                     if (dot >= 0 && dot + 1 < propertyName.Length)
                     {
                         propertyName = propertyName.Substring(dot + 1);
                     }
 
+                    // Keep the group prefix (item1.TEL) so group labels such as X-ABLabel still resolve.
                     if (string.Equals(propertyName, "EMAIL", StringComparison.OrdinalIgnoreCase)
                         && value.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase))
                     {
-                        value = value.Substring(7);
+                        line = left + ":" + value.Substring(7);
                     }
-
-                    line = propertyName + parameters + ":" + value;
                 }
 
                 if (builder.Length > 0)
@@ -78,7 +79,8 @@ namespace NcTalkOutlookAddIn.Services
             string email = ExtractPropertyValue(rawVCard, "EMAIL");
             string fullName = ExtractPropertyValue(rawVCard, "FN");
             string photoValue;
-            byte[] photo = TryExtractEmbeddedPhoto(rawVCard, out photoValue);
+            string photoUri;
+            byte[] photo = TryExtractEmbeddedPhoto(rawVCard, out photoValue, out photoUri);
             string source = string.Empty;
 
             if (IsSupportedImage(photo))
@@ -91,10 +93,10 @@ namespace NcTalkOutlookAddIn.Services
             }
 
             if (photo == null
-                && !string.IsNullOrWhiteSpace(photoValue)
+                && !string.IsNullOrWhiteSpace(photoUri)
                 && configuration != null)
             {
-                photo = TryDownloadPhoto(photoValue, configuration);
+                photo = TryDownloadPhoto(photoUri, configuration);
                 if (IsSupportedImage(photo))
                 {
                     source = "photo-uri";
@@ -217,13 +219,18 @@ namespace NcTalkOutlookAddIn.Services
             }
         }
 
-        private static byte[] TryExtractEmbeddedPhoto(string rawVCard, out string photoValue)
+        private static byte[] TryExtractEmbeddedPhoto(
+            string rawVCard,
+            out string photoValue,
+            out string photoUri)
         {
             photoValue = string.Empty;
+            photoUri = string.Empty;
             string normalized = rawVCard.Replace("\r\n", "\n").Replace("\r", "\n");
             string[] lines = normalized.Split('\n');
             var logical = new StringBuilder();
             bool collecting = false;
+            bool declaredUri = false;
 
             foreach (string sourceLine in lines)
             {
@@ -249,6 +256,7 @@ namespace NcTalkOutlookAddIn.Services
                     }
 
                     collecting = true;
+                    declaredUri = left.IndexOf("VALUE=URI", StringComparison.OrdinalIgnoreCase) >= 0;
                     logical.Append(line.Substring(colon + 1).Trim());
                     continue;
                 }
@@ -263,19 +271,33 @@ namespace NcTalkOutlookAddIn.Services
 
             string value = logical.ToString().Trim();
             photoValue = value;
-            if (value.Length == 0 || LooksLikePhotoUri(value))
+            if (value.Length == 0)
             {
                 return null;
             }
             if (value.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
             {
                 int comma = value.IndexOf(',');
-                if (comma >= 0)
-                {
-                    value = value.Substring(comma + 1);
-                }
+                return comma >= 0 ? TryDecodeBase64(value.Substring(comma + 1)) : null;
+            }
+            if (value.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                || value.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                photoUri = value;
+                return null;
             }
 
+            // Base64 JPEG data starts with "/9j/", so a leading slash alone does not mark a URI.
+            byte[] decoded = declaredUri ? null : TryDecodeBase64(value);
+            if (!IsSupportedImage(decoded) && LooksLikePhotoUri(value))
+            {
+                photoUri = value;
+            }
+            return decoded;
+        }
+
+        private static byte[] TryDecodeBase64(string value)
+        {
             try
             {
                 return Convert.FromBase64String(value);
@@ -384,12 +406,22 @@ namespace NcTalkOutlookAddIn.Services
                 return null;
             }
 
+            // Photo requests carry the app password, so they may only target the configured origin.
+            string trustedUrl;
+            if (!NextcloudUriValidator.TryResolveSameOriginHttpsUrl(url, configuration.BaseUrl, out trustedUrl))
+            {
+                DiagnosticsLogger.Log(
+                    LogCategories.Core,
+                    "CardDAV contact photo URL rejected because it is not on the configured Nextcloud origin.");
+                return null;
+            }
+
             try
             {
                 NcHttpResponse response = new NcHttpClient(configuration).Send(new NcHttpRequestOptions
                 {
                     Method = "GET",
-                    Url = url,
+                    Url = trustedUrl,
                     Accept = "image/*, */*",
                     IncludeOcsApiHeader = false,
                     ParseJson = false,
@@ -425,29 +457,16 @@ namespace NcTalkOutlookAddIn.Services
                 return string.Empty;
             }
 
+            // Relative paths are resolved below the configured base path (e.g. /nextcloud).
             Uri absolute;
-            if (Uri.TryCreate(trimmed, UriKind.Absolute, out absolute))
-            {
-                if (string.Equals(absolute.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(absolute.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
-                {
-                    return absolute.AbsoluteUri;
-                }
-                return string.Empty;
-            }
+            string candidate = Uri.TryCreate(trimmed, UriKind.Absolute, out absolute)
+                ? trimmed
+                : trimmed.TrimStart('/');
 
-            string baseUrl = configuration != null
-                ? configuration.GetNormalizedBaseUrl()
-                : string.Empty;
-            Uri baseUri;
-            if (!Uri.TryCreate(baseUrl.TrimEnd('/') + "/", UriKind.Absolute, out baseUri))
-            {
-                return string.Empty;
-            }
-
-            Uri resolved;
-            return Uri.TryCreate(baseUri, trimmed.TrimStart('/'), out resolved)
-                ? resolved.AbsoluteUri
+            string resolved;
+            return configuration != null
+                && NextcloudUriValidator.TryResolveSameOriginHttpsUrl(candidate, configuration.BaseUrl, out resolved)
+                ? resolved
                 : string.Empty;
         }
 
