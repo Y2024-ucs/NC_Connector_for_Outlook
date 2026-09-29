@@ -3,7 +3,9 @@
 // See LICENSE.txt for details.
 
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Xml;
 using NcTalkOutlookAddIn.Models;
 using NcTalkOutlookAddIn.Utilities;
@@ -14,6 +16,11 @@ namespace NcTalkOutlookAddIn.Services
     {
         private const string FileName = "carddav-sync.xml";
         private const string SystemAddressBookMarker = "z-server-generated--system";
+        // Selection value for "all personal address books".
+        internal const string AllPersonalAddressBooks = "*";
+        // IBP default: the book synced from the Fritz!Box, shown as "IBP-Kontakte".
+        internal const string DefaultAddressBookSlug = "fritzbox-kontakte";
+        internal const string DefaultAddressBookDisplayName = "IBP-Kontakte";
 
         internal CardDavSyncPreferences()
         {
@@ -29,7 +36,8 @@ namespace NcTalkOutlookAddIn.Services
         internal bool Configured { get; set; }
         internal bool Enabled { get; set; }
         internal bool SyncPersonalContacts { get; set; }
-        // Empty: all personal address books. Otherwise only the book with this href.
+        // Empty: the IBP default book (all books when it does not exist); "*": all personal books;
+        // otherwise only the book with this href.
         internal string PersonalAddressBookHref { get; set; }
         // Display name of the selected book, shown while the server list is not loaded.
         internal string PersonalAddressBookName { get; set; }
@@ -38,21 +46,47 @@ namespace NcTalkOutlookAddIn.Services
         internal bool SyncCustomers { get; set; }
 
         /// <summary>
-        /// Whether the read-only sync imports this address book. The company directory (system address
-        /// book) and the two-way customer book are never part of it.
+        /// Whether the read-only sync imports this address book, given all books of the account. The company
+        /// directory (system address book) and the two-way customer book are never part of it.
         /// </summary>
-        internal bool IncludesAddressBook(CardDavAddressBook addressBook)
+        internal bool IncludesAddressBook(CardDavAddressBook addressBook, IEnumerable<CardDavAddressBook> allAddressBooks)
         {
-            if (!SyncPersonalContacts || addressBook == null || string.IsNullOrWhiteSpace(addressBook.Href))
+            if (!IsPersonalAddressBook(addressBook) || !SyncPersonalContacts)
             {
                 return false;
             }
-            if (IsSystemAddressBook(addressBook) || CardDavCustomerSync.IsCustomerAddressBook(addressBook))
+            string selection = (PersonalAddressBookHref ?? string.Empty).Trim();
+            if (string.Equals(selection, AllPersonalAddressBooks, StringComparison.Ordinal))
             {
-                return false;
+                return true;
             }
-            return string.IsNullOrWhiteSpace(PersonalAddressBookHref)
-                || SameCollection(addressBook.Href, PersonalAddressBookHref);
+            if (selection.Length > 0)
+            {
+                return SameCollection(addressBook.Href, selection);
+            }
+            bool defaultExists = (allAddressBooks ?? Enumerable.Empty<CardDavAddressBook>())
+                .Any(book => IsPersonalAddressBook(book) && IsDefaultAddressBook(book));
+            return !defaultExists || IsDefaultAddressBook(addressBook);
+        }
+
+        internal static bool IsPersonalAddressBook(CardDavAddressBook addressBook)
+        {
+            return addressBook != null
+                && !string.IsNullOrWhiteSpace(addressBook.Href)
+                && !IsSystemAddressBook(addressBook)
+                && !CardDavCustomerSync.IsCustomerAddressBook(addressBook);
+        }
+
+        internal static bool IsDefaultAddressBook(CardDavAddressBook addressBook)
+        {
+            if (addressBook == null) return false;
+            Uri uri;
+            if (Uri.TryCreate(addressBook.Href ?? string.Empty, UriKind.Absolute, out uri)
+                && string.Equals(uri.AbsolutePath.TrimEnd('/').Split('/').Last(), DefaultAddressBookSlug, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            return string.Equals((addressBook.DisplayName ?? string.Empty).Trim(), DefaultAddressBookDisplayName, StringComparison.OrdinalIgnoreCase);
         }
 
         internal static bool IsSystemAddressBook(CardDavAddressBook addressBook)

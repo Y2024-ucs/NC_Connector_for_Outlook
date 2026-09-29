@@ -229,13 +229,21 @@ internal static class CardDavTests
         var other = new NcTalkOutlookAddIn.Models.CardDavAddressBook { Href = "https://cloud.example/remote.php/dav/addressbooks/users/stefan/contacts/", DisplayName = "Kontakte" };
         var company = new NcTalkOutlookAddIn.Models.CardDavAddressBook { Href = "https://cloud.example/remote.php/dav/addressbooks/system/system/z-server-generated--system/", DisplayName = "Firma" };
         var customers = new NcTalkOutlookAddIn.Models.CardDavAddressBook { Href = "https://cloud.example/remote.php/dav/addressbooks/users/stefan/ibp-kunden/", DisplayName = "IBP-Kunden" };
-        Check(all.IncludesAddressBook(book) && all.IncludesAddressBook(other), "Without a selection all personal books are synced");
-        Check(!all.IncludesAddressBook(company), "The company directory is never synced");
-        Check(!all.IncludesAddressBook(customers), "The two-way customer book is not part of the read-only sync");
-        var selected = new CardDavSyncPreferences { PersonalAddressBookHref = "https://cloud.example/remote.php/dav/addressbooks/users/stefan/ibp-kontakte" };
-        Check(selected.IncludesAddressBook(book) && !selected.IncludesAddressBook(other), "Only the selected personal book is synced");
+        var fritz = new NcTalkOutlookAddIn.Models.CardDavAddressBook { Href = "https://cloud.example/remote.php/dav/addressbooks/users/stefan/fritzbox-kontakte/", DisplayName = "Telefonbuch" };
+        var withDefault = new[] { other, fritz, company, customers };
+        var withoutDefault = new[] { other, book, company, customers };
+        Check(all.IncludesAddressBook(fritz, withDefault) && !all.IncludesAddressBook(other, withDefault), "By default only the fritzbox-kontakte book is synced");
+        Check(all.IncludesAddressBook(book, new[] { other, book }) && !all.IncludesAddressBook(other, new[] { other, book }), "The default also matches the display name IBP-Kontakte");
+        var noDefault = new[] { other, company, customers };
+        Check(all.IncludesAddressBook(other, noDefault), "Without the default book all personal books are synced");
+        Check(!all.IncludesAddressBook(company, withDefault) && !all.IncludesAddressBook(company, noDefault), "The company directory is never synced");
+        Check(!all.IncludesAddressBook(customers, noDefault), "The two-way customer book is not part of the read-only sync");
+        var everything = new CardDavSyncPreferences { PersonalAddressBookHref = CardDavSyncPreferences.AllPersonalAddressBooks };
+        Check(everything.IncludesAddressBook(other, withDefault) && everything.IncludesAddressBook(fritz, withDefault), "Choosing all syncs every personal book");
+        var selected = new CardDavSyncPreferences { PersonalAddressBookHref = "https://cloud.example/remote.php/dav/addressbooks/users/stefan/contacts" };
+        Check(selected.IncludesAddressBook(other, withoutDefault) && !selected.IncludesAddressBook(book, withoutDefault), "Only the selected personal book is synced");
         var off = new CardDavSyncPreferences { SyncPersonalContacts = false };
-        Check(!off.IncludesAddressBook(book), "Disabled personal sync includes no book");
+        Check(!off.IncludesAddressBook(book, withoutDefault), "Disabled personal sync includes no book");
     }
 
     private static void FolderNameChecks()
@@ -387,6 +395,7 @@ internal static class CardDavTests
     $prefsTestSource = Join-Path $TempRoot "CardDavPreferences.TestSource.cs"
     @(
         "using System;"
+        "using System.Collections.Generic;"
         "using System.IO;"
         "using System.Linq;"
         "using System.Xml;"

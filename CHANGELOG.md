@@ -15,7 +15,7 @@ This project follows the principles of **Keep a Changelog** and **Semantic Versi
 ### Changed
 
 - The company directory option is removed; the read-only sync imports personal address books only.
-- Settings let you choose which personal Nextcloud address book is synchronized (or all of them).
+- Settings let you choose which personal Nextcloud address book is synchronized (or all of them). The default is the IBP book (`fritzbox-kontakte` / "IBP-Kontakte"); accounts without it sync all personal books.
 
 ### Fixed
 

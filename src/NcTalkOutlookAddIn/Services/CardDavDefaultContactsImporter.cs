@@ -374,7 +374,7 @@ namespace NcTalkOutlookAddIn.Services
             var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
             foreach (CardDavAddressBook addressBook in addressBooks)
             {
-                if (!preferences.IncludesAddressBook(addressBook))
+                if (!preferences.IncludesAddressBook(addressBook, addressBooks))
                 {
                     continue;
                 }
@@ -1034,7 +1034,7 @@ namespace NcTalkOutlookAddIn.Services
 
                 foreach (CardDavAddressBook addressBook in addressBooks)
                 {
-                    if (!preferences.IncludesAddressBook(addressBook))
+                    if (!preferences.IncludesAddressBook(addressBook, addressBooks))
                     {
                         continue;
                     }

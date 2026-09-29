@@ -423,7 +423,7 @@ namespace NcTalkOutlookAddIn
                     var result = new List<CardDavContactRecord>();
                     foreach (CardDavAddressBook addressBook in addressBooks)
                     {
-                        if (!preferences.IncludesAddressBook(addressBook)) continue;
+                        if (!preferences.IncludesAddressBook(addressBook, addressBooks)) continue;
                         result.AddRange(sync.DownloadContacts(addressBook, knownEtags));
                     }
                     return result;

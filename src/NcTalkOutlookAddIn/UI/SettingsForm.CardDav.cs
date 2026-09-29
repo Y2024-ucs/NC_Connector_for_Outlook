@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -183,13 +184,13 @@ namespace NcTalkOutlookAddIn.UI
 
             var choices = new List<AddressBookChoice>
             {
-                new AddressBookChoice { Href = string.Empty, Name = "Alle persönlichen Adressbücher" }
+                new AddressBookChoice { Href = CardDavSyncPreferences.AllPersonalAddressBooks, Name = "Alle persönlichen Adressbücher" }
             };
             if (serverBooks != null)
             {
                 foreach (CardDavAddressBook book in serverBooks)
                 {
-                    if (CardDavSyncPreferences.IsSystemAddressBook(book) || CardDavCustomerSync.IsCustomerAddressBook(book))
+                    if (!CardDavSyncPreferences.IsPersonalAddressBook(book))
                     {
                         continue;
                     }
@@ -197,6 +198,30 @@ namespace NcTalkOutlookAddIn.UI
                     {
                         Href = book.Href,
                         Name = string.IsNullOrWhiteSpace(book.DisplayName) ? book.Href : book.DisplayName
+                    });
+                }
+            }
+            if (string.IsNullOrWhiteSpace(selectedHref))
+            {
+                // Nothing chosen yet: the IBP default book, or "all" when the account has none.
+                CardDavAddressBook defaultBook = serverBooks == null
+                    ? null
+                    : serverBooks.FirstOrDefault(b => CardDavSyncPreferences.IsPersonalAddressBook(b)
+                        && CardDavSyncPreferences.IsDefaultAddressBook(b));
+                if (defaultBook != null)
+                {
+                    selectedHref = defaultBook.Href;
+                }
+                else if (serverBooks != null)
+                {
+                    selectedHref = CardDavSyncPreferences.AllPersonalAddressBooks;
+                }
+                else
+                {
+                    choices.Add(new AddressBookChoice
+                    {
+                        Href = string.Empty,
+                        Name = CardDavSyncPreferences.DefaultAddressBookDisplayName + " (Standard)"
                     });
                 }
             }
@@ -284,6 +309,7 @@ namespace NcTalkOutlookAddIn.UI
                 SyncPersonalContacts = _cardDavPersonalCheckBox.Checked,
                 PersonalAddressBookHref = choice != null ? choice.Href : string.Empty,
                 PersonalAddressBookName = choice != null && !string.IsNullOrWhiteSpace(choice.Href)
+                    && choice.Href != CardDavSyncPreferences.AllPersonalAddressBooks
                     ? choice.Name.Replace(" (nicht mehr vorhanden)", string.Empty)
                     : string.Empty,
                 UseDefaultContactsFolder = _cardDavDefaultContactsRadio.Checked,
@@ -464,7 +490,7 @@ namespace NcTalkOutlookAddIn.UI
                 var result = new List<CardDavContactRecord>();
                 foreach (CardDavAddressBook addressBook in addressBooks)
                 {
-                    if (!preferences.IncludesAddressBook(addressBook))
+                    if (!preferences.IncludesAddressBook(addressBook, addressBooks))
                     {
                         continue;
                     }
