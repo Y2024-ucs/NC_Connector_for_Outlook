@@ -19,11 +19,23 @@ namespace NcTalkOutlookAddIn.Services
     {
         // Nothing to do: profile present and current, or an own profile of the user covers the calendar.
         Unchanged,
+        // A new profile is needed; the caller backs up the Outlook calendar, then calls CreateProfile.
+        CreateRequired,
         // A new profile was written; CalDav Synchronizer reads it on the next Outlook start.
         Created,
         // The stored password of our profile was renewed; also effective after a restart.
         PasswordUpdated,
         Skipped
+    }
+
+    /// <summary>
+    /// Result of <see cref="CalDavSynchronizerProvisioning.Prepare"/>; carries what CreateProfile needs.
+    /// </summary>
+    internal sealed class CalDavSynchronizerProvisioningPlan
+    {
+        internal CalDavSynchronizerProvisioningOutcome Outcome { get; set; }
+        internal string CalendarUrl { get; set; }
+        internal string OptionsPath { get; set; }
     }
 
     /// <summary>
@@ -58,23 +70,29 @@ namespace NcTalkOutlookAddIn.Services
         private static readonly XNamespace Xsi = "http://www.w3.org/2001/XMLSchema-instance";
         private static readonly XNamespace Xsd = "http://www.w3.org/2001/XMLSchema";
 
-        internal static CalDavSynchronizerProvisioningOutcome Run(
+        /// <summary>
+        /// Decides what to do. Renews the credentials of our own profile directly; for a missing profile it
+        /// only reports CreateRequired, so the Outlook calendar can be backed up before anything is written.
+        /// </summary>
+        internal static CalDavSynchronizerProvisioningPlan Prepare(
             TalkServiceConfiguration configuration,
             CalDavSynchronizerOutlookContext outlook)
         {
+            var plan = new CalDavSynchronizerProvisioningPlan { Outcome = CalDavSynchronizerProvisioningOutcome.Skipped };
             if (configuration == null || !configuration.IsComplete() || outlook == null
                 || string.IsNullOrWhiteSpace(outlook.OutlookProfileName)
                 || string.IsNullOrWhiteSpace(outlook.CalendarEntryId))
             {
-                return CalDavSynchronizerProvisioningOutcome.Skipped;
+                return plan;
             }
 
             string calendarUrl = new DavDiscoveryService(configuration).DiscoverCalendarUrl(PersonalCalendarCollection);
             if (string.IsNullOrWhiteSpace(calendarUrl))
             {
                 DiagnosticsLogger.Log(LogCategories.Core, "CalDav Synchronizer provisioning skipped: personal calendar not found.");
-                return CalDavSynchronizerProvisioningOutcome.Skipped;
+                return plan;
             }
+            plan.CalendarUrl = calendarUrl;
 
             DisableUpdateNotifications();
             string optionsPath = GetOrCreateOptionsPath(outlook.OutlookProfileName);
@@ -86,7 +104,8 @@ namespace NcTalkOutlookAddIn.Services
                 ownId.Length > 0 && string.Equals((string)o.Element("Id"), ownId, StringComparison.OrdinalIgnoreCase));
             if (own != null)
             {
-                return RenewPasswordIfChanged(options, own, optionsPath, configuration, calendarUrl);
+                plan.Outcome = RenewPasswordIfChanged(options, own, optionsPath, configuration, calendarUrl);
+                return plan;
             }
 
             // The user's own profiles win: same calendar or same Outlook folder means it is set up already.
@@ -98,16 +117,44 @@ namespace NcTalkOutlookAddIn.Services
                 DiagnosticsLogger.Log(
                     LogCategories.Core,
                     "CalDav Synchronizer provisioning left an existing profile untouched (name=" + (string)existing.Element("Name") + ").");
+                plan.Outcome = CalDavSynchronizerProvisioningOutcome.Unchanged;
+                return plan;
+            }
+
+            plan.OptionsPath = optionsPath;
+            plan.Outcome = CalDavSynchronizerProvisioningOutcome.CreateRequired;
+            return plan;
+        }
+
+        /// <summary>
+        /// Writes the new profile after the caller backed up the Outlook calendar. The options file is read
+        /// again, so a profile the user added meanwhile still prevents a second one.
+        /// </summary>
+        internal static CalDavSynchronizerProvisioningOutcome CreateProfile(
+            CalDavSynchronizerProvisioningPlan plan,
+            TalkServiceConfiguration configuration,
+            CalDavSynchronizerOutlookContext outlook)
+        {
+            if (plan == null || plan.Outcome != CalDavSynchronizerProvisioningOutcome.CreateRequired)
+            {
+                return CalDavSynchronizerProvisioningOutcome.Skipped;
+            }
+
+            XDocument options = LoadOptions(plan.OptionsPath);
+            if (options.Root.Elements("Options").Any(o =>
+                SameUrl((string)o.Element("CalenderUrl"), plan.CalendarUrl)
+                || string.Equals((string)o.Element("OutlookFolderEntryId"), outlook.CalendarEntryId, StringComparison.OrdinalIgnoreCase)))
+            {
                 return CalDavSynchronizerProvisioningOutcome.Unchanged;
             }
 
             string id = Guid.NewGuid().ToString("D");
-            root.Add(BuildProfile(id, calendarUrl, configuration, outlook));
-            SaveOptions(options, optionsPath);
+            options.Root.Add(BuildProfile(id, plan.CalendarUrl, configuration, outlook));
+            SaveOptions(options, plan.OptionsPath);
             SaveOwnProfileId(outlook.OutlookProfileName, id);
             DiagnosticsLogger.Log(
                 LogCategories.Core,
-                "CalDav Synchronizer profile created (calendar=" + calendarUrl + ", outlookProfile=" + outlook.OutlookProfileName + ").");
+                "CalDav Synchronizer profile created (calendar=" + plan.CalendarUrl + ", outlookProfile=" + outlook.OutlookProfileName + ").");
             return CalDavSynchronizerProvisioningOutcome.Created;
         }
 

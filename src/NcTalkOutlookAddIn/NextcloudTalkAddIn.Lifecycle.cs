@@ -360,8 +360,25 @@ namespace NcTalkOutlookAddIn
                 return;
             }
 
-            CalDavSynchronizerProvisioningOutcome outcome = await Task.Run(
-                () => CalDavSynchronizerProvisioning.Run(configuration, context)).ConfigureAwait(false);
+            CalDavSynchronizerProvisioningPlan plan = await Task.Run(
+                () => CalDavSynchronizerProvisioning.Prepare(configuration, context)).ConfigureAwait(false);
+            CalDavSynchronizerProvisioningOutcome outcome = plan.Outcome;
+            string backupFolderName = null;
+            if (outcome == CalDavSynchronizerProvisioningOutcome.CreateRequired)
+            {
+                // The first sync merges both calendars; keep a copy of the Outlook side before it can run.
+                bool backedUp = await RunOnOutlookUiThreadAsync(
+                    () => TryBackUpDefaultCalendar(out backupFolderName)).ConfigureAwait(false);
+                if (!backedUp)
+                {
+                    DiagnosticsLogger.Log(
+                        LogCategories.Core,
+                        "CalDav Synchronizer profile not created because the calendar backup failed; retrying at next start.");
+                    return;
+                }
+                outcome = await Task.Run(
+                    () => CalDavSynchronizerProvisioning.CreateProfile(plan, configuration, context)).ConfigureAwait(false);
+            }
             if (outcome != CalDavSynchronizerProvisioningOutcome.Created
                 && outcome != CalDavSynchronizerProvisioningOutcome.PasswordUpdated)
             {
@@ -371,6 +388,12 @@ namespace NcTalkOutlookAddIn
             string text = outcome == CalDavSynchronizerProvisioningOutcome.Created
                 ? "Ihr Nextcloud-Kalender wurde für Outlook eingerichtet."
                 : "Die Zugangsdaten Ihres Nextcloud-Kalenders wurden aktualisiert.";
+            if (!string.IsNullOrWhiteSpace(backupFolderName))
+            {
+                text += Environment.NewLine + Environment.NewLine
+                    + "Eine Sicherungskopie Ihres bisherigen Outlook-Kalenders liegt im Ordner \""
+                    + backupFolderName + "\". Sie können sie löschen, sobald alle Termine wie gewünscht angezeigt werden.";
+            }
             await RunOnOutlookUiThreadAsync(() =>
             {
                 MessageBox.Show(
@@ -381,6 +404,74 @@ namespace NcTalkOutlookAddIn
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
             }).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Copies the default calendar next to it as "Kalender - Sicherung vor Nextcloud-Sync (date)".
+        /// An empty calendar needs no copy. Returns false when the copy failed.
+        /// </summary>
+        private bool TryBackUpDefaultCalendar(out string backupFolderName)
+        {
+            backupFolderName = null;
+            Outlook.NameSpace session = null;
+            Outlook.MAPIFolder calendar = null;
+            Outlook.MAPIFolder parent = null;
+            Outlook.MAPIFolder copy = null;
+            Outlook.Items items = null;
+            try
+            {
+                session = _outlookApplication.Session;
+                calendar = session.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderCalendar);
+                items = calendar.Items;
+                if (items == null || items.Count == 0)
+                {
+                    return true;
+                }
+
+                parent = calendar.Parent as Outlook.MAPIFolder;
+                if (parent == null)
+                {
+                    return false;
+                }
+
+                // A copy outside the default calendar raises no reminders and is not part of the sync.
+                copy = calendar.CopyTo(parent);
+                string baseName = "Kalender - Sicherung vor Nextcloud-Sync ("
+                    + DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + ")";
+                string name = baseName;
+                for (int attempt = 2; attempt < 100; attempt++)
+                {
+                    try
+                    {
+                        copy.Name = name;
+                        break;
+                    }
+                    catch (COMException)
+                    {
+                        // A folder with that name exists already.
+                        name = baseName + " " + attempt;
+                    }
+                }
+                backupFolderName = copy.Name;
+                DiagnosticsLogger.Log(
+                    LogCategories.Core,
+                    "Outlook calendar backed up before CalDav Synchronizer setup (folder=" + backupFolderName
+                    + ", items=" + items.Count + ").");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsLogger.LogException(LogCategories.Core, "Outlook calendar backup failed.", ex);
+                return false;
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(items, LogCategories.Core, "Failed to release calendar items after backup.");
+                ComInteropScope.TryRelease(copy, LogCategories.Core, "Failed to release calendar backup folder.");
+                ComInteropScope.TryRelease(parent, LogCategories.Core, "Failed to release calendar parent folder.");
+                ComInteropScope.TryRelease(calendar, LogCategories.Core, "Failed to release default calendar after backup.");
+                ComInteropScope.TryRelease(session, LogCategories.Core, "Failed to release Outlook session after calendar backup.");
+            }
         }
 
         private CalDavSynchronizerOutlookContext ReadCalDavSynchronizerContext()
