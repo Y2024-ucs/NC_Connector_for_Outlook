@@ -174,7 +174,10 @@ namespace NcTalkOutlookAddIn.UI
             SetStatus("Nextcloud-Kontakte werden auf Änderungen geprüft ...", false);
             try
             {
-                Dictionary<string, string> knownEtags = CardDavReadOnlySync.LoadKnownEtagsFromOutlook(_outlookApplication);
+                bool useDefaultContactsFolder = _cardDavDefaultContactsRadio.Checked;
+                Dictionary<string, string> knownEtags = CardDavReadOnlySync.LoadKnownEtagsFromOutlook(
+                    _outlookApplication,
+                    useDefaultContactsFolder);
                 var sync = new CardDavReadOnlySync(configuration);
                 List<CardDavContactRecord> contacts = await Task.Run(() =>
                 {
@@ -198,7 +201,7 @@ namespace NcTalkOutlookAddIn.UI
                 });
 
                 int count = sync.ImportIntoOutlook(_outlookApplication, contacts,
-                    _cardDavDefaultContactsRadio.Checked);
+                    useDefaultContactsFolder);
                 SetStatus("Nextcloud-Kontakte synchronisiert: " + count + " geändert/neu, " + sync.DeletedCount + " gelöscht.", false);
             }
             catch (Exception ex)

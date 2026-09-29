@@ -408,7 +408,9 @@ namespace NcTalkOutlookAddIn
                 ShowCardDavSyncStatus("NC Connector: Kontakte werden geprüft ...");
 
                 Dictionary<string, string> knownEtags =
-                    CardDavReadOnlySync.LoadKnownEtagsFromOutlook(_outlookApplication);
+                    CardDavReadOnlySync.LoadKnownEtagsFromOutlook(
+                        _outlookApplication,
+                        preferences.UseDefaultContactsFolder);
                 var sync = new CardDavReadOnlySync(configuration);
                 IList<CardDavAddressBook> syncedAddressBooks = null;
 
@@ -547,6 +549,7 @@ namespace NcTalkOutlookAddIn
 
             int index = 0;
             int imported = 0;
+            var importCache = new CardDavImportCache();
             while (index < contacts.Count)
             {
                 int sliceImported = 0;
@@ -566,7 +569,8 @@ namespace NcTalkOutlookAddIn
                             new[] { contact },
                             useDefaultContactsFolder,
                             false,
-                            false);
+                            false,
+                            importCache);
                         index++;
                     }
                     while (index < contacts.Count

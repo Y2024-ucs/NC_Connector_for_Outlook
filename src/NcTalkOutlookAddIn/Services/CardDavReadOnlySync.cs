@@ -45,6 +45,48 @@ namespace NcTalkOutlookAddIn.Services
         internal string Notes { get; set; }
     }
 
+    /// <summary>
+    /// Keeps per-run lookups across time-sliced import calls, so each target folder is scanned once
+    /// per sync run instead of once per contact. Holds strings only; no COM objects outlive a slice.
+    /// Use it on the Outlook UI thread for a single sync run.
+    /// </summary>
+    internal sealed class CardDavImportCache
+    {
+        private readonly Dictionary<string, Dictionary<string, string>> _entryIdsByFolder =
+            new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, string> _folderEntryIdsByName =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        internal string InstanceName { get; set; }
+
+        internal Dictionary<string, string> GetOrLoadEntryIds(
+            Outlook.MAPIFolder folder,
+            Func<Outlook.MAPIFolder, Dictionary<string, string>> load)
+        {
+            string folderId = folder.EntryID ?? string.Empty;
+            Dictionary<string, string> entryIds;
+            if (!_entryIdsByFolder.TryGetValue(folderId, out entryIds))
+            {
+                entryIds = load(folder);
+                _entryIdsByFolder[folderId] = entryIds;
+            }
+            return entryIds;
+        }
+
+        internal bool TryGetFolderEntryId(string folderName, out string entryId)
+        {
+            return _folderEntryIdsByName.TryGetValue(folderName ?? string.Empty, out entryId);
+        }
+
+        internal void RememberFolder(string folderName, string entryId)
+        {
+            if (!string.IsNullOrWhiteSpace(folderName) && !string.IsNullOrWhiteSpace(entryId))
+            {
+                _folderEntryIdsByName[folderName] = entryId;
+            }
+        }
+    }
+
     internal sealed class CardDavReadOnlySync
     {
         private sealed class RemoteContactVersion
@@ -58,6 +100,7 @@ namespace NcTalkOutlookAddIn.Services
         private const string HrefPropertyName = "NC-CardDAV-HREF";
         private const string ETagPropertyName = "NC-CardDAV-ETAG";
         private const string ImportSchemaPropertyName = "NC-CardDAV-SCHEMA";
+        private const string GroupCopyPropertyName = "NC-CardDAV-GROUP-COPY";
         private const string CurrentImportSchema = "4";
         private const string CompanyFolderSuffix = " - Firmenverzeichnis";
         private const string PersonalFolderSuffix = " - Persönliche Kontakte";
@@ -68,6 +111,8 @@ namespace NcTalkOutlookAddIn.Services
         private static readonly object KnownEtagsSyncRoot = new object();
         private static readonly Dictionary<string, string> KnownEtags =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        // Destination mode the ETag cache was built for; null until the first Outlook scan.
+        private static bool? _knownEtagsUseDefaultContactsFolder;
 
         private readonly TalkServiceConfiguration _configuration;
         private readonly List<CardDavRemoteSnapshot> _completedSnapshots = new List<CardDavRemoteSnapshot>();
@@ -83,11 +128,19 @@ namespace NcTalkOutlookAddIn.Services
             _configuration = configuration;
         }
 
-        internal IList<CardDavContactRecord> DownloadContacts(CardDavAddressBook addressBook)
+        internal IList<CardDavContactRecord> DownloadContacts(
+            CardDavAddressBook addressBook,
+            bool useDefaultContactsFolder)
         {
             Dictionary<string, string> snapshot;
             lock (KnownEtagsSyncRoot)
             {
+                // ETags known for another destination do not prove the new destination is filled.
+                if (_knownEtagsUseDefaultContactsFolder != useDefaultContactsFolder)
+                {
+                    KnownEtags.Clear();
+                    _knownEtagsUseDefaultContactsFolder = useDefaultContactsFolder;
+                }
                 snapshot = new Dictionary<string, string>(KnownEtags, StringComparer.OrdinalIgnoreCase);
             }
             return DownloadContacts(addressBook, snapshot);
@@ -241,8 +294,13 @@ namespace NcTalkOutlookAddIn.Services
                 .Replace("'", "&apos;");
         }
 
+        /// <summary>
+        /// Builds the href/ETag cache from the folders the given destination mode imports into.
+        /// Contacts in the other destination (or in group folders) must not mark a contact as present.
+        /// </summary>
         internal static Dictionary<string, string> LoadKnownEtagsFromOutlook(
-            Outlook.Application outlookApplication)
+            Outlook.Application outlookApplication,
+            bool useDefaultContactsFolder)
         {
             var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             if (outlookApplication == null)
@@ -257,17 +315,23 @@ namespace NcTalkOutlookAddIn.Services
             {
                 session = outlookApplication.Session;
                 defaultContacts = session.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderContacts);
-                CollectKnownEtagsFromFolder(defaultContacts, result);
+                if (useDefaultContactsFolder)
+                {
+                    CollectKnownEtagsFromFolder(defaultContacts, result);
+                }
+                else
+                {
+                    folders = defaultContacts.Folders;
+                }
 
-                folders = defaultContacts.Folders;
-                int count = folders.Count;
+                int count = folders != null ? folders.Count : 0;
                 for (int index = 1; index <= count; index++)
                 {
                     Outlook.MAPIFolder folder = null;
                     try
                     {
                         folder = folders[index];
-                        if (folder != null)
+                        if (folder != null && IsSeparateDestinationFolderName(folder.Name))
                         {
                             CollectKnownEtagsFromFolder(folder, result);
                         }
@@ -292,12 +356,21 @@ namespace NcTalkOutlookAddIn.Services
                 {
                     KnownEtags[pair.Key] = pair.Value;
                 }
+                _knownEtagsUseDefaultContactsFolder = useDefaultContactsFolder;
             }
 
             DiagnosticsLogger.Log(
                 LogCategories.Core,
-                "CardDAV local ETag cache initialized (contacts=" + result.Count + ").");
+                "CardDAV local ETag cache initialized (contacts=" + result.Count
+                + ", defaultFolder=" + useDefaultContactsFolder + ").");
             return result;
+        }
+
+        private static bool IsSeparateDestinationFolderName(string folderName)
+        {
+            string name = folderName ?? string.Empty;
+            return name.EndsWith(CompanyFolderSuffix, StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith(PersonalFolderSuffix, StringComparison.OrdinalIgnoreCase);
         }
 
         private static void CollectKnownEtagsFromFolder(
@@ -330,7 +403,10 @@ namespace NcTalkOutlookAddIn.Services
                         string href = ReadUserProperty(contact, HrefPropertyName);
                         string etag = ReadUserProperty(contact, ETagPropertyName);
                         string importSchema = ReadUserProperty(contact, ImportSchemaPropertyName);
-                        if (!string.IsNullOrWhiteSpace(href)
+                        bool isGroupCopy = !string.IsNullOrWhiteSpace(
+                            ReadUserProperty(contact, GroupCopyPropertyName));
+                        if (!isGroupCopy
+                            && !string.IsNullOrWhiteSpace(href)
                             && !string.IsNullOrWhiteSpace(etag)
                             && string.Equals(
                                 importSchema,
@@ -381,7 +457,8 @@ namespace NcTalkOutlookAddIn.Services
             IEnumerable<CardDavContactRecord> contacts,
             bool? useDefaultContactsFolder = null,
             bool reconcileDeletedContacts = true,
-            bool ensureBackgroundSync = true)
+            bool ensureBackgroundSync = true,
+            CardDavImportCache cache = null)
         {
             if (outlookApplication == null)
             {
@@ -393,10 +470,12 @@ namespace NcTalkOutlookAddIn.Services
                 CardDavBackgroundSyncManager.EnsureStarted(_configuration, outlookApplication);
             }
 
-            CardDavSyncPreferences preferences = CardDavSyncPreferences.Load();
-            if (useDefaultContactsFolder ?? preferences.UseDefaultContactsFolder)
+            bool useDefaultFolder = useDefaultContactsFolder.HasValue
+                ? useDefaultContactsFolder.Value
+                : CardDavSyncPreferences.Load().UseDefaultContactsFolder;
+            if (useDefaultFolder)
             {
-                int imported = CardDavDefaultContactsImporter.Import(outlookApplication, contacts);
+                int imported = CardDavDefaultContactsImporter.Import(outlookApplication, contacts, cache);
                 if (reconcileDeletedContacts)
                 {
                     ReconcileDeletedContacts(outlookApplication);
@@ -422,23 +501,33 @@ namespace NcTalkOutlookAddIn.Services
             {
                 session = outlookApplication.Session;
                 defaultContacts = session.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderContacts);
-                string instanceName = ResolveInstanceName();
+                string instanceName = cache != null && !string.IsNullOrWhiteSpace(cache.InstanceName)
+                    ? cache.InstanceName
+                    : ResolveInstanceName();
+                if (cache != null)
+                {
+                    cache.InstanceName = instanceName;
+                }
                 int imported = 0;
 
                 if (companyContacts.Count > 0)
                 {
                     companyFolder = EnsureSubFolder(
+                        session,
                         defaultContacts,
-                        instanceName + CompanyFolderSuffix);
-                    imported += ImportIntoFolder(session, companyFolder, companyContacts);
+                        instanceName + CompanyFolderSuffix,
+                        cache);
+                    imported += ImportIntoFolder(session, companyFolder, companyContacts, cache);
                 }
 
                 if (personalContacts.Count > 0)
                 {
                     personalFolder = EnsureSubFolder(
+                        session,
                         defaultContacts,
-                        instanceName + PersonalFolderSuffix);
-                    imported += ImportIntoFolder(session, personalFolder, personalContacts);
+                        instanceName + PersonalFolderSuffix,
+                        cache);
+                    imported += ImportIntoFolder(session, personalFolder, personalContacts, cache);
                 }
 
                 DiagnosticsLogger.Log(
@@ -542,10 +631,13 @@ namespace NcTalkOutlookAddIn.Services
         private static int ImportIntoFolder(
             Outlook.NameSpace session,
             Outlook.MAPIFolder targetFolder,
-            IEnumerable<CardDavContactRecord> contacts)
+            IEnumerable<CardDavContactRecord> contacts,
+            CardDavImportCache cache)
         {
             string storeId = targetFolder.StoreID;
-            Dictionary<string, string> existing = LoadExistingContactEntryIds(targetFolder);
+            Dictionary<string, string> existing = cache != null
+                ? cache.GetOrLoadEntryIds(targetFolder, LoadExistingContactEntryIds)
+                : LoadExistingContactEntryIds(targetFolder);
             int imported = 0;
 
             foreach (CardDavContactRecord source in contacts)
@@ -560,7 +652,7 @@ namespace NcTalkOutlookAddIn.Services
                         && existing.TryGetValue(key, out entryId)
                         && !string.IsNullOrWhiteSpace(entryId))
                     {
-                        target = session.GetItemFromID(entryId, storeId) as Outlook.ContactItem;
+                        target = TryGetContactById(session, entryId, storeId);
                     }
 
                     if (target == null)
@@ -590,6 +682,7 @@ namespace NcTalkOutlookAddIn.Services
 
                     ApplyContact(target, source);
                     target.Save();
+                    RememberExistingEntryId(existing, key, target);
                     RememberKnownEtag(source.Href, source.ETag);
                     imported++;
                 }
@@ -600,6 +693,55 @@ namespace NcTalkOutlookAddIn.Services
                 }
             }
             return imported;
+        }
+
+        /// <summary>
+        /// Resolves a cached EntryID; returns null when the user deleted or moved the item meanwhile.
+        /// </summary>
+        internal static Outlook.ContactItem TryGetContactById(
+            Outlook.NameSpace session,
+            string entryId,
+            string storeId)
+        {
+            object raw = null;
+            try
+            {
+                raw = session.GetItemFromID(entryId, storeId);
+                var contact = raw as Outlook.ContactItem;
+                if (contact != null)
+                {
+                    raw = null;
+                }
+                return contact;
+            }
+            catch (System.Runtime.InteropServices.COMException)
+            {
+                return null;
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(raw, LogCategories.Core, "Failed to release non-contact CardDAV item.");
+            }
+        }
+
+        /// <summary>
+        /// Keeps the lookup current after a save, so later contacts with the same key update this item.
+        /// </summary>
+        internal static void RememberExistingEntryId(
+            IDictionary<string, string> existing,
+            string key,
+            Outlook.ContactItem target)
+        {
+            if (existing == null || string.IsNullOrWhiteSpace(key) || target == null)
+            {
+                return;
+            }
+
+            string entryId = target.EntryID;
+            if (!string.IsNullOrWhiteSpace(entryId))
+            {
+                existing[key] = entryId;
+            }
         }
 
         private static Dictionary<string, string> LoadExistingContactEntryIds(Outlook.MAPIFolder folder)
@@ -786,6 +928,37 @@ namespace NcTalkOutlookAddIn.Services
                 ComInteropScope.TryRelease(property, LogCategories.Core, "Failed to release CardDAV contact user property.");
                 ComInteropScope.TryRelease(properties, LogCategories.Core, "Failed to release CardDAV contact user properties.");
             }
+        }
+
+        private static Outlook.MAPIFolder EnsureSubFolder(
+            Outlook.NameSpace session,
+            Outlook.MAPIFolder parent,
+            string name,
+            CardDavImportCache cache)
+        {
+            string cachedEntryId;
+            if (cache != null && cache.TryGetFolderEntryId(name, out cachedEntryId))
+            {
+                try
+                {
+                    Outlook.MAPIFolder cached = session.GetFolderFromID(cachedEntryId, parent.StoreID);
+                    if (cached != null)
+                    {
+                        return cached;
+                    }
+                }
+                catch (System.Runtime.InteropServices.COMException)
+                {
+                    // The folder was removed during the run; fall back to the name lookup.
+                }
+            }
+
+            Outlook.MAPIFolder result = EnsureSubFolder(parent, name);
+            if (cache != null && result != null)
+            {
+                cache.RememberFolder(name, result.EntryID);
+            }
+            return result;
         }
 
         private static Outlook.MAPIFolder EnsureSubFolder(Outlook.MAPIFolder parent, string name)

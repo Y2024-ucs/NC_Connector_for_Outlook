@@ -24,7 +24,8 @@ namespace NcTalkOutlookAddIn.Services
 
         internal static int Import(
             Outlook.Application outlookApplication,
-            IEnumerable<CardDavContactRecord> contacts)
+            IEnumerable<CardDavContactRecord> contacts,
+            CardDavImportCache cache = null)
         {
             if (outlookApplication == null)
             {
@@ -38,7 +39,7 @@ namespace NcTalkOutlookAddIn.Services
                 session = outlookApplication.Session;
                 defaultContacts = session.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderContacts);
                 EnsureFolderAvailableInAddressBook(defaultContacts);
-                return ImportIntoFolder(session, defaultContacts, contacts);
+                return ImportIntoFolder(session, defaultContacts, contacts, cache);
             }
             finally
             {
@@ -50,10 +51,13 @@ namespace NcTalkOutlookAddIn.Services
         private static int ImportIntoFolder(
             Outlook.NameSpace session,
             Outlook.MAPIFolder targetFolder,
-            IEnumerable<CardDavContactRecord> contacts)
+            IEnumerable<CardDavContactRecord> contacts,
+            CardDavImportCache cache)
         {
             string storeId = targetFolder.StoreID;
-            Dictionary<string, string> existing = LoadExistingContactEntryIds(targetFolder);
+            Dictionary<string, string> existing = cache != null
+                ? cache.GetOrLoadEntryIds(targetFolder, LoadExistingContactEntryIds)
+                : LoadExistingContactEntryIds(targetFolder);
             int imported = 0;
 
             foreach (CardDavContactRecord source in contacts)
@@ -73,7 +77,7 @@ namespace NcTalkOutlookAddIn.Services
                         && existing.TryGetValue(key, out entryId)
                         && !string.IsNullOrWhiteSpace(entryId))
                     {
-                        target = session.GetItemFromID(entryId, storeId) as Outlook.ContactItem;
+                        target = CardDavReadOnlySync.TryGetContactById(session, entryId, storeId);
                     }
 
                     if (target == null)
@@ -88,6 +92,7 @@ namespace NcTalkOutlookAddIn.Services
 
                     ApplyContact(target, source);
                     target.Save();
+                    CardDavReadOnlySync.RememberExistingEntryId(existing, key, target);
                     CardDavReadOnlySync.RememberKnownEtag(source.Href, source.ETag);
                     imported++;
                 }
@@ -1030,7 +1035,7 @@ namespace NcTalkOutlookAddIn.Services
                     {
                         continue;
                     }
-                    contacts.AddRange(sync.DownloadContacts(addressBook));
+                    contacts.AddRange(sync.DownloadContacts(addressBook, preferences.UseDefaultContactsFolder));
                 }
 
                 uiContext.Post(
@@ -1038,7 +1043,10 @@ namespace NcTalkOutlookAddIn.Services
                     {
                         try
                         {
-                            int count = sync.ImportIntoOutlook(outlookApplication, contacts);
+                            int count = sync.ImportIntoOutlook(
+                                outlookApplication,
+                                contacts,
+                                preferences.UseDefaultContactsFolder);
                             int groups = CardDavContactGroupSync.Reconcile(
                                 configuration,
                                 outlookApplication,
