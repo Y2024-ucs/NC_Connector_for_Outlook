@@ -34,6 +34,21 @@ function Find-SignTool {
         Select-Object -First 1 -ExpandProperty FullName
 }
 
+function Find-WixCli {
+    # The WiX SDK used by the installer projects ships wix.exe; take it from the NuGet package cache.
+    $packages = $env:NUGET_PACKAGES
+    if ([string]::IsNullOrWhiteSpace($packages)) {
+        $packages = Join-Path $env:USERPROFILE ".nuget\packages"
+    }
+    $wixCli = Get-ChildItem (Join-Path $packages "wixtoolset.sdk\6.0.2\tools") -Recurse -Filter wix.exe -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -match '\\x64\\' } |
+        Select-Object -First 1 -ExpandProperty FullName
+    if ([string]::IsNullOrWhiteSpace($wixCli)) {
+        throw "wix.exe (WixToolset.Sdk 6.0.2, x64) not found in $packages. Build the installer projects once to restore it."
+    }
+    return $wixCli
+}
+
 function Sign-IBPFile {
     param(
         [Parameter(Mandatory = $true)]
@@ -204,9 +219,27 @@ if ($LASTEXITCODE -ne 0) {
 }
 $builtBundlePath = Join-Path $ProjectFolder "installer\bundle\bin\$Configuration\IBP-NC-Connector-Setup.exe"
 $finalBundlePath = Join-Path $OutputDir "IBP-NC-Connector-Setup-$assemblyVersionShort.exe"
-Copy-Item -Force $builtBundlePath $finalBundlePath
 if ($signingEnabled) {
-    Sign-IBPFile $finalBundlePath
+    # A Burn bundle must not be signed in place: the signature moves the attached container and the
+    # setup then asks for its own file. Sign the detached engine, reattach it, then sign the bundle.
+    $wixExe = Find-WixCli
+    $engineWork = Join-Path ([IO.Path]::GetTempPath()) ("nc4ol-burn-" + [Guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Force -Path $engineWork | Out-Null
+    try {
+        $enginePath = Join-Path $engineWork "engine.exe"
+        & $wixExe burn detach $builtBundlePath -engine $enginePath | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "wix burn detach exited with code $LASTEXITCODE." }
+        Sign-IBPFile $enginePath
+        & $wixExe burn reattach $builtBundlePath -engine $enginePath -o $finalBundlePath | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "wix burn reattach exited with code $LASTEXITCODE." }
+        Sign-IBPFile $finalBundlePath
+    }
+    finally {
+        Remove-Item -Recurse -Force $engineWork -ErrorAction SilentlyContinue
+    }
+}
+else {
+    Copy-Item -Force $builtBundlePath $finalBundlePath
 }
 Write-Host "Setup erstellt: $finalBundlePath"
 
