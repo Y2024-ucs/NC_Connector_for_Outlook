@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  One setup for the test group: installs Outlook CalDav Synchronizer for all users, then the
+  IBP NC Connector. NC Connector configures the calendar profile on the first Outlook start.
+  For GPO deployment the same two MSI files are assigned separately (see build.ps1, GPO folder).
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+  <Bundle
+    Name="IBP Nextcloud Integration für Outlook"
+    Manufacturer="IBP GmbH"
+    Version="$(var.ProductVersion)"
+    UpgradeCode="{3E6C2B51-7A4D-4C8E-9F61-2D0B5A7E8C14}">
+
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication
+        Theme="hyperlinkLicense"
+        LicenseUrl="https://www.gnu.org/licenses/agpl-3.0.html"
+        SuppressOptionsUI="yes"
+        SuppressRepair="yes"
+        ShowVersion="yes" />
+    </BootstrapperApplication>
+
+    <Chain>
+      <!-- Third-party, unchanged upstream package (AGPL-3.0), forced per machine like ALLUSERS=1. -->
+      <MsiPackage
+        Id="CalDavSynchronizer"
+        SourceFile="$(var.CalDavSynchronizerMsi)"
+        ForcePerMachine="yes"
+        Vital="yes"
+        Visible="yes" />
+
+      <MsiPackage
+        Id="NcConnector"
+        SourceFile="$(var.NcConnectorMsi)"
+        Vital="yes" />
+    </Chain>
+  </Bundle>
+</Wix>

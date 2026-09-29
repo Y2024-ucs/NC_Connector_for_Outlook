@@ -9,7 +9,8 @@ Param(
     [string]$SigningPfx = $env:IBP_SIGNING_PFX,
     [string]$SigningPassword = $env:IBP_SIGNING_PASSWORD,
     [string]$TimestampUrl = "http://timestamp.digicert.com",
-    [switch]$SkipSigning
+    [switch]$SkipSigning,
+    [switch]$SkipBundle
 )
 
 $ErrorActionPreference = "Stop"
@@ -175,3 +176,48 @@ Write-Host "MSI erstellt: $finalPath"
 if ($signingEnabled) {
     Write-Host "Signierung abgeschlossen: Add-in DLL und MSI sind mit Zeitstempel signiert."
 }
+
+if ($SkipBundle) {
+    return
+}
+
+# Outlook CalDav Synchronizer (AGPL-3.0) is shipped unchanged; NC Connector configures its calendar profile.
+$calDavMsi = Join-Path $ProjectFolder "installer\vendor\caldavsynchronizer\CalDavSynchronizer.Setup.msi"
+$calDavSha256 = "9624D688C832286683D40BF7B946C9C18228BE2AC0D89C8772A20E91520F0FDA"
+if (-not (Test-Path $calDavMsi)) {
+    throw "CalDav Synchronizer MSI not found at $calDavMsi."
+}
+$actualSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $calDavMsi).Hash
+if ($actualSha256 -ne $calDavSha256) {
+    throw "CalDav Synchronizer MSI checksum mismatch ($actualSha256). Update installer\vendor\caldavsynchronizer\README.md and build.ps1 together."
+}
+
+# 1) One setup for the test group: CalDav Synchronizer for all users, then NC Connector.
+$bundleProject = Join-Path $ProjectFolder "installer\bundle\IbpNcConnectorSetup.wixproj"
+Write-Host "Building combined setup (WiX bundle)..."
+& dotnet build $bundleProject -c $Configuration --no-incremental `
+    "/p:NcConnectorMsi=$finalPath" `
+    "/p:CalDavSynchronizerMsi=$calDavMsi" `
+    "/p:ProductVersion=$assemblyVersionShort" | Out-Host
+if ($LASTEXITCODE -ne 0) {
+    throw "dotnet build (WiX bundle) exited with code $LASTEXITCODE."
+}
+$builtBundlePath = Join-Path $ProjectFolder "installer\bundle\bin\$Configuration\IBP-NC-Connector-Setup.exe"
+$finalBundlePath = Join-Path $OutputDir "IBP-NC-Connector-Setup-$assemblyVersionShort.exe"
+Copy-Item -Force $builtBundlePath $finalBundlePath
+if ($signingEnabled) {
+    Sign-IBPFile $finalBundlePath
+}
+Write-Host "Setup erstellt: $finalBundlePath"
+
+# 2) GPO folder: the same MSI files for computer assignment, plus the ALLUSERS transform.
+$gpoDir = Join-Path $OutputDir "GPO-$assemblyVersionShort"
+New-Item -ItemType Directory -Force -Path $gpoDir | Out-Null
+Copy-Item -Force $finalPath (Join-Path $gpoDir $finalName)
+Copy-Item -Force $calDavMsi (Join-Path $gpoDir "CalDavSynchronizer.Setup.msi")
+& (Join-Path $ProjectFolder "tools\installer\New-AllUsersTransform.ps1") `
+    -MsiPath $calDavMsi `
+    -TransformPath (Join-Path $gpoDir "CalDavSynchronizer-AllUsers.mst")
+Copy-Item -Force (Join-Path $ProjectFolder "installer\vendor\caldavsynchronizer\README.md") (Join-Path $gpoDir "CalDavSynchronizer-LIESMICH.md")
+Write-Host "GPO-Paket erstellt: $gpoDir"
+

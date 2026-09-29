@@ -272,6 +272,7 @@ namespace NcTalkOutlookAddIn
                                         LogCategories.Core,
                                         "CardDAV delayed startup sync starting after Outlook startup.");
                                     StartCardDavContactSync();
+                                    StartCalDavSynchronizerProvisioning(configuration);
                                 }
                                 catch (Exception ex)
                                 {
@@ -336,6 +337,156 @@ namespace NcTalkOutlookAddIn
             {
                 DiagnosticsLogger.LogException(LogCategories.Core, "Failed to dispose CardDAV sync status window.", ex);
             }
+        }
+
+        private void StartCalDavSynchronizerProvisioning(TalkServiceConfiguration configuration)
+        {
+            RunCalDavSynchronizerProvisioningAsync(configuration).ContinueWith(
+                task => DiagnosticsLogger.LogException(LogCategories.Core,
+                    "CalDav Synchronizer provisioning failed.", task.Exception),
+                CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+        }
+
+        /// <summary>
+        /// Sets up CalDav Synchronizer for the personal Nextcloud calendar when that add-in is installed.
+        /// It reads profiles only at Outlook start, so a new profile needs one restart, which the user is asked for.
+        /// </summary>
+        private async Task RunCalDavSynchronizerProvisioningAsync(TalkServiceConfiguration configuration)
+        {
+            CalDavSynchronizerOutlookContext context = await RunOnOutlookUiThreadAsync(
+                () => ReadCalDavSynchronizerContext()).ConfigureAwait(false);
+            if (context == null)
+            {
+                return;
+            }
+
+            CalDavSynchronizerProvisioningOutcome outcome = await Task.Run(
+                () => CalDavSynchronizerProvisioning.Run(configuration, context)).ConfigureAwait(false);
+            if (outcome != CalDavSynchronizerProvisioningOutcome.Created
+                && outcome != CalDavSynchronizerProvisioningOutcome.PasswordUpdated)
+            {
+                return;
+            }
+
+            string text = outcome == CalDavSynchronizerProvisioningOutcome.Created
+                ? "Ihr Nextcloud-Kalender wurde für Outlook eingerichtet."
+                : "Die Zugangsdaten Ihres Nextcloud-Kalenders wurden aktualisiert.";
+            await RunOnOutlookUiThreadAsync(() =>
+            {
+                MessageBox.Show(
+                    text + Environment.NewLine + Environment.NewLine
+                    + "Damit die Einrichtung abgeschlossen werden kann, starten Sie bitte Outlook neu. "
+                    + "Erst dann wird das von NC Connector erzeugte Kalender-Profil eingelesen.",
+                    "NC Connector – Kalender",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }).ConfigureAwait(false);
+        }
+
+        private CalDavSynchronizerOutlookContext ReadCalDavSynchronizerContext()
+        {
+            if (_outlookApplication == null || !IsComAddInInstalled(CalDavSynchronizerProvisioning.AddInProgId))
+            {
+                return null;
+            }
+
+            Outlook.NameSpace session = null;
+            Outlook.MAPIFolder calendar = null;
+            Outlook.Store store = null;
+            try
+            {
+                session = _outlookApplication.Session;
+                calendar = session.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderCalendar);
+                store = calendar.Store;
+                return new CalDavSynchronizerOutlookContext
+                {
+                    OutlookProfileName = session.CurrentProfileName,
+                    CalendarEntryId = calendar.EntryID,
+                    CalendarStoreId = calendar.StoreID,
+                    AccountName = store != null ? store.DisplayName : string.Empty,
+                    EmailAddress = FindAccountSmtpAddress(session, calendar.StoreID)
+                };
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(store, LogCategories.Core, "Failed to release calendar store after CalDav Synchronizer scan.");
+                ComInteropScope.TryRelease(calendar, LogCategories.Core, "Failed to release default calendar after CalDav Synchronizer scan.");
+                ComInteropScope.TryRelease(session, LogCategories.Core, "Failed to release Outlook session after CalDav Synchronizer scan.");
+            }
+        }
+
+        private bool IsComAddInInstalled(string progId)
+        {
+            COMAddIns addIns = null;
+            try
+            {
+                addIns = _outlookApplication.COMAddIns;
+                int count = addIns != null ? addIns.Count : 0;
+                for (int index = 1; index <= count; index++)
+                {
+                    object key = index;
+                    COMAddIn addIn = null;
+                    try
+                    {
+                        addIn = addIns.Item(ref key);
+                        if (addIn != null && string.Equals(addIn.ProgId, progId, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return true;
+                        }
+                    }
+                    finally
+                    {
+                        ComInteropScope.TryRelease(addIn, LogCategories.Core, "Failed to release COM add-in entry.");
+                    }
+                }
+                return false;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsLogger.LogException(LogCategories.Core, "Failed to enumerate Outlook COM add-ins.", ex);
+                return false;
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(addIns, LogCategories.Core, "Failed to release COM add-ins collection.");
+            }
+        }
+
+        private static string FindAccountSmtpAddress(Outlook.NameSpace session, string storeId)
+        {
+            Outlook.Accounts accounts = null;
+            string fallback = string.Empty;
+            try
+            {
+                accounts = session.Accounts;
+                int count = accounts != null ? accounts.Count : 0;
+                for (int index = 1; index <= count; index++)
+                {
+                    Outlook.Account account = null;
+                    Outlook.Store delivery = null;
+                    try
+                    {
+                        account = accounts[index];
+                        string address = account.SmtpAddress ?? string.Empty;
+                        if (fallback.Length == 0) fallback = address;
+                        delivery = account.DeliveryStore;
+                        if (delivery != null && string.Equals(delivery.StoreID, storeId, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return address;
+                        }
+                    }
+                    finally
+                    {
+                        ComInteropScope.TryRelease(delivery, LogCategories.Core, "Failed to release account delivery store.");
+                        ComInteropScope.TryRelease(account, LogCategories.Core, "Failed to release Outlook account.");
+                    }
+                }
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(accounts, LogCategories.Core, "Failed to release Outlook accounts.");
+            }
+            return fallback;
         }
 
         private void StartCardDavContactSync(bool userInitiated = false)

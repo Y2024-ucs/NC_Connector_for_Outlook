@@ -17,6 +17,7 @@ namespace NcTalkOutlookAddIn.Services
     {
         private static readonly XNamespace Dav = "DAV:";
         private static readonly XNamespace CardDav = "urn:ietf:params:xml:ns:carddav";
+        private static readonly XNamespace CalDav = "urn:ietf:params:xml:ns:caldav";
 
         private readonly TalkServiceConfiguration _configuration;
 
@@ -101,6 +102,48 @@ namespace NcTalkOutlookAddIn.Services
             return created;
         }
 
+        /// <summary>
+        /// URL of the user's calendar with the given collection name (Nextcloud's default is "personal"),
+        /// found via calendar-home-set. Returns null when that calendar does not exist.
+        /// </summary>
+        internal string DiscoverCalendarUrl(string collectionName)
+        {
+            if (!_configuration.IsComplete())
+            {
+                throw new InvalidOperationException("Nextcloud configuration is incomplete.");
+            }
+
+            Uri principal = DiscoverPrincipal();
+            XDocument homeResponse = SendPropFind(principal, 0, "<d:prop><cal:calendar-home-set /></d:prop>");
+            string homeHref = FirstHref(homeResponse, CalDav + "calendar-home-set");
+            if (string.IsNullOrWhiteSpace(homeHref))
+            {
+                throw new InvalidOperationException("CalDAV calendar-home-set could not be discovered.");
+            }
+
+            Uri home = ResolveDavUri(principal, homeHref);
+            Uri calendar = new Uri(new Uri(home.AbsoluteUri.TrimEnd('/') + "/"), collectionName.Trim('/') + "/");
+            XDocument calendarResponse;
+            try
+            {
+                calendarResponse = SendPropFind(calendar, 0, "<d:prop><d:resourcetype /></d:prop>");
+            }
+            catch (InvalidOperationException ex)
+            {
+                var web = ex.InnerException as WebException;
+                var http = web != null ? web.Response as HttpWebResponse : null;
+                if (http != null && http.StatusCode == HttpStatusCode.NotFound)
+                {
+                    return null;
+                }
+                throw;
+            }
+            bool isCalendar = calendarResponse
+                .Descendants(Dav + "resourcetype")
+                .Any(type => type.Elements(CalDav + "calendar").Any());
+            return isCalendar ? calendar.AbsoluteUri : null;
+        }
+
         private Uri DiscoverPrincipal()
         {
             // This is a Nextcloud-specific add-in, so use the canonical DAV root
@@ -183,7 +226,7 @@ namespace NcTalkOutlookAddIn.Services
         private XDocument SendPropFind(Uri uri, int depth, string propertyXml)
         {
             string body = "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
-                          + "<d:propfind xmlns:d=\"DAV:\" xmlns:card=\"urn:ietf:params:xml:ns:carddav\">"
+                          + "<d:propfind xmlns:d=\"DAV:\" xmlns:card=\"urn:ietf:params:xml:ns:carddav\" xmlns:cal=\"urn:ietf:params:xml:ns:caldav\">"
                           + propertyXml
                           + "</d:propfind>";
 

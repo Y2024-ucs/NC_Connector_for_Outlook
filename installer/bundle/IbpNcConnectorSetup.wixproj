@@ -1,0 +1,17 @@
+<Project Sdk="WixToolset.Sdk/6.0.2">
+  <PropertyGroup>
+    <OutputType>Bundle</OutputType>
+    <OutputName>IBP-NC-Connector-Setup</OutputName>
+    <InstallerPlatform>x64</InstallerPlatform>
+
+    <ProductVersion Condition=" '$(ProductVersion)' == '' ">3.4.11</ProductVersion>
+    <NcConnectorMsi Condition=" '$(NcConnectorMsi)' == '' ">$(MSBuildProjectDirectory)\..\bin\$(Configuration)\NCConnectorForOutlook.msi</NcConnectorMsi>
+    <CalDavSynchronizerMsi Condition=" '$(CalDavSynchronizerMsi)' == '' ">$(MSBuildProjectDirectory)\..\vendor\caldavsynchronizer\CalDavSynchronizer.Setup.msi</CalDavSynchronizerMsi>
+
+    <DefineConstants>ProductVersion=$(ProductVersion);NcConnectorMsi=$(NcConnectorMsi);CalDavSynchronizerMsi=$(CalDavSynchronizerMsi)</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.BootstrapperApplications.wixext" Version="6.0.2" />
+  </ItemGroup>
+</Project>

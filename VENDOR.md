@@ -64,3 +64,15 @@
 - License: MIT
 - Usage in this add-in:
   - Runtime dependencies required by `HtmlSanitizer`/`AngleSharp`
+
+## Outlook CalDav Synchronizer
+
+- Package: `CalDavSynchronizer.Setup.msi`
+- Version: `4.7.1`
+- Source: https://github.com/aluxnimm/outlookcaldavsynchronizer/releases/tag/v4.7.1
+- Upstream repository: https://github.com/aluxnimm/outlookcaldavsynchronizer
+- Included file: `installer/vendor/caldavsynchronizer/CalDavSynchronizer.Setup.msi` (unchanged, SHA-256 pinned in `build.ps1`)
+- License: AGPL-3.0
+- Usage:
+  - Separate Outlook add-in, installed next to NC Connector by the combined setup or the GPO package
+  - NC Connector writes its calendar profile: `src/NcTalkOutlookAddIn/Services/CalDavSynchronizerProvisioning.cs`
