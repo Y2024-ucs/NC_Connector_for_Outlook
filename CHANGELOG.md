@@ -4,18 +4,23 @@ All notable changes to **NC Connector for Outlook** will be documented in this f
 
 This project follows the principles of **Keep a Changelog** and **Semantic Versioning**.
 
-## [3.4.10] - 2026-09-29
+## [3.4.11] - 2026-09-29
 
 ### Added
 
 - Settings button "Kontakte-Sync zurücksetzen und neu aufbauen": removes the imported contacts, group folders and group distribution lists (to "Deleted Items") and downloads everything again. Own contacts and the "Kunden" folder are not touched.
 - Customer sync uploads Outlook contact pictures (as JPEG, at most 512 px) and replaces the cloud photo; without an Outlook picture the cloud photo is kept.
-- Two-way customer sync: the Outlook contacts subfolder "Kunden" (reused if present, never deleted) is synchronized with the Nextcloud address book "IBP-Kunden", which is created when missing. New, changed and deleted contacts are applied in both directions, Outlook wins conflicting edits, unmapped cloud properties are preserved on upload, and mass deletions are held back.
 
 ### Changed
 
 - The company directory option is removed; the read-only sync imports personal address books only.
 - Settings let you choose which personal Nextcloud address book is synchronized (or all of them). The default is the IBP book (`fritzbox-kontakte` / "IBP-Kontakte"); accounts without it sync all personal books.
+
+## [3.4.10] - 2026-09-29
+
+### Added
+
+- Two-way customer sync: the Outlook contacts subfolder "Kunden" (reused if present, never deleted) is synchronized with the Nextcloud address book "IBP-Kunden", which is created when missing. New, changed and deleted contacts are applied in both directions, Outlook wins conflicting edits, unmapped cloud properties are preserved on upload, and mass deletions are held back.
 
 ### Fixed
 
