@@ -5,7 +5,8 @@
   For GPO deployment the same two MSI files are assigned separately (see build.ps1, GPO folder).
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
-     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
   <Bundle
     Name="IBP Nextcloud Integration für Outlook"
     Manufacturer="IBP GmbH"
@@ -21,12 +22,40 @@
         ShowVersion="yes" />
     </BootstrapperApplication>
 
+    <!--
+      CalDav Synchronizer may already be installed "just for me" (per user). Burn only sees the
+      per-machine package, so look for the Outlook add-in registration itself and skip the package
+      when any registration exists; a second installation would register the add-in twice.
+    -->
+    <util:RegistrySearch
+      Id="CalDavAddInCurrentUser"
+      Variable="CalDavAddInCurrentUser"
+      Root="HKCU"
+      Key="Software\Microsoft\Office\Outlook\Addins\CalDavSynchronizer.1"
+      Result="exists" />
+    <util:RegistrySearch
+      Id="CalDavAddInMachine64"
+      Variable="CalDavAddInMachine64"
+      Root="HKLM"
+      Key="Software\Microsoft\Office\Outlook\Addins\CalDavSynchronizer.1"
+      Bitness="always64"
+      Result="exists" />
+    <util:RegistrySearch
+      Id="CalDavAddInMachine32"
+      Variable="CalDavAddInMachine32"
+      Root="HKLM"
+      Key="Software\Microsoft\Office\Outlook\Addins\CalDavSynchronizer.1"
+      Bitness="always32"
+      Result="exists" />
+
     <Chain>
       <!-- Third-party, unchanged upstream package (AGPL-3.0), forced per machine like ALLUSERS=1. -->
       <MsiPackage
         Id="CalDavSynchronizer"
         SourceFile="$(var.CalDavSynchronizerMsi)"
         ForcePerMachine="yes"
+        InstallCondition="NOT (CalDavAddInCurrentUser OR CalDavAddInMachine64 OR CalDavAddInMachine32)"
+        Permanent="yes"
         Vital="yes"
         Visible="yes" />
 

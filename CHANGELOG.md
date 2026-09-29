@@ -9,7 +9,7 @@ This project follows the principles of **Keep a Changelog** and **Semantic Versi
 ### Added
 
 - Calendar sync via the separate add-in Outlook CalDav Synchronizer 4.7.1 (AGPL-3.0, shipped unchanged). On Outlook start NC Connector creates the profile "Nextcloud Kalender" for the personal Nextcloud calendar (Outlook default calendar, two-way, template of the IBP reference profile) with the NC Connector app password; existing user profiles for the same calendar or folder are left untouched. Users are asked once to restart Outlook so CalDav Synchronizer loads the profile. Before the profile is written, the Outlook default calendar is copied to "Kalender - Sicherung vor Nextcloud-Sync (date)"; if that copy fails, no profile is created and setup retries at the next start.
-- `build.ps1` also produces `IBP-NC-Connector-Setup-<Version>.exe` (installs CalDav Synchronizer for all users and NC Connector in one step) and the folder `GPO-<Version>` with both MSI files and the `ALLUSERS=1` transform for group policy assignment.
+- `build.ps1` also produces `IBP-NC-Connector-Setup-<Version>.exe` (installs CalDav Synchronizer for all users and NC Connector in one step) and the folder `GPO-<Version>` with both MSI files and the `ALLUSERS=1` transform for group policy assignment. The setup skips CalDav Synchronizer when its Outlook add-in is already registered (also a per-user "just me" installation) and never uninstalls it.
 
 ## [3.4.11] - 2026-09-29
 
