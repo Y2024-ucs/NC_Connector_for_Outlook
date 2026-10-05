@@ -741,6 +741,14 @@ namespace NcTalkOutlookAddIn.Services
                             continue;
                         }
 
+                        // Contacts without an email address can never become list members; including them
+                        // would mark every run incomplete and force a full rebuild each sync.
+                        string email = (contact.Email1Address ?? string.Empty).Trim();
+                        if (string.IsNullOrWhiteSpace(email))
+                        {
+                            continue;
+                        }
+
                         string href = ReadContactProperty(contact, HrefPropertyName);
                         List<string> categories;
                         if (string.IsNullOrWhiteSpace(href)
@@ -767,7 +775,7 @@ namespace NcTalkOutlookAddIn.Services
                             members.Add(new GroupMember
                             {
                                 DisplayName = contact.FullName ?? string.Empty,
-                                EmailAddress = contact.Email1Address ?? string.Empty
+                                EmailAddress = email
                             });
                         }
                     }
@@ -794,6 +802,7 @@ namespace NcTalkOutlookAddIn.Services
         private static void DeleteManagedGroups(Outlook.MAPIFolder folder)
         {
             Outlook.Items items = null;
+            Outlook.MAPIFolder deletedItems = ResolveDeletedItemsFolder(folder);
             try
             {
                 items = folder.Items;
@@ -808,7 +817,7 @@ namespace NcTalkOutlookAddIn.Services
                         if (list != null
                             && string.Equals(ReadGroupProperty(list, ManagedGroupPropertyName), "1", StringComparison.Ordinal))
                         {
-                            list.Delete();
+                            DeletePermanently(list, deletedItems);
                         }
                     }
                     finally
@@ -827,6 +836,55 @@ namespace NcTalkOutlookAddIn.Services
             finally
             {
                 ComInteropScope.TryRelease(items, LogCategories.Core, "Failed to release CardDAV group cleanup items collection.");
+                ComInteropScope.TryRelease(deletedItems, LogCategories.Core, "Failed to release Deleted Items folder after CardDAV group cleanup.");
+            }
+        }
+
+        /// <summary>
+        /// Deletes <paramref name="list"/> without leaving a copy in Deleted Items: the list is moved there
+        /// first, and deleting an item that already sits in Deleted Items removes it for good.
+        /// </summary>
+        private static void DeletePermanently(Outlook.DistListItem list, Outlook.MAPIFolder deletedItems)
+        {
+            if (deletedItems == null)
+            {
+                list.Delete();
+                return;
+            }
+
+            Outlook.DistListItem moved = null;
+            try
+            {
+                moved = list.Move(deletedItems) as Outlook.DistListItem;
+                if (moved != null)
+                {
+                    moved.Delete();
+                }
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(moved, LogCategories.Core, "Failed to release moved CardDAV distribution list.");
+            }
+        }
+
+        private static Outlook.MAPIFolder ResolveDeletedItemsFolder(Outlook.MAPIFolder folder)
+        {
+            Outlook.Store store = null;
+            try
+            {
+                store = folder.Store;
+                return store != null ? store.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderDeletedItems) : null;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsLogger.Log(
+                    LogCategories.Core,
+                    "Deleted Items folder unavailable; CardDAV distribution lists are deleted normally (" + ex.Message + ").");
+                return null;
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(store, LogCategories.Core, "Failed to release store while resolving Deleted Items.");
             }
         }
 
