@@ -562,83 +562,169 @@ namespace NcTalkOutlookAddIn.Services
                 return existingManagedGroups;
             }
 
-            DeleteManagedGroups(folder);
-
-            int created = 0;
+            // Lists are refreshed in place: deleting and recreating them leaves copies behind, because
+            // Outlook turns a contact group moved into an IMAP Trash folder into a message.
+            var pending = new Dictionary<string, List<GroupMember>>(groups, StringComparer.OrdinalIgnoreCase);
+            int written = 0;
             bool complete = true;
-            foreach (KeyValuePair<string, List<GroupMember>> pair in groups)
+            Outlook.Items items = null;
+            Outlook.MAPIFolder deletedItems = null;
+            try
             {
-                Outlook.Items items = null;
-                Outlook.DistListItem list = null;
+                items = folder.Items;
+                for (int index = items.Count; index >= 1; index--)
+                {
+                    object raw = null;
+                    Outlook.DistListItem list = null;
+                    try
+                    {
+                        raw = items[index];
+                        list = raw as Outlook.DistListItem;
+                        if (list == null
+                            || !string.Equals(ReadGroupProperty(list, ManagedGroupPropertyName), "1", StringComparison.Ordinal))
+                        {
+                            continue;
+                        }
+
+                        string name = ReadGroupProperty(list, ManagedGroupNamePropertyName);
+                        List<GroupMember> members;
+                        if (!string.IsNullOrWhiteSpace(name) && pending.TryGetValue(name, out members))
+                        {
+                            pending.Remove(name);
+                            if (FillGroup(session, list, name, members, ref complete))
+                            {
+                                written++;
+                                continue;
+                            }
+                        }
+
+                        if (deletedItems == null)
+                        {
+                            deletedItems = ResolveDeletedItemsFolder(folder);
+                        }
+                        DeletePermanently(list, deletedItems);
+                    }
+                    finally
+                    {
+                        if (list != null)
+                        {
+                            ComInteropScope.TryRelease(list, LogCategories.Core, "Failed to release managed CardDAV distribution list during refresh.");
+                        }
+                        else
+                        {
+                            ComInteropScope.TryRelease(raw, LogCategories.Core, "Failed to release non-distribution-list during CardDAV group refresh.");
+                        }
+                    }
+                }
+
+                foreach (KeyValuePair<string, List<GroupMember>> pair in pending)
+                {
+                    Outlook.DistListItem list = null;
+                    try
+                    {
+                        list = items.Add(Outlook.OlItemType.olDistributionListItem) as Outlook.DistListItem;
+                        if (list == null)
+                        {
+                            complete = false;
+                            continue;
+                        }
+
+                        if (FillGroup(session, list, pair.Key, pair.Value, ref complete))
+                        {
+                            written++;
+                        }
+                    }
+                    finally
+                    {
+                        ComInteropScope.TryRelease(list, LogCategories.Core, "Failed to release CardDAV distribution list.");
+                    }
+                }
+            }
+            finally
+            {
+                ComInteropScope.TryRelease(items, LogCategories.Core, "Failed to release CardDAV distribution list items collection.");
+                ComInteropScope.TryRelease(deletedItems, LogCategories.Core, "Failed to release Deleted Items folder after CardDAV group refresh.");
+            }
+
+            WriteFolderProperty(folder, ManagedGroupSnapshotProperty, complete ? signature : string.Empty);
+            return written;
+        }
+
+        /// <summary>
+        /// Replaces the name and members of <paramref name="list"/> and saves it. Returns false without
+        /// saving when no member could be resolved, leaving the caller to delete or discard the list.
+        /// </summary>
+        private static bool FillGroup(
+            Outlook.NameSpace session,
+            Outlook.DistListItem list,
+            string groupName,
+            List<GroupMember> members,
+            ref bool complete)
+        {
+            list.DLName = groupName + " (Verteiler)";
+            WriteGroupProperty(list, ManagedGroupPropertyName, "1");
+            WriteGroupProperty(list, ManagedGroupNamePropertyName, groupName);
+
+            for (int index = list.MemberCount; index >= 1; index--)
+            {
+                Outlook.Recipient existing = null;
                 try
                 {
-                    items = folder.Items;
-                    list = items.Add(Outlook.OlItemType.olDistributionListItem) as Outlook.DistListItem;
-                    if (list == null)
+                    existing = list.GetMember(index);
+                    if (existing != null)
+                    {
+                        list.RemoveMember(existing);
+                    }
+                }
+                finally
+                {
+                    ComInteropScope.TryRelease(existing, LogCategories.Core, "Failed to release existing CardDAV group member.");
+                }
+            }
+
+            int addedMembers = 0;
+            foreach (GroupMember member in members)
+            {
+                Outlook.Recipient recipient = null;
+                try
+                {
+                    string address = !string.IsNullOrWhiteSpace(member.EmailAddress)
+                        ? member.EmailAddress
+                        : member.DisplayName;
+                    if (string.IsNullOrWhiteSpace(address))
                     {
                         complete = false;
                         continue;
                     }
 
-                    list.DLName = pair.Key + " (Verteiler)";
-                    WriteGroupProperty(list, ManagedGroupPropertyName, "1");
-                    WriteGroupProperty(list, ManagedGroupNamePropertyName, pair.Key);
-
-                    int addedMembers = 0;
-                    foreach (GroupMember member in pair.Value)
-                    {
-                        Outlook.Recipient recipient = null;
-                        try
-                        {
-                            string address = !string.IsNullOrWhiteSpace(member.EmailAddress)
-                                ? member.EmailAddress
-                                : member.DisplayName;
-                            if (string.IsNullOrWhiteSpace(address))
-                            {
-                                complete = false;
-                                continue;
-                            }
-
-                            recipient = session.CreateRecipient(address);
-                            if (recipient == null || !recipient.Resolve())
-                            {
-                                complete = false;
-                                DiagnosticsLogger.Log(
-                                    LogCategories.Core,
-                                    "CardDAV group member unresolved (group=" + pair.Key
-                                    + ", member=" + (member.DisplayName ?? string.Empty) + ").");
-                                continue;
-                            }
-
-                            list.AddMember(recipient);
-                            addedMembers++;
-                        }
-                        finally
-                        {
-                            ComInteropScope.TryRelease(recipient, LogCategories.Core, "Failed to release CardDAV group recipient.");
-                        }
-                    }
-
-                    if (addedMembers > 0)
-                    {
-                        list.Save();
-                        created++;
-                    }
-                    else
+                    recipient = session.CreateRecipient(address);
+                    if (recipient == null || !recipient.Resolve())
                     {
                         complete = false;
-                        list.Delete();
+                        DiagnosticsLogger.Log(
+                            LogCategories.Core,
+                            "CardDAV group member unresolved (group=" + groupName
+                            + ", member=" + (member.DisplayName ?? string.Empty) + ").");
+                        continue;
                     }
+
+                    list.AddMember(recipient);
+                    addedMembers++;
                 }
                 finally
                 {
-                    ComInteropScope.TryRelease(list, LogCategories.Core, "Failed to release CardDAV distribution list.");
-                    ComInteropScope.TryRelease(items, LogCategories.Core, "Failed to release CardDAV distribution list items collection.");
+                    ComInteropScope.TryRelease(recipient, LogCategories.Core, "Failed to release CardDAV group recipient.");
                 }
             }
 
-            WriteFolderProperty(folder, ManagedGroupSnapshotProperty, complete ? signature : string.Empty);
-            return created;
+            if (addedMembers == 0)
+            {
+                complete = false;
+                return false;
+            }
+
+            list.Save();
+            return true;
         }
 
         private static string BuildGroupSignature(IDictionary<string, List<GroupMember>> groups)
@@ -852,13 +938,26 @@ namespace NcTalkOutlookAddIn.Services
                 return;
             }
 
-            Outlook.DistListItem moved = null;
+            // On IMAP stores the move turns the list into a message, so delete whatever item arrived.
+            object moved = null;
             try
             {
-                moved = list.Move(deletedItems) as Outlook.DistListItem;
-                if (moved != null)
+                moved = list.Move(deletedItems);
+                var movedList = moved as Outlook.DistListItem;
+                var movedMail = moved as Outlook.MailItem;
+                if (movedList != null)
                 {
-                    moved.Delete();
+                    movedList.Delete();
+                }
+                else if (movedMail != null)
+                {
+                    movedMail.Delete();
+                }
+                else if (moved != null)
+                {
+                    DiagnosticsLogger.Log(
+                        LogCategories.Core,
+                        "Moved CardDAV distribution list could not be deleted permanently.");
                 }
             }
             finally
