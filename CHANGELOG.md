@@ -4,6 +4,12 @@ All notable changes to **NC Connector for Outlook** will be documented in this f
 
 This project follows the principles of **Keep a Changelog** and **Semantic Versioning**.
 
+## [3.5.1] - 2026-10-07
+
+### Fixed
+
+- Group distribution lists ("<Gruppe> (Verteiler)") no longer pile up in "Deleted Items", "Trash" or "Drafts" after a sync. Lists are updated in place instead of being deleted and recreated; on IMAP mailboxes Outlook had turned every replaced list into a message that could not be removed. Contacts without an email address no longer force a rebuild on every sync.
+
 ## [3.5.0] - 2026-09-29
 
 ### Added
