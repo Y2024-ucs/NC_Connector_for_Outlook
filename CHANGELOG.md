@@ -4,6 +4,12 @@ All notable changes to **NC Connector for Outlook** will be documented in this f
 
 This project follows the principles of **Keep a Changelog** and **Semantic Versioning**.
 
+## [3.5.2] - 2026-10-08
+
+### Fixed
+
+- Outlook AutoComplete suggestions for synced contacts no longer disappear after a sync. Contact fields are only written when their value actually changed; rewriting an unchanged e-mail address had reset the contact's e-mail entry and dropped it from the AutoComplete list.
+
 ## [3.5.1] - 2026-10-07
 
 ### Fixed

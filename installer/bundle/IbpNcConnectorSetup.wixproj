@@ -4,7 +4,7 @@
     <OutputName>IBP-NC-Connector-Setup</OutputName>
     <InstallerPlatform>x64</InstallerPlatform>
 
-    <ProductVersion Condition=" '$(ProductVersion)' == '' ">3.5.1</ProductVersion>
+    <ProductVersion Condition=" '$(ProductVersion)' == '' ">3.5.2</ProductVersion>
     <NcConnectorMsi Condition=" '$(NcConnectorMsi)' == '' ">$(MSBuildProjectDirectory)\..\bin\$(Configuration)\NCConnectorForOutlook.msi</NcConnectorMsi>
     <CalDavSynchronizerMsi Condition=" '$(CalDavSynchronizerMsi)' == '' ">$(MSBuildProjectDirectory)\..\vendor\caldavsynchronizer\CalDavSynchronizer.Setup.msi</CalDavSynchronizerMsi>
 
