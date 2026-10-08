@@ -59,14 +59,24 @@ function Sign-IBPFile {
         throw "File to sign not found: $Path"
     }
 
-    Write-Host "Signing: $Path"
-    & $script:SignToolPath sign `
-        /f $SigningPfx `
-        /p $SigningPassword `
-        /fd SHA256 `
-        /tr $TimestampUrl `
-        /td SHA256 `
-        $Path | Out-Host
+    # A freshly written file is often still held by the virus scanner, so a failed attempt is retried.
+    $maxAttempts = 5
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        Write-Host "Signing: $Path"
+        & $script:SignToolPath sign `
+            /f $SigningPfx `
+            /p $SigningPassword `
+            /fd SHA256 `
+            /tr $TimestampUrl `
+            /td SHA256 `
+            $Path | Out-Host
+
+        if ($LASTEXITCODE -eq 0 -or $attempt -eq $maxAttempts) {
+            break
+        }
+        Write-Host "SignTool failed (attempt $attempt of $maxAttempts); retrying in 3 seconds."
+        Start-Sleep -Seconds 3
+    }
 
     if ($LASTEXITCODE -ne 0) {
         throw "SignTool failed while signing '$Path' with exit code $LASTEXITCODE."
@@ -167,7 +177,9 @@ if ($SkipIceValidation) {
     # Useful on environments where Windows Installer ICE execution is unavailable (WIX0217).
     $wixArgs += "/p:SuppressValidation=true"
 }
-& dotnet @wixArgs | Out-Host
+# Not piped through Out-Host: in a console MSBuild switches it to UTF-8, and PowerShell would decode the
+# captured text with the old code page and garble umlauts. Writing directly keeps them intact.
+& dotnet @wixArgs
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet build (WiX) exited with code $LASTEXITCODE."
 }
@@ -213,7 +225,7 @@ Write-Host "Building combined setup (WiX bundle)..."
 & dotnet build $bundleProject -c $Configuration --no-incremental `
     "/p:NcConnectorMsi=$finalPath" `
     "/p:CalDavSynchronizerMsi=$calDavMsi" `
-    "/p:ProductVersion=$assemblyVersionShort" | Out-Host
+    "/p:ProductVersion=$assemblyVersionShort"
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet build (WiX bundle) exited with code $LASTEXITCODE."
 }
