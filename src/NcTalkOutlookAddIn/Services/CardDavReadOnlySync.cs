@@ -893,35 +893,46 @@ namespace NcTalkOutlookAddIn.Services
         }
 
         /// <summary>
-        /// Copies the mapped vCard fields only; sync markers are left to the caller.
+        /// Copies the mapped vCard fields only; sync markers are left to the caller. Unchanged fields are
+        /// not assigned: rewriting an e-mail address, even with the same value, resets the contact's
+        /// e-mail entry and drops it from Outlook's AutoComplete list.
         /// </summary>
         internal static void ApplyContactFields(Outlook.ContactItem target, CardDavContactRecord source)
         {
-            target.FullName = source.FullName ?? string.Empty;
-            target.FirstName = source.FirstName ?? string.Empty;
-            target.LastName = source.LastName ?? string.Empty;
-            target.FileAs = ResolveContactFileAs(source);
-            target.CompanyName = source.Company ?? string.Empty;
-            target.JobTitle = source.JobTitle ?? string.Empty;
-            target.Email1Address = source.Email1 ?? string.Empty;
-            target.Email2Address = source.Email2 ?? string.Empty;
-            target.BusinessTelephoneNumber = source.BusinessPhone ?? string.Empty;
-            target.Business2TelephoneNumber = source.BusinessPhone2 ?? string.Empty;
-            target.MobileTelephoneNumber = source.MobilePhone ?? string.Empty;
-            target.HomeTelephoneNumber = source.HomePhone ?? string.Empty;
-            target.Home2TelephoneNumber = source.HomePhone2 ?? string.Empty;
-            target.BusinessFaxNumber = source.BusinessFax ?? string.Empty;
-            target.HomeFaxNumber = source.HomeFax ?? string.Empty;
-            target.OtherTelephoneNumber = source.OtherPhone ?? string.Empty;
-            target.PagerNumber = source.PagerPhone ?? string.Empty;
-            target.CompanyMainTelephoneNumber = source.CompanyMainPhone ?? string.Empty;
-            target.CarTelephoneNumber = source.CarPhone ?? string.Empty;
-            target.BusinessAddressStreet = source.BusinessAddressStreet ?? string.Empty;
-            target.BusinessAddressCity = source.BusinessAddressCity ?? string.Empty;
-            target.BusinessAddressState = source.BusinessAddressState ?? string.Empty;
-            target.BusinessAddressPostalCode = source.BusinessAddressPostalCode ?? string.Empty;
-            target.BusinessAddressCountry = source.BusinessAddressCountry ?? string.Empty;
-            target.Body = source.Notes ?? string.Empty;
+            AssignIfChanged(target.FullName, source.FullName, value => target.FullName = value);
+            AssignIfChanged(target.FirstName, source.FirstName, value => target.FirstName = value);
+            AssignIfChanged(target.LastName, source.LastName, value => target.LastName = value);
+            AssignIfChanged(target.FileAs, ResolveContactFileAs(source), value => target.FileAs = value);
+            AssignIfChanged(target.CompanyName, source.Company, value => target.CompanyName = value);
+            AssignIfChanged(target.JobTitle, source.JobTitle, value => target.JobTitle = value);
+            AssignIfChanged(target.Email1Address, source.Email1, value => target.Email1Address = value);
+            AssignIfChanged(target.Email2Address, source.Email2, value => target.Email2Address = value);
+            AssignIfChanged(target.BusinessTelephoneNumber, source.BusinessPhone, value => target.BusinessTelephoneNumber = value);
+            AssignIfChanged(target.Business2TelephoneNumber, source.BusinessPhone2, value => target.Business2TelephoneNumber = value);
+            AssignIfChanged(target.MobileTelephoneNumber, source.MobilePhone, value => target.MobileTelephoneNumber = value);
+            AssignIfChanged(target.HomeTelephoneNumber, source.HomePhone, value => target.HomeTelephoneNumber = value);
+            AssignIfChanged(target.Home2TelephoneNumber, source.HomePhone2, value => target.Home2TelephoneNumber = value);
+            AssignIfChanged(target.BusinessFaxNumber, source.BusinessFax, value => target.BusinessFaxNumber = value);
+            AssignIfChanged(target.HomeFaxNumber, source.HomeFax, value => target.HomeFaxNumber = value);
+            AssignIfChanged(target.OtherTelephoneNumber, source.OtherPhone, value => target.OtherTelephoneNumber = value);
+            AssignIfChanged(target.PagerNumber, source.PagerPhone, value => target.PagerNumber = value);
+            AssignIfChanged(target.CompanyMainTelephoneNumber, source.CompanyMainPhone, value => target.CompanyMainTelephoneNumber = value);
+            AssignIfChanged(target.CarTelephoneNumber, source.CarPhone, value => target.CarTelephoneNumber = value);
+            AssignIfChanged(target.BusinessAddressStreet, source.BusinessAddressStreet, value => target.BusinessAddressStreet = value);
+            AssignIfChanged(target.BusinessAddressCity, source.BusinessAddressCity, value => target.BusinessAddressCity = value);
+            AssignIfChanged(target.BusinessAddressState, source.BusinessAddressState, value => target.BusinessAddressState = value);
+            AssignIfChanged(target.BusinessAddressPostalCode, source.BusinessAddressPostalCode, value => target.BusinessAddressPostalCode = value);
+            AssignIfChanged(target.BusinessAddressCountry, source.BusinessAddressCountry, value => target.BusinessAddressCountry = value);
+            AssignIfChanged(target.Body, source.Notes, value => target.Body = value);
+        }
+
+        private static void AssignIfChanged(string current, string value, Action<string> assign)
+        {
+            string normalized = value ?? string.Empty;
+            if (!string.Equals(current ?? string.Empty, normalized, StringComparison.Ordinal))
+            {
+                assign(normalized);
+            }
         }
 
         private static string ResolveContactFileAs(CardDavContactRecord source)

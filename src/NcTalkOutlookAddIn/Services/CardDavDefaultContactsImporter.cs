@@ -163,60 +163,13 @@ namespace NcTalkOutlookAddIn.Services
 
         private static void ApplyContact(Outlook.ContactItem target, CardDavContactRecord source)
         {
-            target.FullName = source.FullName ?? string.Empty;
-            target.FirstName = source.FirstName ?? string.Empty;
-            target.LastName = source.LastName ?? string.Empty;
-            target.FileAs = ResolveContactFileAs(source);
-            target.CompanyName = source.Company ?? string.Empty;
-            target.JobTitle = source.JobTitle ?? string.Empty;
-            target.Email1Address = source.Email1 ?? string.Empty;
-            target.Email2Address = source.Email2 ?? string.Empty;
-            target.BusinessTelephoneNumber = source.BusinessPhone ?? string.Empty;
-            target.Business2TelephoneNumber = source.BusinessPhone2 ?? string.Empty;
-            target.MobileTelephoneNumber = source.MobilePhone ?? string.Empty;
-            target.HomeTelephoneNumber = source.HomePhone ?? string.Empty;
-            target.Home2TelephoneNumber = source.HomePhone2 ?? string.Empty;
-            target.BusinessFaxNumber = source.BusinessFax ?? string.Empty;
-            target.HomeFaxNumber = source.HomeFax ?? string.Empty;
-            target.OtherTelephoneNumber = source.OtherPhone ?? string.Empty;
-            target.PagerNumber = source.PagerPhone ?? string.Empty;
-            target.CompanyMainTelephoneNumber = source.CompanyMainPhone ?? string.Empty;
-            target.CarTelephoneNumber = source.CarPhone ?? string.Empty;
-            target.BusinessAddressStreet = source.BusinessAddressStreet ?? string.Empty;
-            target.BusinessAddressCity = source.BusinessAddressCity ?? string.Empty;
-            target.BusinessAddressState = source.BusinessAddressState ?? string.Empty;
-            target.BusinessAddressPostalCode = source.BusinessAddressPostalCode ?? string.Empty;
-            target.BusinessAddressCountry = source.BusinessAddressCountry ?? string.Empty;
-            target.Body = source.Notes ?? string.Empty;
+            CardDavReadOnlySync.ApplyContactFields(target, source);
             CardDavVCardSupport.ApplyPhoto(target, source.Href);
 
             WriteUserProperty(target, UidPropertyName, source.Uid);
             WriteUserProperty(target, HrefPropertyName, source.Href);
             WriteUserProperty(target, ETagPropertyName, source.ETag);
             WriteUserProperty(target, ImportSchemaPropertyName, CurrentImportSchema);
-        }
-
-        private static string ResolveContactFileAs(CardDavContactRecord source)
-        {
-            if (source == null)
-            {
-                return string.Empty;
-            }
-
-            if (!string.IsNullOrWhiteSpace(source.FullName))
-            {
-                return source.FullName.Trim();
-            }
-
-            string name = ((source.FirstName ?? string.Empty)
-                + " "
-                + (source.LastName ?? string.Empty)).Trim();
-            if (!string.IsNullOrWhiteSpace(name))
-            {
-                return name;
-            }
-
-            return (source.Email1 ?? string.Empty).Trim();
         }
 
         private static void EnsureFolderAvailableInAddressBook(Outlook.MAPIFolder folder)
